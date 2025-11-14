@@ -1,0 +1,43 @@
+# AutoSecure-VPN - gitignore
+
+# Generated output and packages
+output/
+output/**
+
+# Logs
+logs/
+logs/**
+
+# Certificates 
+certs/
+certs/**
+
+
+# Sensitive file types
+*.key
+*.pem
+*.pfx
+*.p12
+
+# Installers / archives
+*.msi
+*.exe
+*.zip
+
+# PowerShell temp / caches
+*.ps1xml
+*.ps1history
+
+# Pester / test results
+TestResults/
+
+# IDE/editor
+/.vscode/
+.idea/
+*.suo
+*.user
+
+# OS files
+Thumbs.db
+desktop.ini
+.DS_Store
