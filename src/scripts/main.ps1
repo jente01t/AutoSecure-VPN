@@ -100,7 +100,18 @@ function Invoke-ServerSetup {
         }
         Write-Host "  ✓ OpenVPN geïnstalleerd" -ForegroundColor Green
         
-       
+        # Stap 3: Firewall configureren
+        Write-Host "`n[3/8] Windows Firewall configureren..." -ForegroundColor Cyan
+        if (-not (Configure-Firewall -Port 443 -Protocol "TCP")) {
+            throw "Firewall configuratie mislukt"
+        }
+        Write-Host "  ✓ Firewall regels toegevoegd" -ForegroundColor Green
+        
+        # Stap 4: Gebruikersinput verzamelen
+        Write-Host "`n[4/8] Server configuratie parameters..." -ForegroundColor Cyan
+        $serverConfig = Get-ServerConfiguration
+        
+        
     }
     catch {
         Write-Host "`n[!] FOUT tijdens server setup: $_" -ForegroundColor Red

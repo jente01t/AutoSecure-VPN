@@ -149,3 +149,83 @@ function Install-OpenVPN {
 
 #endregion Installatie functies
 
+#region Firewall functies
+
+function Configure-Firewall {
+    param(
+        [int]$Port = $Script:Settings.port,
+        [string]$Protocol = $Script:Settings.protocol
+    )
+    
+    Write-Log "Firewall configuratie gestart voor poort $Port $Protocol" -Level "INFO"
+    
+    try {
+        # Enable firewall rule for OpenVPN
+        $ruleName = "OpenVPN-Inbound-$Protocol-$Port"
+        
+        # Check if rule already exists
+        $existingRule = Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue
+        
+        if ($existingRule) {
+            Write-Log "Firewall regel bestaat al: $ruleName" -Level "INFO"
+            return $true
+        }
+        
+        New-NetFirewallRule -Name $ruleName `
+                           -DisplayName "OpenVPN $Protocol $Port" `
+                           -Direction Inbound `
+                           -Protocol $Protocol `
+                           -LocalPort $Port `
+                           -Action Allow `
+                           -Profile Any
+        
+        Write-Log "Firewall regel toegevoegd: $ruleName" -Level "SUCCESS"
+        return $true
+    }
+    catch {
+        Write-Log "Fout tijdens firewall configuratie: $_" -Level "ERROR"
+        return $false
+    }
+}
+
+#endregion Firewall functies
+
+#region Server configuratie functies
+
+function Get-ServerConfiguration {
+    param()
+    
+    $config = @{}
+    
+    Write-Host ""
+    $config.ServerName = Read-Host "  Servernaam (bijv. vpn-server)"
+    if ([string]::IsNullOrWhiteSpace($config.ServerName)) {
+        $config.ServerName = $Script:Settings.serverNameDefault
+    }
+    
+    $config.ServerIP = Read-Host "  Server WAN IP of DDNS (bijv. vpn.example.com)"
+    while ([string]::IsNullOrWhiteSpace($config.ServerIP)) {
+        Write-Host "  ! Server IP/DDNS is verplicht" -ForegroundColor Red
+        $config.ServerIP = Read-Host "  Server WAN IP of DDNS"
+    }
+    
+    $lanSubnet = Read-Host "  LAN subnet (default 192.168.1.0, druk Enter voor skip)"
+    if (-not [string]::IsNullOrWhiteSpace($lanSubnet)) {
+        $config.LANSubnet = $Script:Settings.lanSubnetDefault
+        $config.LANMask = $Script:Settings.lanMaskDefault
+    }
+    
+    $noPassInput = Read-Host "  Certificaten zonder wachtwoord? (J/N, standaard N)"
+    $config.NoPass = ($noPassInput -eq "J" -or $noPassInput -eq "j")
+    
+    if (-not $config.NoPass) {
+        $config.Password = Read-Host "  Voer wachtwoord in voor certificaten"
+    }
+    
+    Write-Log "Server configuratie verzameld: ServerName=$($config.ServerName), ServerIP=$($config.ServerIP)" -Level "INFO"
+    
+    return $config
+}
+
+#endregion Server configuratie functies
+
