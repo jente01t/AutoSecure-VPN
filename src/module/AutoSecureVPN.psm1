@@ -724,3 +724,65 @@ function Start-VPNConnection {
     }
 }
 
+function Test-VPNConnection {
+    Write-Log "VPN verbinding testen gestart" -Level "INFO"
+    
+    try {
+        # Simple ping test to VPN server
+        $pingResult = Test-Connection -ComputerName $Script:Settings.testIP -Count 1 -Quiet
+        
+        if ($pingResult) {
+            Write-Log "VPN verbinding succesvol getest" -Level "SUCCESS"
+            return $true
+        } else {
+            Write-Log "VPN verbinding test mislukt" -Level "WARNING"
+            return $false
+        }
+    }
+    catch {
+        Write-Log "Fout tijdens VPN verbinding test: $_" -Level "ERROR"
+        return $false
+    }
+}
+
+#endregion Test functies
+
+#region Batch functies
+
+function Invoke-BatchClientSetup {
+    param(
+        [string]$CsvPath,
+        [string]$EasyRSAPath = $Script:Settings.easyRSAPath
+    )
+    
+    if (-not (Test-Path $CsvPath)) {
+        Write-Log "CSV bestand niet gevonden: $CsvPath" -Level "ERROR"
+        return
+    }
+    
+    try {
+        $clients = Import-Csv -Path $CsvPath
+        
+        $env:EASYRSA_BATCH = "1"
+        $env:PATH = "$EasyRSAPath;$EasyRSAPath\bin;$env:PATH"
+        $sh = Join-Path $EasyRSAPath "bin\sh.exe"
+        $easyrsa = Join-Path $EasyRSAPath "easyrsa"
+        
+        Push-Location $EasyRSAPath
+        foreach ($client in $clients) {
+            $clientName = $client.Name
+            if (-not $clientName) { continue }
+            
+            & $sh $easyrsa gen-req $clientName nopass
+            & $sh $easyrsa sign-req client $clientName
+        }
+        Pop-Location
+        
+        Write-Log "Batch client setup voltooid" -Level "SUCCESS"
+    }
+    catch {
+        Write-Log "Fout tijdens batch client setup: $_" -Level "ERROR"
+    }
+}
+
+#endregion Batch functies

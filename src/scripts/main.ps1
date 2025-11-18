@@ -206,6 +206,18 @@ function Invoke-ClientSetup {
             throw "VPN verbinding starten mislukt"
         }
         Write-Host "  ✓ VPN verbinding gestart" -ForegroundColor Green
+        
+        # Stap 6: Verbinding testen
+        Write-Host "`n[6/6] VPN verbinding testen..." -ForegroundColor Cyan
+        Start-Sleep -Seconds 5  # Wacht tot verbinding is opgezet
+        Test-VPNConnection
+        
+        Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Green
+        Write-Host "║     Client Setup Succesvol Voltooid!      ║" -ForegroundColor Green
+        Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Green
+        Write-Host "`nLogbestand: $script:LogFile" -ForegroundColor Yellow
+        
+        Write-Log "Client setup succesvol voltooid" -Level "SUCCESS"
     }
     catch {
         Write-Host "`n[!] FOUT tijdens client setup: $_" -ForegroundColor Red
