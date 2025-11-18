@@ -159,6 +159,79 @@ function Invoke-ServerSetup {
     }
 }
 
+function Invoke-ClientSetup {
+    <#
+    .SYNOPSIS
+        Voert volledige VPN-client setup uit
+    #>
+    
+    Write-Log "=== Client Setup Gestart ===" -Level "INFO"
+    
+    try {
+        # Stap 1: Administrator check
+        Write-Host "`n[1/6] Controleren administrator rechten..." -ForegroundColor Cyan
+        if (-not (Test-AdminRights)) {
+            throw "Script moet als Administrator worden uitgevoerd!"
+        }
+        Write-Host "  ✓ Administrator rechten bevestigd" -ForegroundColor Green
+        
+        # Stap 2: OpenVPN installeren
+        Write-Host "`n[2/6] OpenVPN installeren..." -ForegroundColor Cyan
+        if (-not (Install-OpenVPN)) {
+            throw "OpenVPN installatie mislukt"
+        }
+        Write-Host "  ✓ OpenVPN geïnstalleerd" -ForegroundColor Green
+        
+        # Stap 3: Client configuratie importeren
+        Write-Host "`n[3/6] Client configuratie importeren..." -ForegroundColor Cyan
+        $configPath = Import-ClientConfiguration
+        if (-not $configPath) {
+            throw "Client configuratie importeren mislukt"
+        }
+        Write-Host "  ✓ Configuratie geïmporteerd" -ForegroundColor Green
+        
+        
+    }
+    catch {
+        Write-Host "`n[!] FOUT tijdens client setup: $_" -ForegroundColor Red
+        Write-Log "Client setup FOUT: $_" -Level "ERROR"
+        Write-Host "`nControleer het logbestand voor details: $script:LogFile" -ForegroundColor Yellow
+    }
+}
+
+function Get-ServerConfiguration {
+    <#
+    .SYNOPSIS
+        Verzamelt server configuratie parameters van gebruiker
+    #>
+    
+    $config = @{}
+    
+    Write-Host ""
+    $config.ServerName = Read-Host "  Servernaam (bijv. vpn-server)"
+    if ([string]::IsNullOrWhiteSpace($config.ServerName)) {
+        $config.ServerName = "vpn-server"
+    }
+    
+    $config.ServerIP = Read-Host "  Server WAN IP of DDNS (bijv. vpn.example.com)"
+    while ([string]::IsNullOrWhiteSpace($config.ServerIP)) {
+        Write-Host "  ! Server IP/DDNS is verplicht" -ForegroundColor Red
+        $config.ServerIP = Read-Host "  Server WAN IP of DDNS"
+    }
+    
+    $lanSubnet = Read-Host "  LAN subnet (bijv. 192.168.1.0, druk Enter voor skip)"
+    if (-not [string]::IsNullOrWhiteSpace($lanSubnet)) {
+        $config.LANSubnet = $lanSubnet
+        $config.LANMask = "255.255.255.0"
+    }
+    
+    $noPassInput = Read-Host "  Certificaten zonder wachtwoord? (J/N, standaard N)"
+    $config.NoPass = ($noPassInput -eq "J" -or $noPassInput -eq "j")
+    
+    Write-Log "Server configuratie verzameld: ServerName=$($config.ServerName), ServerIP=$($config.ServerIP)" -Level "INFO"
+    
+    return $config
+}
 
 # Start het script
 Start-VPNSetup

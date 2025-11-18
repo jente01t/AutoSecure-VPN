@@ -642,3 +642,38 @@ verb 3
     }
 }
 
+function Import-ClientConfiguration {
+    Write-Log "Client configuratie importeren gestart" -Level "INFO"
+    
+    $configPath = $Script:Settings.configPath
+    
+    $zipFile = Read-Host "Pad naar client ZIP bestand"
+    
+    if (-not (Test-Path $zipFile)) {
+        Write-Log "ZIP bestand niet gevonden: $zipFile" -Level "ERROR"
+        return $null
+    }
+    
+    try {
+        Expand-Archive -Path $zipFile -DestinationPath $configPath -Force
+        
+        $ovpnFile = Get-ChildItem $configPath -Filter "*.ovpn" | Select-Object -First 1
+        
+        if ($ovpnFile) {
+            Write-Log "Client configuratie geïmporteerd: $($ovpnFile.FullName)" -Level "SUCCESS"
+            return $ovpnFile.FullName
+        } else {
+            Write-Log "Geen OVPN bestand gevonden in ZIP" -Level "ERROR"
+            return $null
+        }
+    }
+    catch {
+        Write-Log "Fout tijdens importeren client configuratie: $_" -Level "ERROR"
+        return $null
+    }
+}
+
+#endregion Client functies
+
+#region Test functies
+
