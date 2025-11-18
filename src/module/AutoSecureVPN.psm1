@@ -64,3 +64,39 @@ function Test-IsAdmin {
     return ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+function Write-Log {
+    param(
+        [string]$Message,
+        [string]$Level = "INFO",
+        [string]$LogFile = $null
+    )
+    
+    if (-not $LogFile) {
+        $logsPath = Join-Path $PSScriptRoot "..\..\$($Script:Settings.logsPath)"
+        if (-not (Test-Path $logsPath)) {
+            New-Item -ItemType Directory -Path $logsPath -Force | Out-Null
+        }
+        $LogFile = Join-Path $logsPath $Script:Settings.logFileName
+    }
+    
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $logEntry = "[$timestamp] [$Level] $Message"
+    
+    try {
+        Add-Content -Path $LogFile -Value $logEntry -Encoding UTF8
+    }
+    catch {
+        Write-Host "Kan niet schrijven naar logbestand: $_" -ForegroundColor Red
+    }
+    
+    # Also write to console based on level
+    switch ($Level.ToUpper()) {
+        "ERROR" { Write-Host $logEntry -ForegroundColor Red }
+        "WARNING" { Write-Host $logEntry -ForegroundColor Yellow }
+        "SUCCESS" { Write-Host $logEntry -ForegroundColor Green }
+        default { Write-Host $logEntry -ForegroundColor White }
+    }
+}
+
+#endregion Configuratie functies
+
