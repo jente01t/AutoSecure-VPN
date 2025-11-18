@@ -77,3 +77,28 @@ function Start-VPNSetup {
     }
 }
 
+function Invoke-ServerSetup {
+    <#
+    .SYNOPSIS
+        Voert volledige VPN-server setup uit
+    #>
+    
+    Write-Log "=== Server Setup Gestart ===" -Level "INFO"
+    
+    try {
+        # Stap 1: Administrator check
+        Write-Host "`n[1/8] Controleren administrator rechten..." -ForegroundColor Cyan
+        if (-not (Test-AdminRights)) {
+            throw "Script moet als Administrator worden uitgevoerd!"
+        }
+        Write-Host "  ✓ Administrator rechten bevestigd" -ForegroundColor Green
+        
+       
+    }
+    catch {
+        Write-Host "`n[!] FOUT tijdens server setup: $_" -ForegroundColor Red
+        Write-Log "Server setup FOUT: $_" -Level "ERROR"
+        Write-Host "`nControleer het logbestand voor details: $script:LogFile" -ForegroundColor Yellow
+    }
+}
+
