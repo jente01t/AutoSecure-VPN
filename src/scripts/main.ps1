@@ -111,6 +111,16 @@ function Invoke-ServerSetup {
         Write-Host "`n[4/8] Server configuratie parameters..." -ForegroundColor Cyan
         $serverConfig = Get-ServerConfiguration
         
+        # Stap 5: EasyRSA en certificaten
+        Write-Host "`n[5/8] Certificaten genereren (dit kan even duren)..." -ForegroundColor Cyan
+        if (-not (Initialize-EasyRSA -EasyRSAPath $script:EasyRSAPath)) {
+            throw "EasyRSA initialisatie mislukt"
+        }
+        if (-not (Initialize-Certificates -ServerName $serverConfig.ServerName -Password $serverConfig.Password -EasyRSAPath $script:EasyRSAPath)) {
+            throw "Certificaat generatie mislukt"
+        }
+        Write-Host "  ✓ Certificaten gegenereerd" -ForegroundColor Green
+        
         
     }
     catch {

@@ -229,3 +229,193 @@ function Get-ServerConfiguration {
 
 #endregion Server configuratie functies
 
+#region EasyRSA functies
+
+function Initialize-EasyRSA {
+    param(
+        [string]$EasyRSAPath = $Script:Settings.easyRSAPath
+    )
+    
+    if (Test-Path $EasyRSAPath) {
+        Write-Log "EasyRSA is al geïnstalleerd in $EasyRSAPath" -Level "INFO"
+        return $true
+    }
+    
+    try {
+        $easyRSAUrl = $Script:Settings.easyRSAUrl
+        $tempZip = Join-Path $env:TEMP "easyrsa.zip"
+        
+        Invoke-WebRequest -Uri $easyRSAUrl -OutFile $tempZip -UseBasicParsing
+        Expand-Archive -Path $tempZip -DestinationPath $EasyRSAPath -Force
+        
+        $nestedDir = Get-ChildItem $EasyRSAPath -Directory | Where-Object { $_.Name -like "EasyRSA-*" } | Select-Object -First 1
+        if ($nestedDir) {
+            Get-ChildItem $nestedDir.FullName | Move-Item -Destination $EasyRSAPath -Force
+            Remove-Item $nestedDir.FullName -Recurse -Force
+        }
+        
+        Write-Log "EasyRSA geïnstalleerd in $EasyRSAPath" -Level "SUCCESS"
+        return $true
+    }
+    catch {
+        Write-Log "Fout tijdens EasyRSA installatie: $_" -Level "ERROR"
+        return $false
+    }
+    finally {
+        if (Test-Path $tempZip) { Remove-Item $tempZip -Force }
+    }
+}
+
+#endregion EasyRSA functies
+
+#region Certificaat functies
+
+function Initialize-Certificates {
+    param(
+        [string]$ServerName = $Script:Settings.serverNameDefault,
+        [string]$Password = $null,
+        [string]$EasyRSAPath = (Join-Path $PSScriptRoot "..\..\$($Script:Settings.certPath)")
+    )
+    
+    try {
+        $env:EASYRSA_BATCH = "1"
+        $env:EASYRSA_REQ_CN = $ServerName
+        $varsFileWin = Join-Path $EasyRSAPath "vars"
+        $env:PATH = "$EasyRSAPath;$EasyRSAPath\bin;$env:PATH"
+        $sh = Join-Path $EasyRSAPath "bin\sh.exe"
+        $easyrsa = Join-Path $EasyRSAPath "easyrsa"
+
+        # Prepare Unix-style paths for bash (do not use them for Set-Content)
+        $drive = $EasyRSAPath.Substring(0,1).ToLower()
+        $unixEasyRSAPath = '/' + $drive + $EasyRSAPath.Substring(2) -replace '\\', '/'
+        $env:EASYRSA = $unixEasyRSAPath
+
+        # Create vars file (write using Windows path)
+        $pkiPath = Join-Path $EasyRSAPath "pki"
+        $pkiPathUnix = (Join-Path $pkiPath '') -replace '\\', '/'
+        $pkiPathUnix = '/' + $drive + $pkiPathUnix.Substring(2) -replace ' ', '\ '
+        $varsContent = @"
+set_var EASYRSA_REQ_CN "$ServerName"
+set_var EASYRSA_BATCH "1"
+set_var EASYRSA_PKI "pki"
+set_var EASYRSA_ALGO "rsa"
+set_var EASYRSA_KEY_SIZE "2048"
+set_var EASYRSA_CA_EXPIRE "3650"
+set_var EASYRSA_CERT_EXPIRE "3650"
+set_var EASYRSA_CRL_DAYS "180"
+"@
+        Set-Content -Path $varsFileWin -Value $varsContent -Encoding UTF8
+
+        if (Test-Path $varsFileWin) {
+            Write-Log "vars file succesvol geschreven naar $varsFileWin" -Level "INFO"
+        } else {
+            Write-Log "vars file kon niet worden geschreven naar $varsFileWin" -Level "ERROR"
+        }
+
+        # Also set the environment variable used by the easyrsa bash scripts to the Unix-style path
+        $env:EASYRSA_VARS_FILE = '/' + $drive + $varsFileWin.Substring(2) -replace '\\', '/' -replace ' ', '\ '
+        
+        Push-Location $EasyRSAPath
+        
+        # Write vars file in the current directory (EasyRSA path)
+        Set-Content -Path "vars" -Value $varsContent -Encoding UTF8
+
+        if (Test-Path "vars") {
+            Write-Log "vars file succesvol geschreven naar $(Join-Path $EasyRSAPath 'vars')" -Level "INFO"
+        } else {
+            Write-Log "vars file kon niet worden geschreven" -Level "ERROR"
+        }
+
+        # Set the environment variable to the relative path
+        $env:EASYRSA_VARS_FILE = "vars"
+        $env:EASYRSA_PKI = "pki"
+        
+        # Remove existing PKI if it exists to avoid init-pki failure
+        if (Test-Path $pkiPath) {
+            Write-Log "Removing existing PKI directory: $pkiPath" -Level "INFO"
+            Remove-Item $pkiPath -Recurse -Force
+        }
+        
+        $easyrsaOutput = & $sh $easyrsa init-pki
+        if ($LASTEXITCODE -ne 0) {
+            Write-Log "EasyRSA init-pki failed with exit code $LASTEXITCODE. Output: $easyrsaOutput" -Level "ERROR"
+            return $false
+        }
+        Write-Log "Easy-RSA output: $easyrsaOutput"
+
+        # Handle password if provided
+        $passFile = $null
+        if ($Password) {
+            $passFile = [System.IO.Path]::GetTempFileName()
+            Set-Content -Path $passFile -Value $Password -NoNewline -Encoding UTF8
+            $env:EASYRSA_PASSOUT = "file:$passFile"
+            Write-Log "Password file created for certificate generation" -Level "INFO"
+        }
+
+        if ($Password) {
+            $easyrsaOutput = & $sh $easyrsa build-ca
+        } else {
+            $easyrsaOutput = & $sh $easyrsa build-ca nopass
+        }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Log "EasyRSA build-ca failed with exit code $LASTEXITCODE. Output: $easyrsaOutput" -Level "ERROR"
+            return $false
+        }
+        Write-Log "Easy-RSA output: $easyrsaOutput"
+        
+        if ($Password) {
+            $easyrsaOutput = & $sh $easyrsa gen-req $ServerName
+        } else {
+            $easyrsaOutput = & $sh $easyrsa gen-req $ServerName nopass
+        }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Log "EasyRSA gen-req failed with exit code $LASTEXITCODE. Output: $easyrsaOutput" -Level "ERROR"
+            return $false
+        }
+        Write-Log "Easy-RSA output: $easyrsaOutput"
+
+        
+        & $sh $easyrsa sign-req server $ServerName
+        if ($LASTEXITCODE -ne 0) {
+            Write-Log "EasyRSA sign-req server failed with exit code $LASTEXITCODE" -Level "ERROR"
+            return $false
+        }
+        & $sh $easyrsa gen-dh
+        if ($LASTEXITCODE -ne 0) {
+            Write-Log "EasyRSA gen-dh failed with exit code $LASTEXITCODE" -Level "ERROR"
+            return $false
+        }
+        & $sh $easyrsa gen-crl
+        if ($LASTEXITCODE -ne 0) {
+            Write-Log "EasyRSA gen-crl failed with exit code $LASTEXITCODE" -Level "ERROR"
+            return $false
+        }
+        
+        # Controleer of alle vereiste certificaat bestanden zijn aangemaakt
+        $requiredFiles = @(
+            (Join-Path $pkiPath 'ca.crt'),
+            (Join-Path $pkiPath (Join-Path 'issued' "$ServerName.crt")),
+            (Join-Path $pkiPath (Join-Path 'private' "$ServerName.key")),
+            (Join-Path $pkiPath 'dh.pem'),
+            (Join-Path $pkiPath 'crl.pem')
+        )
+        
+        Write-Log "Certificaten gegenereerd voor $ServerName" -Level "SUCCESS"
+        return $true
+    }
+    catch {
+        Write-Log "Fout tijdens certificaat generatie: $_" -Level "ERROR"
+        return $false
+    }
+    finally {
+        # Clean up password file
+        if ($passFile -and (Test-Path $passFile)) {
+            Remove-Item $passFile -Force
+        }
+        # Keep vars file for client
+        Pop-Location
+    }
+}
+
+#endregion Certificaat functies
+
