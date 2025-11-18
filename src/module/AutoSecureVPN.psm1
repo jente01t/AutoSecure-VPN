@@ -677,3 +677,50 @@ function Import-ClientConfiguration {
 
 #region Test functies
 
+function Test-TAPAdapter {
+    Write-Log "TAP adapter controle gestart" -Level "INFO"
+    
+    try {
+        $tapAdapters = Get-NetAdapter | Where-Object { $_.Name -like "*TAP*" -or $_.DriverDescription -like "*TAP*" }
+        
+        if ($tapAdapters) {
+            Write-Log "TAP adapter gevonden: $($tapAdapters[0].Name)" -Level "SUCCESS"
+            return $true
+        } else {
+            Write-Log "Geen TAP adapter gevonden" -Level "WARNING"
+            return $false
+        }
+    }
+    catch {
+        Write-Log "Fout tijdens TAP adapter controle: $_" -Level "ERROR"
+        return $false
+    }
+}
+
+function Start-VPNConnection {
+    param(
+        [string]$ConfigFile
+    )
+    
+    Write-Log "VPN verbinding starten met config: $ConfigFile" -Level "INFO"
+    
+    try {
+        $openVPNPath = $Script:Settings.openVPNExePath
+        
+        if (-not (Test-Path $openVPNPath)) {
+            Write-Log "OpenVPN executable niet gevonden: $openVPNPath" -Level "ERROR"
+            return $false
+        }
+        
+        $arguments = "--config `"$ConfigFile`""
+        Start-Process -FilePath $openVPNPath -ArgumentList $arguments -NoNewWindow
+        
+        Write-Log "VPN verbinding gestart" -Level "SUCCESS"
+        return $true
+    }
+    catch {
+        Write-Log "Fout tijdens starten VPN verbinding: $_" -Level "ERROR"
+        return $false
+    }
+}
+

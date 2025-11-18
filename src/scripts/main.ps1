@@ -190,7 +190,22 @@ function Invoke-ClientSetup {
         }
         Write-Host "  ✓ Configuratie geïmporteerd" -ForegroundColor Green
         
+        # Stap 4: TAP adapter controleren
+        Write-Host "`n[4/6] TAP adapter controleren..." -ForegroundColor Cyan
+        if (-not (Test-TAPAdapter)) {
+            Write-Host "  ! TAP adapter niet gevonden, OpenVPN moet mogelijk opnieuw worden geïnstalleerd" -ForegroundColor Yellow
+            Write-Log "TAP adapter niet gevonden" -Level "WARNING"
+        }
+        else {
+            Write-Host "  ✓ TAP adapter gevonden" -ForegroundColor Green
+        }
         
+        # Stap 5: VPN verbinding starten
+        Write-Host "`n[5/6] VPN verbinding starten..." -ForegroundColor Cyan
+        if (-not (Start-VPNConnection -ConfigFile $configPath)) {
+            throw "VPN verbinding starten mislukt"
+        }
+        Write-Host "  ✓ VPN verbinding gestart" -ForegroundColor Green
     }
     catch {
         Write-Host "`n[!] FOUT tijdens client setup: $_" -ForegroundColor Red
