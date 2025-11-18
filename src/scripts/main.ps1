@@ -128,6 +128,29 @@ function Invoke-ServerSetup {
         }
         Write-Host "  ✓ Server configuratie aangemaakt" -ForegroundColor Green
         
+        # Stap 7: OpenVPN service starten
+        Write-Host "`n[7/8] OpenVPN service starten..." -ForegroundColor Cyan
+        if (-not (Start-VPNService)) {
+            throw "OpenVPN service starten mislukt"
+        }
+        Write-Host "  ✓ OpenVPN service actief" -ForegroundColor Green
+        
+        # Stap 8: Client package maken
+        Write-Host "`n[8/8] Client configuratie package maken..." -ForegroundColor Cyan
+        $zipPath = New-ClientPackage -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -OutputPath (Join-Path $PSScriptRoot "..\output")
+        if (-not $zipPath) {
+            throw "Client package aanmaken mislukt"
+        }
+        Write-Host "  ✓ Client package aangemaakt: $zipPath" -ForegroundColor Green
+        
+        Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Green
+        Write-Host "║     Server Setup Succesvol Voltooid!      ║" -ForegroundColor Green
+        Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Green
+        Write-Host "`nLogbestand: $script:LogFile" -ForegroundColor Yellow
+        Write-Host "Client package: $zipPath" -ForegroundColor Yellow
+        Write-Host "`nDit ZIP-bestand naar de client overzetten om de verbinding te maken." -ForegroundColor Cyan
+        
+        Write-Log "Server setup succesvol voltooid" -Level "SUCCESS"
     }
     catch {
         Write-Host "`n[!] FOUT tijdens server setup: $_" -ForegroundColor Red
@@ -135,7 +158,6 @@ function Invoke-ServerSetup {
         Write-Host "`nControleer het logbestand voor details: $script:LogFile" -ForegroundColor Yellow
     }
 }
-
 
 
 # Start het script

@@ -484,3 +484,161 @@ verb 3
 
 #endregion Server config generatie functies
 
+#region VPN service functies
+
+function Start-VPNService {
+    Write-Log "OpenVPN service starten" -Level "INFO"
+    
+    try {
+        $service = Get-Service -Name "OpenVPNService" -ErrorAction SilentlyContinue
+        
+        if (-not $service) {
+            Write-Log "OpenVPN service niet gevonden" -Level "ERROR"
+            return $false
+        }
+        
+        if ($service.Status -ne "Running") {
+            Start-Service -Name "OpenVPNService"
+            Write-Log "OpenVPN service gestart" -Level "SUCCESS"
+        } else {
+            Write-Log "OpenVPN service was al actief" -Level "INFO"
+        }
+        
+        return $true
+    }
+    catch {
+        Write-Log "Fout tijdens starten OpenVPN service: $_" -Level "ERROR"
+        return $false
+    }
+}
+
+#endregion VPN service functies
+
+#region Client functies
+
+function New-ClientPackage {
+    param(
+        [hashtable]$Config,
+        [string]$EasyRSAPath = $Script:Settings.easyRSAPath,
+        [string]$OutputPath = (Join-Path $PSScriptRoot "..\..\$($Script:Settings.outputPath)")
+    )
+    
+    $pkiPath = Join-Path $EasyRSAPath "pki"
+    
+    if (-not (Test-Path $OutputPath)) {
+        New-Item -ItemType Directory -Path $OutputPath -Force
+    }
+    
+    $clientName = $Script:Settings.clientNameDefault
+    $zipPath = Join-Path $OutputPath "vpn-client-$clientName.zip"
+    
+    try {
+        Write-Log "Client package generatie gestart voor $clientName" -Level "INFO"
+        Write-Log "EasyRSA path: $EasyRSAPath" -Level "INFO"
+        Write-Log "PKI path: $pkiPath" -Level "INFO"
+        Write-Log "Output path: $OutputPath" -Level "INFO"
+        
+        $env:EASYRSA_BATCH = "1"
+        $env:EASYRSA_VARS_FILE = "vars"
+        $env:EASYRSA_PKI = "pki"
+        $env:PATH = "$EasyRSAPath;$EasyRSAPath\bin;$env:PATH"
+        $sh = Join-Path $EasyRSAPath "bin\sh.exe"
+        $easyrsa = Join-Path $EasyRSAPath "easyrsa"
+        
+        # Prepare Unix-style paths for bash
+        $drive = $EasyRSAPath.Substring(0,1).ToLower()
+        $unixEasyRSAPath = '/' + $drive + $EasyRSAPath.Substring(2) -replace '\\', '/'
+        $pkiPathUnix = '/' + $drive + $pkiPath.Substring(2) -replace '\\', '/'
+        $env:EASYRSA = $unixEasyRSAPath
+        
+        $env:EASYRSA_BATCH = "1"
+        $env:EASYRSA_VARS_FILE = "vars"
+        $env:EASYRSA_PKI = "pki"
+        $env:PATH = "$EasyRSAPath;$EasyRSAPath\bin;$env:PATH"
+        $sh = Join-Path $EasyRSAPath "bin\sh.exe"
+        $easyrsa = Join-Path $EasyRSAPath "easyrsa"
+        
+        Write-Log "Environment variables ingesteld: EASYRSA=$env:EASYRSA, EASYRSA_BATCH=$env:EASYRSA_BATCH, EASYRSA_VARS_FILE=$env:EASYRSA_VARS_FILE, EASYRSA_PKI=$env:EASYRSA_PKI" -Level "INFO"
+        Write-Log "sh.exe path: $sh" -Level "INFO"
+        Write-Log "easyrsa script path: $easyrsa" -Level "INFO"
+        
+        Push-Location $EasyRSAPath
+        Write-Log "Gewisseld naar directory: $EasyRSAPath" -Level "INFO"
+        
+        Write-Log "Uitvoeren: $sh $easyrsa gen-req $clientName nopass" -Level "INFO"
+        $result1 = & $sh $easyrsa gen-req $clientName nopass
+        Write-Log "Exit code gen-req: $LASTEXITCODE" -Level "INFO"
+        if ($LASTEXITCODE -ne 0) { Write-Log "Fout bij gen-req: $result1" -Level "ERROR" }
+        
+        Write-Log "Uitvoeren: $sh $easyrsa sign-req client $clientName" -Level "INFO"
+        $result2 = & $sh $easyrsa sign-req client $clientName
+        Write-Log "Exit code sign-req: $LASTEXITCODE" -Level "INFO"
+        if ($LASTEXITCODE -ne 0) { Write-Log "Fout bij sign-req: $result2" -Level "ERROR" }
+        
+        Pop-Location
+        Write-Log "Terug naar oorspronkelijke directory" -Level "INFO"
+        
+        Write-Log "Controleren of certificaten bestaan..." -Level "INFO"
+        $caCrt = Join-Path $pkiPath 'ca.crt'
+        $clientCrt = Join-Path $pkiPath (Join-Path 'issued' "$clientName.crt")
+        $clientKey = Join-Path $pkiPath (Join-Path 'private' "$clientName.key")
+
+        if ([System.IO.File]::Exists($caCrt)) { Write-Log "ca.crt gevonden: $caCrt" -Level "INFO" } else { Write-Log "ca.crt niet gevonden: $caCrt" -Level "ERROR" }
+        if ([System.IO.File]::Exists($clientCrt)) { Write-Log "$clientName.crt gevonden: $clientCrt" -Level "INFO" } else { Write-Log "$clientName.crt niet gevonden: $clientCrt" -Level "ERROR" }
+        if ([System.IO.File]::Exists($clientKey)) { Write-Log "$clientName.key gevonden: $clientKey" -Level "INFO" } else { Write-Log "$clientName.key niet gevonden: $clientKey" -Level "ERROR" }
+        
+        $clientConfig = @"
+client
+dev tun
+proto tcp
+remote $($Config.ServerIP) $($Script:Settings.port)
+resolv-retry infinite
+nobind
+user nobody
+group nobody
+persist-key
+persist-tun
+ca ca.crt
+cert $clientName.crt
+key $clientName.key
+remote-cert-tls server
+cipher AES-256-CBC
+verb 3
+"@
+        
+        $clientConfigPath = Join-Path $OutputPath "client.ovpn"
+        Set-Content -Path $clientConfigPath -Value $clientConfig -Encoding UTF8
+        Write-Log "Client config aangemaakt: $clientConfigPath" -Level "INFO"
+        
+        Write-Log "Certificaten kopiëren naar output directory..." -Level "INFO"
+        $copyFailed = $false
+        
+        Copy-Item -Path $caCrt -Destination $OutputPath
+        if ($?) { Write-Log "ca.crt gekopieerd" -Level "INFO" } else { Write-Log "cp failed for ca.crt" -Level "ERROR"; $copyFailed = $true }
+        
+        Copy-Item -Path $clientCrt -Destination $OutputPath
+        if ($?) { Write-Log "$clientName.crt gekopieerd" -Level "INFO" } else { Write-Log "cp failed for $clientName.crt" -Level "ERROR"; $copyFailed = $true }
+        
+        Copy-Item -Path $clientKey -Destination $OutputPath
+        if ($?) { Write-Log "$clientName.key gekopieerd" -Level "INFO" } else { Write-Log "cp failed for $clientName.key" -Level "ERROR"; $copyFailed = $true }
+        
+        if ($copyFailed) {
+            Write-Log "Certificaten konden niet worden gekopieerd, client package aanmaken mislukt" -Level "ERROR"
+            return $null
+        }
+        
+        Write-Log "ZIP bestand maken: $zipPath" -Level "INFO"
+        Compress-Archive -Path "$OutputPath\*" -DestinationPath $zipPath -Force
+        
+        Write-Log "Tijdelijke bestanden opruimen" -Level "INFO"
+        Remove-Item "$OutputPath\ca.crt", "$OutputPath\$clientName.crt", "$OutputPath\$clientName.key", $clientConfigPath -Force
+        
+        Write-Log "Client package aangemaakt: $zipPath" -Level "SUCCESS"
+        return $zipPath
+    }
+    catch {
+        Write-Log "Fout tijdens client package: $_" -Level "ERROR"
+        return $null
+    }
+}
+
