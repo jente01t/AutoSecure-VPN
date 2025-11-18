@@ -100,3 +100,52 @@ function Write-Log {
 
 #endregion Configuratie functies
 
+#region Installatie functies
+
+function Install-OpenVPN {
+    param(
+        [string]$Url = $Script:Settings.installerUrl
+    )
+    
+    if (-not $Url) {
+        $Url = $Script:Settings.installerUrl
+    }
+    
+    $installedPath = $Script:Settings.installedPath
+    if (Test-Path $installedPath) {
+        Write-Log "OpenVPN lijkt al geïnstalleerd te zijn op $installedPath" -Level "INFO"
+        return $true
+    }
+    
+    Write-Log "OpenVPN installatie gestart" -Level "INFO"
+    
+    $tempPath = [System.IO.Path]::GetTempFileName() + ".msi"
+    
+    try {
+        Invoke-WebRequest -Uri $Url -OutFile $tempPath -UseBasicParsing
+        Write-Log "OpenVPN MSI gedownload naar $tempPath" -Level "INFO"
+        
+        $arguments = "/i `"$tempPath`" /qn /norestart"
+        $process = Start-Process -FilePath "msiexec.exe" -ArgumentList $arguments -Wait -PassThru
+        
+        if ($process.ExitCode -eq 0) {
+            Write-Log "OpenVPN succesvol geïnstalleerd" -Level "SUCCESS"
+            return $true
+        } else {
+            Write-Log "OpenVPN installatie mislukt met exit code $($process.ExitCode)" -Level "ERROR"
+            return $false
+        }
+    }
+    catch {
+        Write-Log "Fout tijdens OpenVPN installatie: $_" -Level "ERROR"
+        return $false
+    }
+    finally {
+        if (Test-Path $tempPath) {
+            Remove-Item $tempPath -Force
+        }
+    }
+}
+
+#endregion Installatie functies
+

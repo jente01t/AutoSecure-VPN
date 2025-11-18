@@ -93,6 +93,13 @@ function Invoke-ServerSetup {
         }
         Write-Host "  ✓ Administrator rechten bevestigd" -ForegroundColor Green
         
+        # Stap 2: OpenVPN installeren
+        Write-Host "`n[2/8] OpenVPN installeren..." -ForegroundColor Cyan
+        if (-not (Install-OpenVPN)) {
+            throw "OpenVPN installatie mislukt"
+        }
+        Write-Host "  ✓ OpenVPN geïnstalleerd" -ForegroundColor Green
+        
        
     }
     catch {
@@ -102,3 +109,7 @@ function Invoke-ServerSetup {
     }
 }
 
+
+
+# Start het script
+Start-VPNSetup
