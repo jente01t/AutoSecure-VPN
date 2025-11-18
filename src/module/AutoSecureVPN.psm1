@@ -419,3 +419,68 @@ set_var EASYRSA_CRL_DAYS "180"
 
 #endregion Certificaat functies
 
+#region Server config generatie functies
+
+function Generate-ServerConfig {
+    param(
+        [hashtable]$Config,
+        [string]$EasyRSAPath = $Script:Settings.easyRSAPath,
+        [string]$ConfigPath = $Script:Settings.configPath
+    )
+    
+    Write-Log "Server configuratie generatie gestart" -Level "INFO"
+    
+    $serverConfigFile = Join-Path $ConfigPath "server.ovpn"
+    
+    $pkiPath = Join-Path $EasyRSAPath "pki"
+
+    $caPath   = Join-Path $pkiPath 'ca.crt'
+    $certPath = Join-Path $pkiPath (Join-Path 'issued' "$($Config.ServerName).crt")
+    $keyPath  = Join-Path $pkiPath (Join-Path 'private' "$($Config.ServerName).key")
+    $dhPath   = Join-Path $pkiPath 'dh.pem'
+
+    $serverConfig = @"
+port $($Script:Settings.port)
+proto tcp
+dev tun
+ca "$caPath"
+cert "$certPath"
+key "$keyPath"
+dh "$dhPath"
+server $($Script:Settings.vpnSubnet) $($Script:Settings.vpnMask)
+ifconfig-pool-persist ipp.txt
+push "redirect-gateway def1 bypass-dhcp"
+push "dhcp-option DNS $($Script:Settings.dns1)"
+push "dhcp-option DNS $($Script:Settings.dns2)"
+keepalive 10 120
+cipher AES-256-CBC
+user nobody
+group nobody
+persist-key
+persist-tun
+status openvpn-status.log
+verb 3
+"@
+    
+    if ($Config.LANSubnet) {
+        $serverConfig += "`npush `"route $($Config.LANSubnet) $($Config.LANMask)`""
+    }
+    
+    try {
+        if (-not (Test-Path $ConfigPath)) {
+            New-Item -ItemType Directory -Path $ConfigPath -Force
+        }
+        
+        Set-Content -Path $serverConfigFile -Value $serverConfig -Encoding UTF8
+        
+        Write-Log "Server configuratie aangemaakt: $serverConfigFile" -Level "SUCCESS"
+        return $true
+    }
+    catch {
+        Write-Log "Fout tijdens server configuratie generatie: $_" -Level "ERROR"
+        return $false
+    }
+}
+
+#endregion Server config generatie functies
+

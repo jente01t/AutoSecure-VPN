@@ -121,6 +121,12 @@ function Invoke-ServerSetup {
         }
         Write-Host "  ✓ Certificaten gegenereerd" -ForegroundColor Green
         
+        # Stap 6: Server configuratie genereren
+        Write-Host "`n[6/8] Server configuratie aanmaken..." -ForegroundColor Cyan
+        if (-not (Generate-ServerConfig -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -ConfigPath $script:ConfigPath)) {
+            throw "Server configuratie generatie mislukt"
+        }
+        Write-Host "  ✓ Server configuratie aangemaakt" -ForegroundColor Green
         
     }
     catch {
