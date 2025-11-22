@@ -25,24 +25,42 @@ catch {
 	exit 1
 }
 
+# Load settings
+$Script:Settings = @{}
+try {
+    $configPath = Join-Path $PSScriptRoot '..\config\Settings.psd1'
+    if (Test-Path $configPath) {
+        $loaded = Import-PowerShellDataFile -Path $configPath -ErrorAction Stop
+        if ($loaded) { $Script:Settings = $loaded }
+    }
+}
+catch {
+    Write-Host "Kon settings niet laden: $($_.Exception.Message)" -ForegroundColor Yellow
+}
 
 # Globale variabelen
-$logsPath = Join-Path $PSScriptRoot "..\logs"
+$logsPath = Join-Path $PSScriptRoot "..\$($Script:Settings.logsPath)"
 if (-not (Test-Path $logsPath)) {
     New-Item -ItemType Directory -Path $logsPath -Force
 }
-$script:LogFile = Join-Path $logsPath "vpn-setup.log"
-$script:ConfigPath = Join-Path $env:ProgramFiles "OpenVPN\config"
-$script:EasyRSAPath = Join-Path $env:ProgramFiles "OpenVPN\easy-rsa"
+$script:LogFile = Join-Path $logsPath $Script:Settings.logFileName
+$script:ConfigPath = $Script:Settings.configPath
+$script:EasyRSAPath = $Script:Settings.easyRSAPath
 
 # Hoofdfunctie
 function Start-VPNSetup {
     <#
     .SYNOPSIS
-        Hoofdmenu voor VPN setup keuze
+        Toont het hoofdmenu voor VPN setup keuze.
+
+    .DESCRIPTION
+        Deze functie toont een menu met opties voor server setup, client setup (lokaal of remote), en afsluiten.
+
+    .EXAMPLE
+        Start-VPNSetup
     #>
     
-    # Write-Log "=== OpenVPN Automatische Setup Gestart ===" -Level "INFO"
+    Write-Log "=== OpenVPN Automatische Setup Gestart ===" -Level "INFO"
     Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Cyan
     Write-Host "║   OpenVPN Automatische Setup v1.0         ║" -ForegroundColor Cyan
     Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Cyan
@@ -85,7 +103,13 @@ function Start-VPNSetup {
 function Invoke-ServerSetup {
     <#
     .SYNOPSIS
-        Voert volledige VPN-server setup uit
+        Voert volledige VPN-server setup uit.
+
+    .DESCRIPTION
+        Deze functie voert alle stappen uit voor het opzetten van een OpenVPN server, inclusief installatie, certificaten, configuratie en service start.
+
+    .EXAMPLE
+        Invoke-ServerSetup
     #>
     
     Write-Log "=== Server Setup Gestart ===" -Level "INFO"
@@ -107,7 +131,7 @@ function Invoke-ServerSetup {
         
         # Stap 3: Firewall configureren
         Write-Host "`n[3/8] Windows Firewall configureren..." -ForegroundColor Cyan
-        if (-not (Configure-Firewall -Port 443 -Protocol "TCP")) {
+        if (-not (Set-Firewall -Port 443 -Protocol "TCP")) {
             throw "Firewall configuratie mislukt"
         }
         Write-Host "  ✓ Firewall regels toegevoegd" -ForegroundColor Green
@@ -128,7 +152,7 @@ function Invoke-ServerSetup {
         
         # Stap 6: Server configuratie genereren
         Write-Host "`n[6/8] Server configuratie aanmaken..." -ForegroundColor Cyan
-        if (-not (Generate-ServerConfig -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -ConfigPath $script:ConfigPath)) {
+        if (-not (New-ServerConfig -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -ConfigPath $script:ConfigPath)) {
             throw "Server configuratie generatie mislukt"
         }
         Write-Host "  ✓ Server configuratie aangemaakt" -ForegroundColor Green
@@ -167,7 +191,13 @@ function Invoke-ServerSetup {
 function Invoke-ClientSetup {
     <#
     .SYNOPSIS
-        Voert volledige VPN-client setup uit
+        Voert volledige VPN-client setup uit.
+
+    .DESCRIPTION
+        Deze functie voert alle stappen uit voor het opzetten van een OpenVPN client, inclusief installatie, configuratie importeren en verbinding starten.
+
+    .EXAMPLE
+        Invoke-ClientSetup
     #>
     
     Write-Log "=== Client Setup Gestart ===" -Level "INFO"
@@ -234,7 +264,13 @@ function Invoke-ClientSetup {
 function Invoke-RemoteClientSetup {
     <#
     .SYNOPSIS
-        Voert remote VPN-client setup uit
+        Voert remote VPN-client setup uit.
+
+    .DESCRIPTION
+        Deze functie voert setup uit voor een VPN client op een remote machine via PowerShell remoting.
+
+    .EXAMPLE
+        Invoke-RemoteClientSetup
     #>
     
     Write-Log "=== Remote Client Setup Gestart ===" -Level "INFO"
@@ -298,7 +334,14 @@ function Invoke-RemoteClientSetup {
         
         # Stap 5: Client ZIP bestand
         Write-Host "`n[5/5] Client configuratie bestand..." -ForegroundColor Cyan
-        $zipPath = Read-Host "  Pad naar client ZIP bestand (gegenereerd door server setup)"
+        $defaultZipPath = Join-Path $PSScriptRoot "..\$($Script:Settings.outputPath)\vpn-client-$($Script:Settings.clientNameDefault).zip"
+        if (Test-Path $defaultZipPath) {
+            $zipPath = $defaultZipPath
+            Write-Host "  ✓ Standaard client ZIP bestand gevonden: $zipPath" -ForegroundColor Green
+        } else {
+            Write-Host "  Standaard client ZIP bestand niet gevonden op $defaultZipPath" -ForegroundColor Yellow
+            $zipPath = Read-Host "  Pad naar client ZIP bestand (gegenereerd door server setup)"
+        }
         if (-not (Test-Path $zipPath)) {
             throw "ZIP bestand niet gevonden: $zipPath"
         }
@@ -324,40 +367,6 @@ function Invoke-RemoteClientSetup {
         Write-Log "Remote client setup FOUT: $_" -Level "ERROR"
         Write-Host "`nControleer het logbestand voor details: $script:LogFile" -ForegroundColor Yellow
     }
-}
-
-function Get-ServerConfiguration {
-    <#
-    .SYNOPSIS
-        Verzamelt server configuratie parameters van gebruiker
-    #>
-    
-    $config = @{}
-    
-    Write-Host ""
-    $config.ServerName = Read-Host "  Servernaam (bijv. vpn-server)"
-    if ([string]::IsNullOrWhiteSpace($config.ServerName)) {
-        $config.ServerName = "vpn-server"
-    }
-    
-    $config.ServerIP = Read-Host "  Server WAN IP of DDNS (bijv. vpn.example.com)"
-    while ([string]::IsNullOrWhiteSpace($config.ServerIP)) {
-        Write-Host "  ! Server IP/DDNS is verplicht" -ForegroundColor Red
-        $config.ServerIP = Read-Host "  Server WAN IP of DDNS"
-    }
-    
-    $lanSubnet = Read-Host "  LAN subnet (bijv. 192.168.1.0, druk Enter voor skip)"
-    if (-not [string]::IsNullOrWhiteSpace($lanSubnet)) {
-        $config.LANSubnet = $lanSubnet
-        $config.LANMask = "255.255.255.0"
-    }
-    
-    $noPassInput = Read-Host "  Certificaten zonder wachtwoord? (J/N, standaard N)"
-    $config.NoPass = ($noPassInput -eq "J" -or $noPassInput -eq "j")
-    
-    Write-Log "Server configuratie verzameld: ServerName=$($config.ServerName), ServerIP=$($config.ServerIP)" -Level "INFO"
-    
-    return $config
 }
 
 # Start het script

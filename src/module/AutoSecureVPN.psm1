@@ -1,5 +1,40 @@
 #region Menu en UI functies
 
+<#
+.SYNOPSIS
+    Toont een menu met opties en vraagt om keuze.
+
+.DESCRIPTION
+    Deze functie toont een menu met een titel, lijst van opties, en wacht op gebruikersinvoer.
+    Het valideert de keuze en retourneert het gekozen nummer.
+
+.PARAMETER Title
+    De titel van het menu.
+
+.PARAMETER Options
+    Een array van opties om te tonen.
+
+.PARAMETER HeaderColor
+    Kleur voor de header (standaard Cyan).
+
+.PARAMETER OptionColor
+    Kleur voor de opties (standaard White).
+
+.PARAMETER FooterColor
+    Kleur voor de footer (standaard Cyan).
+
+.PARAMETER SeparatorChar
+    Karakter voor de scheiding (standaard '=').
+
+.PARAMETER NoPrompt
+    Als true, geen prompt tonen en null retourneren.
+
+.PARAMETER Prompt
+    De prompt tekst (standaard 'Keuze: ').
+
+.EXAMPLE
+    Show-Menu -Title "Hoofdmenu" -Options @("Optie 1", "Optie 2")
+#>
 function Show-Menu {
     param(
         [Parameter(Mandatory=$true)][string]$Title,
@@ -37,6 +72,19 @@ function Show-Menu {
     }
 }
 
+<#
+.SYNOPSIS
+    Wacht op gebruikersinvoer om door te gaan.
+
+.DESCRIPTION
+    Deze functie toont een bericht en wacht tot de gebruiker Enter drukt.
+
+.PARAMETER Message
+    Het bericht om te tonen (standaard 'Druk Enter om door te gaan...').
+
+.EXAMPLE
+    Wait-Input
+#>
 function Wait-Input {
 	param([string]$Message = 'Druk Enter om door te gaan...')
 	Read-Host -Prompt $Message | Out-Null
@@ -60,10 +108,39 @@ catch {
 
 #region Configuratie functies  
 
+<#
+.SYNOPSIS
+    Controleert of het script als administrator wordt uitgevoerd.
+
+.DESCRIPTION
+    Deze functie controleert of de huidige gebruiker administrator rechten heeft.
+
+.EXAMPLE
+    if (-not (Test-IsAdmin)) { Write-Host "Administrator rechten vereist" }
+#>
 function Test-IsAdmin {
     return ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+<#
+.SYNOPSIS
+    Schrijft een bericht naar het logbestand en console.
+
+.DESCRIPTION
+    Deze functie logt een bericht met niveau, timestamp, naar een bestand en console.
+
+.PARAMETER Message
+    Het bericht om te loggen.
+
+.PARAMETER Level
+    Het logniveau (INFO, WARNING, ERROR, SUCCESS).
+
+.PARAMETER LogFile
+    Het pad naar het logbestand (optioneel, gebruikt standaard pad).
+
+.EXAMPLE
+    Write-Log "Operatie voltooid" -Level "SUCCESS"
+#>
 function Write-Log {
     param(
         [string]$Message,
@@ -102,6 +179,19 @@ function Write-Log {
 
 #region Installatie functies
 
+<#
+.SYNOPSIS
+    Installeert OpenVPN op de lokale machine.
+
+.DESCRIPTION
+    Deze functie downloadt en installeert OpenVPN via MSI als het niet al geïnstalleerd is.
+
+.PARAMETER Url
+    De URL van de OpenVPN installer (standaard uit settings).
+
+.EXAMPLE
+    Install-OpenVPN
+#>
 function Install-OpenVPN {
     param(
         [string]$Url = $Script:Settings.installerUrl
@@ -154,6 +244,22 @@ function Install-OpenVPN {
 
 #region Firewall functies
 
+<#
+.SYNOPSIS
+    Configureert de Windows Firewall voor OpenVPN.
+
+.DESCRIPTION
+    Deze functie voegt een inbound firewall regel toe voor de opgegeven poort en protocol.
+
+.PARAMETER Port
+    De poort om te openen (standaard uit settings).
+
+.PARAMETER Protocol
+    Het protocol (TCP/UDP, standaard uit settings).
+
+.EXAMPLE
+    Set-Firewall -Port 443 -Protocol "TCP"
+#>
 function Set-Firewall {
     param(
         [int]$Port = $Script:Settings.port,
@@ -195,6 +301,16 @@ function Set-Firewall {
 
 #region Server configuratie functies
 
+<#
+.SYNOPSIS
+    Vraagt server configuratie parameters van de gebruiker.
+
+.DESCRIPTION
+    Deze functie vraagt om servernaam, IP, LAN subnet, en wachtwoord voor certificaten.
+
+.EXAMPLE
+    $config = Get-ServerConfiguration
+#>
 function Get-ServerConfiguration {
     param()
     
@@ -234,6 +350,19 @@ function Get-ServerConfiguration {
 
 #region EasyRSA functies
 
+<#
+.SYNOPSIS
+    Initialiseert EasyRSA voor certificaatbeheer.
+
+.DESCRIPTION
+    Deze functie downloadt en installeert EasyRSA als het niet aanwezig is.
+
+.PARAMETER EasyRSAPath
+    Het pad waar EasyRSA geïnstalleerd wordt (standaard uit settings).
+
+.EXAMPLE
+    Initialize-EasyRSA
+#>
 function Initialize-EasyRSA {
     param(
         [string]$EasyRSAPath = $Script:Settings.easyRSAPath
@@ -273,6 +402,25 @@ function Initialize-EasyRSA {
 
 #region Certificaat functies
 
+<#
+.SYNOPSIS
+    Genereert certificaten voor de VPN server.
+
+.DESCRIPTION
+    Deze functie initialiseert de PKI en genereert CA, server en DH certificaten.
+
+.PARAMETER ServerName
+    De naam van de server (standaard uit settings).
+
+.PARAMETER Password
+    Wachtwoord voor certificaten (optioneel).
+
+.PARAMETER EasyRSAPath
+    Pad naar EasyRSA (standaard uit settings).
+
+.EXAMPLE
+    Initialize-Certificates -ServerName "vpn-server"
+#>
 function Initialize-Certificates {
     param(
         [string]$ServerName = $Script:Settings.serverNameDefault,
@@ -424,6 +572,25 @@ set_var EASYRSA_CRL_DAYS "180"
 
 #region Server config generatie functies
 
+<#
+.SYNOPSIS
+    Genereert de server configuratie voor OpenVPN.
+
+.DESCRIPTION
+    Deze functie maakt een server.ovpn bestand met de opgegeven configuratie.
+
+.PARAMETER Config
+    Hashtable met server configuratie.
+
+.PARAMETER EasyRSAPath
+    Pad naar EasyRSA (standaard uit settings).
+
+.PARAMETER ConfigPath
+    Pad waar config wordt opgeslagen (standaard uit settings).
+
+.EXAMPLE
+    New-ServerConfig -Config $config
+#>
 function New-ServerConfig {
     param(
         [hashtable]$Config,
@@ -489,6 +656,16 @@ verb 3
 
 #region VPN service functies
 
+<#
+.SYNOPSIS
+    Start de OpenVPN service.
+
+.DESCRIPTION
+    Deze functie start de OpenVPN Windows service als deze niet al loopt.
+
+.EXAMPLE
+    Start-VPNService
+#>
 function Start-VPNService {
     Write-Log "OpenVPN service starten" -Level "INFO"
     
@@ -519,6 +696,25 @@ function Start-VPNService {
 
 #region Client functies
 
+<#
+.SYNOPSIS
+    Genereert een client package voor VPN verbinding.
+
+.DESCRIPTION
+    Deze functie genereert certificaten voor een client, maakt een client configuratie bestand, en pakt alles in een ZIP bestand.
+
+.PARAMETER Config
+    Hashtable met server configuratie.
+
+.PARAMETER EasyRSAPath
+    Pad naar EasyRSA (standaard uit settings).
+
+.PARAMETER OutputPath
+    Pad waar het ZIP bestand wordt opgeslagen (standaard uit settings).
+
+.EXAMPLE
+    New-ClientPackage -Config $config
+#>
 function New-ClientPackage {
     param(
         [hashtable]$Config,
@@ -645,6 +841,16 @@ verb 3
     }
 }
 
+<#
+.SYNOPSIS
+    Importeert client configuratie uit een ZIP bestand.
+
+.DESCRIPTION
+    Deze functie pakt een client ZIP bestand uit naar de configuratie map en retourneert het pad naar het OVPN bestand.
+
+.EXAMPLE
+    Import-ClientConfiguration
+#>
 function Import-ClientConfiguration {
     Write-Log "Client configuratie importeren gestart" -Level "INFO"
     
@@ -684,6 +890,28 @@ function Import-ClientConfiguration {
     }
 }
 
+<#
+.SYNOPSIS
+    Installeert OpenVPN en client configuratie op een remote machine.
+
+.DESCRIPTION
+    Deze functie gebruikt PowerShell remoting om OpenVPN te installeren, configuratie te importeren, en de VPN verbinding te starten op een remote computer.
+
+.PARAMETER ComputerName
+    Naam van de remote computer.
+
+.PARAMETER Credential
+    Credentials voor de remote computer.
+
+.PARAMETER ZipPath
+    Pad naar het client ZIP bestand.
+
+.PARAMETER RemoteConfigPath
+    Pad op de remote machine waar config wordt geplaatst (standaard 'C:\Program Files\OpenVPN\config').
+
+.EXAMPLE
+    Install-RemoteClient -ComputerName "remote-pc" -Credential $cred -ZipPath "C:\path\to\client.zip"
+#>
 function Install-RemoteClient {
     param(
         [Parameter(Mandatory=$true)][string]$ComputerName,
@@ -800,6 +1028,16 @@ function Install-RemoteClient {
 
 #region Test functies
 
+<#
+.SYNOPSIS
+    Controleert of een TAP adapter aanwezig is.
+
+.DESCRIPTION
+    Deze functie controleert of er een TAP adapter geïnstalleerd is, wat nodig is voor OpenVPN.
+
+.EXAMPLE
+    Test-TAPAdapter
+#>
 function Test-TAPAdapter {
     Write-Log "TAP adapter controle gestart" -Level "INFO"
     
@@ -820,6 +1058,19 @@ function Test-TAPAdapter {
     }
 }
 
+<#
+.SYNOPSIS
+    Start een VPN verbinding met een configuratie bestand.
+
+.DESCRIPTION
+    Deze functie start OpenVPN met het opgegeven configuratie bestand.
+
+.PARAMETER ConfigFile
+    Pad naar het OVPN configuratie bestand.
+
+.EXAMPLE
+    Start-VPNConnection -ConfigFile "C:\path\to\client.ovpn"
+#>
 function Start-VPNConnection {
     param(
         [string]$ConfigFile
@@ -850,6 +1101,16 @@ function Start-VPNConnection {
     }
 }
 
+<#
+.SYNOPSIS
+    Test de VPN verbinding.
+
+.DESCRIPTION
+    Deze functie test de VPN verbinding door een ping naar een test IP adres.
+
+.EXAMPLE
+    Test-VPNConnection
+#>
 function Test-VPNConnection {
     Write-Log "VPN verbinding testen gestart" -Level "INFO"
     
@@ -879,6 +1140,22 @@ function Test-VPNConnection {
 
 #region Batch functies
 
+<#
+.SYNOPSIS
+    Voert batch setup uit voor meerdere clients.
+
+.DESCRIPTION
+    Deze functie leest een CSV bestand met client namen en genereert certificaten voor elke client.
+
+.PARAMETER CsvPath
+    Pad naar het CSV bestand met client namen.
+
+.PARAMETER EasyRSAPath
+    Pad naar EasyRSA (standaard uit settings).
+
+.EXAMPLE
+    Invoke-BatchClientSetup -CsvPath "C:\path\to\clients.csv"
+#>
 function Invoke-BatchClientSetup {
     param(
         [string]$CsvPath,
