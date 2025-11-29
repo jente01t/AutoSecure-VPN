@@ -176,7 +176,8 @@ function Write-Log {
     )
     
     if (-not $LogFile) {
-        $logsPath = Join-Path $Script:BasePath $Script:Settings.logsPath
+        # Gebruik altijd de root van het project voor logs, ongeacht instellingen
+        $logsPath = Join-Path $Script:BasePath "logs"
         if (-not (Test-Path $logsPath)) {
             New-Item -ItemType Directory -Path $logsPath -Force | Out-Null
         }
