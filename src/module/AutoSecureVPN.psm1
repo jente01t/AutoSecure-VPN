@@ -106,6 +106,33 @@ catch {
     Write-Host "Kon settings niet laden: $($_.Exception.Message)" -ForegroundColor Yellow
 }
 
+$Script:BasePath = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+
+<#
+.SYNOPSIS
+    Stelt de module settings in voor remote operaties.
+
+.DESCRIPTION
+    Deze functie stelt $Script:Settings en $Script:BasePath in voor gebruik in remote sessies.
+
+.PARAMETER Settings
+    De hashtable met settings.
+
+.PARAMETER BasePath
+    Het base path voor de module.
+
+.EXAMPLE
+    Set-ModuleSettings -Settings $mySettings -BasePath "C:\Temp"
+#>
+function Set-ModuleSettings {
+    param(
+        [hashtable]$Settings,
+        [string]$BasePath
+    )
+    $Script:Settings = $Settings
+    $Script:BasePath = $BasePath
+}
+
 #region Configuratie functies  
 
 <#
@@ -149,7 +176,7 @@ function Write-Log {
     )
     
     if (-not $LogFile) {
-        $logsPath = Join-Path $PSScriptRoot "..\..\$($Script:Settings.logsPath)"
+        $logsPath = Join-Path $Script:BasePath $Script:Settings.logsPath
         if (-not (Test-Path $logsPath)) {
             New-Item -ItemType Directory -Path $logsPath -Force | Out-Null
         }
@@ -312,33 +339,46 @@ function Set-Firewall {
     $config = Get-ServerConfiguration
 #>
 function Get-ServerConfiguration {
-    param()
+    param(
+        [string]$ServerName,
+        [string]$ServerIP,
+        [string]$LANSubnet,
+        [string]$LANMask,
+        [switch]$NoPass,
+        [string]$Password
+    )
     
     $config = @{}
     
     Write-Host ""
-    $config.ServerName = Read-Host "  Servernaam (bijv. vpn-server)"
-    if ([string]::IsNullOrWhiteSpace($config.ServerName)) {
-        $config.ServerName = $Script:Settings.serverNameDefault
+    $inputServerName = if ($ServerName) { $ServerName } else { Read-Host "  Servernaam (bijv. vpn-server)" }
+    if ([string]::IsNullOrWhiteSpace($inputServerName)) {
+        $inputServerName = $Script:Settings.serverNameDefault
     }
+    $config.ServerName = $inputServerName
     
-    $config.ServerIP = Read-Host "  Server WAN IP of DDNS (bijv. vpn.example.com)"
-    while ([string]::IsNullOrWhiteSpace($config.ServerIP)) {
+    $inputServerIP = if ($ServerIP) { $ServerIP } else { Read-Host "  Server WAN IP of DDNS (bijv. vpn.example.com)" }
+    while ([string]::IsNullOrWhiteSpace($inputServerIP)) {
         Write-Host "  ! Server IP/DDNS is verplicht" -ForegroundColor Red
-        $config.ServerIP = Read-Host "  Server WAN IP of DDNS"
+        $inputServerIP = Read-Host "  Server WAN IP of DDNS"
+    }
+    $config.ServerIP = $inputServerIP
+    
+    $inputLANSubnet = if ($PSBoundParameters.ContainsKey('LANSubnet')) { $LANSubnet } else { Read-Host "  LAN subnet (default 192.168.1.0, druk Enter voor skip)" }
+    if (-not [string]::IsNullOrWhiteSpace($inputLANSubnet)) {
+        $config.LANSubnet = $inputLANSubnet
+        $config.LANMask = if ($LANMask) { $LANMask } else { $Script:Settings.lanMaskDefault }
     }
     
-    $lanSubnet = Read-Host "  LAN subnet (default 192.168.1.0, druk Enter voor skip)"
-    if (-not [string]::IsNullOrWhiteSpace($lanSubnet)) {
-        $config.LANSubnet = $lanSubnet
-        $config.LANMask = $Script:Settings.lanMaskDefault
+    if ($PSBoundParameters.ContainsKey('NoPass')) {
+        $config.NoPass = $NoPass
+    } else {
+        $noPassInput = Read-Host "  Certificaten zonder wachtwoord? (J/N, standaard N)"
+        $config.NoPass = ($noPassInput -eq "J" -or $noPassInput -eq "j")
     }
-    
-    $noPassInput = Read-Host "  Certificaten zonder wachtwoord? (J/N, standaard N)"
-    $config.NoPass = ($noPassInput -eq "J" -or $noPassInput -eq "j")
     
     if (-not $config.NoPass) {
-        $config.Password = Read-Host "  Voer wachtwoord in voor certificaten"
+        $config.Password = if ($Password) { $Password } else { Read-Host "  Voer wachtwoord in voor certificaten" }
     }
     
     Write-Log "Server configuratie verzameld: ServerName=$($config.ServerName), ServerIP=$($config.ServerIP)" -Level "INFO"
@@ -374,11 +414,12 @@ function Initialize-EasyRSA {
     }
     
     try {
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
         $easyRSAUrl = $Script:Settings.easyRSAUrl
         $tempZip = Join-Path $env:TEMP "easyrsa.zip"
         
         Invoke-WebRequest -Uri $easyRSAUrl -OutFile $tempZip -UseBasicParsing
-        Expand-Archive -Path $tempZip -DestinationPath $EasyRSAPath -Force
+        [System.IO.Compression.ZipFile]::ExtractToDirectory($tempZip, $EasyRSAPath)
         
         $nestedDir = Get-ChildItem $EasyRSAPath -Directory | Where-Object { $_.Name -like "EasyRSA-*" } | Select-Object -First 1
         if ($nestedDir) {
@@ -422,10 +463,10 @@ function Initialize-EasyRSA {
     Initialize-Certificates -ServerName "vpn-server"
 #>
 function Initialize-Certificates {
-    param(
+    param (
         [string]$ServerName = $Script:Settings.serverNameDefault,
         [string]$Password = $null,
-        [string]$EasyRSAPath = (Join-Path $PSScriptRoot "..\..\$($Script:Settings.certPath)")
+        [string]$EasyRSAPath = (Join-Path $Script:BasePath $Script:Settings.certPath)
     )
     
     try {
@@ -652,6 +693,132 @@ verb 3
     }
 }
 
+
+
+<#
+.SYNOPSIS
+    Installeert en configureert OpenVPN server op een remote machine.
+
+.DESCRIPTION
+    Deze functie gebruikt PowerShell remoting om OpenVPN te installeren, firewall te configureren, certificaten te genereren, server config te maken en de service te starten op een remote computer.
+
+.PARAMETER ComputerName
+    Naam van de remote computer.
+
+.PARAMETER Credential
+    Credentials voor de remote computer.
+
+.PARAMETER ServerConfig
+    Hashtable met server configuratie parameters.
+
+.EXAMPLE
+    $config = Get-ServerConfiguration -ServerName "vpn-server" -ServerIP "example.com"
+    Install-RemoteServer -ComputerName "remote-pc" -Credential $cred -ServerConfig $config
+#>
+function Install-RemoteServer {
+    param (
+        [Parameter(Mandatory=$true)][string]$ComputerName,
+        [Parameter(Mandatory=$true)][PSCredential]$Credential,
+        [Parameter(Mandatory=$true)][hashtable]$ServerConfig,
+        [Parameter(Mandatory=$true)][string]$LocalEasyRSAPath
+    )
+
+    Write-Log "Remote server configuratie gestart voor $ComputerName" -Level "INFO"
+    
+    try {
+        $session = New-PSSession -ComputerName $ComputerName -Credential $Credential
+        
+        # Get local paths
+        $moduleBase = $MyInvocation.MyCommand.Module.ModuleBase
+        $localModule = Join-Path $moduleBase "AutoSecureVPN.psm1"
+
+        # copy module to remote temp path
+        $remoteTemp = "C:\Temp"
+        Invoke-Command -Session $session -ScriptBlock { if (-not (Test-Path "C:\Temp")) { New-Item -ItemType Directory -Path "C:\Temp" -Force } }
+        $remoteModule = Join-Path $remoteTemp "AutoSecureVPN.psm1"
+        $remoteEasyRSA = Join-Path $remoteTemp "easy-rsa"
+        
+        Copy-Item -Path $localModule -Destination $remoteModule -ToSession $session
+        Copy-Item -Path $LocalEasyRSAPath -Destination $remoteEasyRSA -ToSession $session -Recurse
+        
+        Invoke-Command -Session $session -ScriptBlock {
+            param($settings, $modulePath, $config, $remoteEasyRSA)
+            
+            # Set execution policy to allow scripts
+            Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process -Force
+            
+            # Stop on errors
+            $ErrorActionPreference = 'Stop'
+            
+            Import-Module $modulePath -Force
+            if (-not (Get-Module -Name "AutoSecureVPN")) { throw "Failed to import module" }
+            
+
+            Set-ModuleSettings -Settings $settings -BasePath "C:\Temp"
+            
+            # Disable file logging for remote operations
+            function global:Write-Log {
+                param($Message, $Level = "INFO")
+                Write-Host "[$Level] $Message"
+            }
+            
+            try {
+                Write-Host "Starting remote server setup..."
+                
+                if (-not (Test-IsAdmin)) {
+                    throw "Administrator rights required"
+                }
+                
+                Write-Host "Installing OpenVPN..."
+                if (-not (Install-OpenVPN)) {
+                    throw "OpenVPN installation failed"
+                }
+                
+                Write-Host "Configuring firewall..."
+                if (-not (Set-Firewall)) {
+                    throw "Firewall configuration failed"
+                }
+                
+                Write-Host "Copying EasyRSA with certificates..."
+                if (-not (Test-Path $settings.easyRSAPath)) {
+                    New-Item -ItemType Directory -Path $settings.easyRSAPath -Force
+                }
+                Copy-Item -Path "$remoteEasyRSA\*" -Destination $settings.easyRSAPath -Recurse -Force
+                
+                Write-Host "Creating server config..."
+                if (-not (New-ServerConfig -Config $config)) {
+                    throw "Server config generation failed"
+                }
+                
+                Write-Host "Starting VPN service..."
+                if (-not (Start-VPNService)) {
+                    throw "VPN service start failed"
+                }
+                
+                Write-Host "Remote server setup completed successfully"
+            }
+            catch {
+                Write-Host "Error during remote server setup: $_"
+                throw
+            }
+            
+            Remove-Item $modulePath -Force
+            Remove-Item $remoteEasyRSA -Recurse -Force
+        } -ArgumentList $Script:Settings, $remoteModule, $ServerConfig, $remoteEasyRSA
+        
+        Remove-PSSession $session
+        
+        Write-Log "Remote server configuratie voltooid voor $ComputerName" -Level "SUCCESS"
+        return $true
+    }
+    catch {
+        Write-Log "Fout tijdens remote server configuratie: $_" -Level "ERROR"
+        if ($session) { Remove-PSSession $session -ErrorAction SilentlyContinue }
+        return $false
+    }
+}
+
+
 #endregion Server config generatie functies
 
 #region VPN service functies
@@ -719,7 +886,7 @@ function New-ClientPackage {
     param(
         [hashtable]$Config,
         [string]$EasyRSAPath = $Script:Settings.easyRSAPath,
-        [string]$OutputPath = (Join-Path $PSScriptRoot "..\..\$($Script:Settings.outputPath)")
+        [string]$OutputPath = (Join-Path $Script:BasePath $Script:Settings.outputPath)
     )
     
     $pkiPath = Join-Path $EasyRSAPath "pki"
@@ -857,7 +1024,7 @@ function Import-ClientConfiguration {
     $configPath = $Script:Settings.configPath
     
     # Try to find the default client ZIP file
-    $defaultZipPath = Join-Path $PSScriptRoot "..\..\$($Script:Settings.outputPath)\vpn-client-$($Script:Settings.clientNameDefault).zip"
+    $defaultZipPath = Join-Path (Join-Path $Script:BasePath $Script:Settings.outputPath) "vpn-client-$($Script:Settings.clientNameDefault).zip"
     if (Test-Path $defaultZipPath) {
         $zipFile = $defaultZipPath
         Write-Log "Standaard client ZIP bestand gevonden: $zipFile" -Level "INFO"
@@ -935,7 +1102,8 @@ function Install-RemoteClient {
         $localModule = Join-Path $moduleBase "AutoSecureVPN.psm1"
         
         # Copy module to remote temp
-        $remoteTemp = Invoke-Command -Session $session -ScriptBlock { $env:TEMP }
+        $remoteTemp = "C:\Temp"
+        Invoke-Command -Session $session -ScriptBlock { if (-not (Test-Path "C:\Temp")) { New-Item -ItemType Directory -Path "C:\Temp" -Force } }
         $remoteModule = Join-Path $remoteTemp "AutoSecureVPN.psm1"
         $remoteZip = Join-Path $remoteTemp "client.zip"
         
@@ -954,52 +1122,59 @@ function Install-RemoteClient {
             
             # Import module
             Import-Module $modulePath -Force
+            if (-not (Get-Module -Name "AutoSecureVPN")) { throw "Failed to import module" }
             
             # Override settings
-            $Script:Settings = $settings
+            Set-ModuleSettings -Settings $settings -BasePath "C:\Temp"
             
             # Disable file logging for remote operations
-            function Write-Log {
+            function global:Write-Log {
                 param($Message, $Level = "INFO")
                 Write-Host "[$Level] $Message"
             }
             
             # Perform client setup
-            Write-Host "Starting remote client setup..."
-            
-            # Check admin (assume true since we have session)
-            if (-not (Test-IsAdmin)) {
-                throw "Administrator rights required on remote machine"
+            try {
+                Write-Host "Starting remote client setup..."
+                
+                # Check admin (assume true since we have session)
+                if (-not (Test-IsAdmin)) {
+                    throw "Administrator rights required on remote machine"
+                }
+                
+                # Install OpenVPN
+                if (-not (Install-OpenVPN)) {
+                    throw "OpenVPN installation failed on remote machine"
+                }
+                
+                # Expand client package
+                if (-not (Test-Path $configPath)) {
+                    New-Item -ItemType Directory -Path $configPath -Force | Out-Null
+                } else {
+                    # Remove existing config files to avoid conflicts
+                    Get-ChildItem $configPath | Remove-Item -Force
+                }
+                Add-Type -AssemblyName System.IO.Compression.FileSystem
+                [System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $configPath)
+                
+                $ovpnFile = Get-ChildItem $configPath -Filter "*.ovpn" | Select-Object -First 1
+                if (-not $ovpnFile) {
+                    throw "No OVPN file found in client package"
+                }
+                
+                # Test TAP adapter
+                if (-not (Test-TAPAdapter)) {
+                    Write-Host "TAP adapter not found, OpenVPN may need reinstallation" -ForegroundColor Yellow
+                }
+                
+                # Start VPN connection
+                if (-not (Start-VPNConnection -ConfigFile $ovpnFile.FullName)) {
+                    throw "Failed to start VPN connection on remote machine"
+                }
             }
-            
-            # Install OpenVPN
-            if (-not (Install-OpenVPN)) {
-                throw "OpenVPN installation failed on remote machine"
-            }
-            
-            # Expand client package
-            if (-not (Test-Path $configPath)) {
-                New-Item -ItemType Directory -Path $configPath -Force | Out-Null
-            } else {
-                # Remove existing config files to avoid conflicts
-                Get-ChildItem $configPath | Remove-Item -Force
-            }
-            Add-Type -AssemblyName System.IO.Compression.FileSystem
-            [System.IO.Compression.ZipFile]::ExtractToDirectory($zipPath, $configPath)
-            
-            $ovpnFile = Get-ChildItem $configPath -Filter "*.ovpn" | Select-Object -First 1
-            if (-not $ovpnFile) {
-                throw "No OVPN file found in client package"
-            }
-            
-            # Test TAP adapter
-            if (-not (Test-TAPAdapter)) {
-                Write-Host "TAP adapter not found, OpenVPN may need reinstallation" -ForegroundColor Yellow
-            }
-            
-            # Start VPN connection
-            if (-not (Start-VPNConnection -ConfigFile $ovpnFile.FullName)) {
-                throw "Failed to start VPN connection on remote machine"
+            catch {
+                Write-Host "Error during remote client setup: $_"
+                throw
             }
             
             # Test connection
@@ -1193,3 +1368,6 @@ function Invoke-BatchClientSetup {
 }
 
 #endregion Batch functies
+
+
+

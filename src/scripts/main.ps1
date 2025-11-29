@@ -69,10 +69,11 @@ function Start-VPNSetup {
     Write-Host "  [1] Server Setup (VPN-server installeren en configureren)" -ForegroundColor Green
     Write-Host "  [2] Client Setup (Lokaal - VPN-client installeren en verbinden)" -ForegroundColor Green
     Write-Host "  [3] Client Setup (Remote - VPN-client op afstand installeren)" -ForegroundColor Green
-    Write-Host "  [4] Afsluiten" -ForegroundColor Red
+    Write-Host "  [4] Server Setup (Remote - VPN-server op afstand installeren)" -ForegroundColor Green
+    Write-Host "  [5] Afsluiten" -ForegroundColor Red
     Write-Host ""
     
-    $choice = Read-Host "Voer uw keuze in (1-4)"
+    $choice = Read-Host "Voer uw keuze in (1-5)"
     
     switch ($choice) {
         "1" {
@@ -88,6 +89,10 @@ function Start-VPNSetup {
             Invoke-RemoteClientSetup
         }
         "4" {
+            Write-Host "`n[*] Server Setup (Remote) geselecteerd..." -ForegroundColor Cyan
+            Invoke-RemoteServerSetup
+        }
+        "5" {
             Write-Host "`n[*] Setup wordt afgesloten..." -ForegroundColor Yellow
             Write-Log "Setup afgesloten door gebruiker" -Level "INFO"
             exit 0
@@ -365,6 +370,122 @@ function Invoke-RemoteClientSetup {
     catch {
         Write-Host "`n[!] FOUT tijdens remote client setup: $_" -ForegroundColor Red
         Write-Log "Remote client setup FOUT: $_" -Level "ERROR"
+        Write-Host "`nControleer het logbestand voor details: $script:LogFile" -ForegroundColor Yellow
+    }
+}
+
+function Invoke-RemoteServerSetup {
+    <#
+    .SYNOPSIS
+        Voert remote VPN-server setup uit.
+
+    .DESCRIPTION
+        Deze functie voert setup uit voor een VPN server op een remote machine via PowerShell remoting.
+
+    .EXAMPLE
+        Invoke-RemoteServerSetup
+    #>
+    
+    Write-Log "=== Remote Server Setup Gestart ===" -Level "INFO"
+    
+    try {
+        # Stap 1: Administrator check (voor lokale machine)
+        Write-Host "`n[1/6] Controleren administrator rechten..." -ForegroundColor Cyan
+        if (-not (Test-IsAdmin)) {
+            throw "Script moet als Administrator worden uitgevoerd!"
+        }
+        Write-Host "  ✓ Administrator rechten bevestigd" -ForegroundColor Green
+        
+        # Stap 1.5: Controleer lokale OpenVPN installatie
+        if (-not (Test-Path $Script:Settings.installedPath)) {
+            Write-Host "`n[1.5] OpenVPN lokaal installeren voor certificaat generatie..." -ForegroundColor Cyan
+            if (-not (Install-OpenVPN)) {
+                throw "Lokale OpenVPN installatie mislukt"
+            }
+            Write-Host "  ✓ OpenVPN lokaal geïnstalleerd" -ForegroundColor Green
+        }
+        
+        # Stap 2: Remote computer details
+        Write-Host "`n[2/6] Remote computer configuratie..." -ForegroundColor Cyan
+        $computerName = Read-Host "  Voer de naam of IP van de remote computer in"
+        if ([string]::IsNullOrWhiteSpace($computerName)) {
+            throw "Remote computer naam is verplicht"
+        }
+        Write-Host "  ✓ Remote computer: $computerName" -ForegroundColor Green
+        
+        # Stap 3: WinRM configuratie
+        Write-Host "`n[3/6] WinRM configuratie controleren..." -ForegroundColor Cyan
+        try {
+            $trustedHosts = (Get-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client -Name TrustedHosts -ErrorAction Stop).TrustedHosts
+        } catch {
+            $trustedHosts = ""
+        }
+        if ($trustedHosts -notlike "*$computerName*" -and $trustedHosts -ne "*") {
+            Write-Host "  Remote computer niet in TrustedHosts. Toevoegen..." -ForegroundColor Yellow
+            $newTrustedHosts = if ($trustedHosts) { "$trustedHosts,$computerName" } else { $computerName }
+            Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client -Name TrustedHosts -Value $newTrustedHosts
+            Restart-Service winrm -Force
+            Write-Host "  ✓ $computerName toegevoegd aan TrustedHosts en WinRM herstart" -ForegroundColor Green
+        } elseif ($trustedHosts -eq "*") {
+            Write-Host "  ✓ TrustedHosts staat op wildcard (*), geen toevoeging nodig" -ForegroundColor Green
+        } else {
+            Write-Host "  ✓ $computerName staat al in TrustedHosts" -ForegroundColor Green
+        }
+        
+        Write-Host "  Controleren of PSRemoting actief is op remote machine..." -ForegroundColor Cyan
+        try {
+            Test-WSMan -ComputerName $computerName -ErrorAction Stop | Out-Null
+            Write-Host "  ✓ PSRemoting actief op $computerName" -ForegroundColor Green
+        } catch {
+            Write-Host "  ! PSRemoting niet actief op $computerName. Inschakelen..." -ForegroundColor Yellow
+            Write-Host "    Voer het volgende uit op de remote machine als Administrator:" -ForegroundColor Yellow
+            Write-Host "    Enable-PSRemoting -Force" -ForegroundColor White
+            Write-Host "    Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client -Name TrustedHosts -Value '*'" -ForegroundColor White
+            throw "PSRemoting moet ingeschakeld zijn op de remote machine"
+        }
+        
+        # Stap 4: Credentials verkrijgen
+        Write-Host "`n[4/6] Authenticatie..." -ForegroundColor Cyan
+        $cred = Get-Credential -Message "Voer Administrator credentials in voor $computerName"
+        if (-not $cred) {
+            throw "Credentials zijn verplicht"
+        }
+        Write-Host "  ✓ Credentials verkregen" -ForegroundColor Green
+        
+        # Stap 5: Server configuratie verkrijgen
+        Write-Host "`n[5/6] Server configuratie..." -ForegroundColor Cyan
+        $serverConfig = Get-ServerConfiguration
+        Write-Host "  ✓ Server configuratie verkregen" -ForegroundColor Green
+        
+        # Stap 6: Certificaten lokaal genereren
+        Write-Host "`n[6/6] Certificaten lokaal genereren..." -ForegroundColor Cyan
+        $localEasyRSA = $Script:Settings.easyRSAPath
+        if (-not (Initialize-EasyRSA)) {
+            throw "EasyRSA initialisatie mislukt lokaal"
+        }
+        if (-not (Initialize-Certificates -ServerName $serverConfig.ServerName -Password $serverConfig.Password -EasyRSAPath $Script:Settings.easyRSAPath)) {
+            throw "Certificaat generatie mislukt lokaal"
+        }
+        Write-Host "  ✓ Certificaten lokaal gegenereerd" -ForegroundColor Green
+        
+        # Remote installatie uitvoeren
+        Write-Host "`n[*] Remote server installatie starten..." -ForegroundColor Cyan
+        if (-not (Install-RemoteServer -ComputerName $computerName -Credential $cred -ServerConfig $serverConfig -LocalEasyRSAPath $localEasyRSA)) {
+            throw "Remote server installatie mislukt"
+        }
+        Write-Host "  ✓ Remote installatie voltooid" -ForegroundColor Green
+        
+        Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Green
+        Write-Host "║  Remote Server Setup Succesvol Voltooid!  ║" -ForegroundColor Green
+        Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Green
+        Write-Host "`nLogbestand: $script:LogFile" -ForegroundColor Yellow
+        Write-Host "`nDe VPN server draait nu op de remote machine." -ForegroundColor Cyan
+        
+        Write-Log "Remote server setup succesvol voltooid voor $computerName" -Level "SUCCESS"
+    }
+    catch {
+        Write-Host "`n[!] FOUT tijdens remote server setup: $_" -ForegroundColor Red
+        Write-Log "Remote server setup FOUT: $_" -Level "ERROR"
         Write-Host "`nControleer het logbestand voor details: $script:LogFile" -ForegroundColor Yellow
     }
 }
