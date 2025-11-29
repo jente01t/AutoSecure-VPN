@@ -650,6 +650,12 @@ function New-ServerConfig {
     $keyPath  = Join-Path $pkiPath (Join-Path 'private' "$($Config.ServerName).key")
     $dhPath   = Join-Path $pkiPath 'dh.pem'
 
+    # Escape backslashes for OpenVPN config
+    $caPath = $caPath -replace '\\', '\\'
+    $certPath = $certPath -replace '\\', '\\'
+    $keyPath = $keyPath -replace '\\', '\\'
+    $dhPath = $dhPath -replace '\\', '\\'
+
     $serverConfig = @"
 port $($Script:Settings.port)
 proto tcp
@@ -914,7 +920,6 @@ function New-ClientPackage {
         # Prepare Unix-style paths for bash
         $drive = $EasyRSAPath.Substring(0,1).ToLower()
         $unixEasyRSAPath = '/' + $drive + $EasyRSAPath.Substring(2) -replace '\\', '/'
-        $pkiPathUnix = '/' + $drive + $pkiPath.Substring(2) -replace '\\', '/'
         $env:EASYRSA = $unixEasyRSAPath
         
         $env:EASYRSA_BATCH = "1"
