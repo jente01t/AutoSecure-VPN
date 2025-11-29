@@ -54,7 +54,7 @@ function Start-VPNSetup {
         Toont het hoofdmenu voor VPN setup keuze.
 
     .DESCRIPTION
-        Deze functie toont een menu met opties voor server setup, client setup (lokaal of remote), en afsluiten.
+        Deze functie toont een menu met opties voor server of client setup keuze.
 
     .EXAMPLE
         Start-VPNSetup
@@ -66,33 +66,23 @@ function Start-VPNSetup {
     Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Kies een optie:" -ForegroundColor Yellow
-    Write-Host "  [1] Server Setup (VPN-server installeren en configureren)" -ForegroundColor Green
-    Write-Host "  [2] Client Setup (Lokaal - VPN-client installeren en verbinden)" -ForegroundColor Green
-    Write-Host "  [3] Client Setup (Remote - VPN-client op afstand installeren)" -ForegroundColor Green
-    Write-Host "  [4] Server Setup (Remote - VPN-server op afstand installeren)" -ForegroundColor Green
-    Write-Host "  [5] Afsluiten" -ForegroundColor Red
+    Write-Host "  [1] Server Setup" -ForegroundColor Green
+    Write-Host "  [2] Client Setup" -ForegroundColor Green
+    Write-Host "  [3] Afsluiten" -ForegroundColor Red
     Write-Host ""
     
-    $choice = Read-Host "Voer uw keuze in (1-5)"
+    $choice = Read-Host "Voer uw keuze in (1-3)"
     
     switch ($choice) {
         "1" {
             Write-Host "`n[*] Server Setup geselecteerd..." -ForegroundColor Cyan
-            Invoke-ServerSetup
+            Select-ServerMode
         }
         "2" {
-            Write-Host "`n[*] Client Setup (Lokaal) geselecteerd..." -ForegroundColor Cyan
-            Invoke-ClientSetup
+            Write-Host "`n[*] Client Setup geselecteerd..." -ForegroundColor Cyan
+            Select-ClientMode
         }
         "3" {
-            Write-Host "`n[*] Client Setup (Remote) geselecteerd..." -ForegroundColor Cyan
-            Invoke-RemoteClientSetup
-        }
-        "4" {
-            Write-Host "`n[*] Server Setup (Remote) geselecteerd..." -ForegroundColor Cyan
-            Invoke-RemoteServerSetup
-        }
-        "5" {
             Write-Host "`n[*] Setup wordt afgesloten..." -ForegroundColor Yellow
             Write-Log "Setup afgesloten door gebruiker" -Level "INFO"
             exit 0
@@ -101,6 +91,88 @@ function Start-VPNSetup {
             Write-Host "`n[!] Ongeldige keuze. Probeer opnieuw." -ForegroundColor Red
             Start-Sleep -Seconds 2
             Start-VPNSetup
+        }
+    }
+}
+
+function Select-ServerMode {
+    <#
+    .SYNOPSIS
+        Toont submenu voor server setup keuze (lokaal of remote).
+
+    .DESCRIPTION
+        Deze functie toont een submenu voor het kiezen tussen lokale of remote server setup.
+
+    .EXAMPLE
+        Select-ServerMode
+    #>
+    
+    Write-Host "`nServer Setup Opties:" -ForegroundColor Yellow
+    Write-Host "  [1] Lokaal (VPN-server installeren en configureren op deze machine)" -ForegroundColor Green
+    Write-Host "  [2] Remote (VPN-server installeren en configureren op afstand)" -ForegroundColor Green
+    Write-Host "  [3] Terug naar hoofdmenu" -ForegroundColor Red
+    Write-Host ""
+    
+    $choice = Read-Host "Voer uw keuze in (1-3)"
+    
+    switch ($choice) {
+        "1" {
+            Write-Host "`n[*] Lokale Server Setup geselecteerd..." -ForegroundColor Cyan
+            Invoke-ServerSetup
+        }
+        "2" {
+            Write-Host "`n[*] Remote Server Setup geselecteerd..." -ForegroundColor Cyan
+            Invoke-RemoteServerSetup
+        }
+        "3" {
+            Write-Host "`n[*] Terug naar hoofdmenu..." -ForegroundColor Yellow
+            Start-VPNSetup
+        }
+        default {
+            Write-Host "`n[!] Ongeldige keuze. Probeer opnieuw." -ForegroundColor Red
+            Start-Sleep -Seconds 2
+            Select-ServerMode
+        }
+    }
+}
+
+function Select-ClientMode {
+    <#
+    .SYNOPSIS
+        Toont submenu voor client setup keuze (lokaal of remote).
+
+    .DESCRIPTION
+        Deze functie toont een submenu voor het kiezen tussen lokale of remote client setup.
+
+    .EXAMPLE
+        Select-ClientMode
+    #>
+    
+    Write-Host "`nClient Setup Opties:" -ForegroundColor Yellow
+    Write-Host "  [1] Lokaal (VPN-client installeren en verbinden op deze machine)" -ForegroundColor Green
+    Write-Host "  [2] Remote (VPN-client installeren en verbinden op afstand)" -ForegroundColor Green
+    Write-Host "  [3] Terug naar hoofdmenu" -ForegroundColor Red
+    Write-Host ""
+    
+    $choice = Read-Host "Voer uw keuze in (1-3)"
+    
+    switch ($choice) {
+        "1" {
+            Write-Host "`n[*] Lokale Client Setup geselecteerd..." -ForegroundColor Cyan
+            Invoke-ClientSetup
+        }
+        "2" {
+            Write-Host "`n[*] Remote Client Setup geselecteerd..." -ForegroundColor Cyan
+            Invoke-RemoteClientSetup
+        }
+        "3" {
+            Write-Host "`n[*] Terug naar hoofdmenu..." -ForegroundColor Yellow
+            Start-VPNSetup
+        }
+        default {
+            Write-Host "`n[!] Ongeldige keuze. Probeer opnieuw." -ForegroundColor Red
+            Start-Sleep -Seconds 2
+            Select-ClientMode
         }
     }
 }
