@@ -529,6 +529,7 @@ set_var EASYRSA_CRL_DAYS "180"
             Remove-Item $pkiPath -Recurse -Force
         }
         
+        Write-Progress -Id 1 -Activity "Certificaat Generatie" -Status "Stap 1 van 6: PKI initialiseren" -PercentComplete 0
         $easyrsaOutput = & $sh $easyrsa init-pki
         if ($LASTEXITCODE -ne 0) {
             Write-Log "EasyRSA init-pki failed with exit code $LASTEXITCODE. Output: $easyrsaOutput" -Level "ERROR"
@@ -545,6 +546,7 @@ set_var EASYRSA_CRL_DAYS "180"
             Write-Log "Password file created for certificate generation" -Level "INFO"
         }
 
+        Write-Progress -Id 1 -Activity "Certificaat Generatie" -Status "Stap 2 van 6: CA certificaat genereren" -PercentComplete 16.67
         if ($Password) {
             $easyrsaOutput = & $sh $easyrsa build-ca
         } else {
@@ -556,6 +558,7 @@ set_var EASYRSA_CRL_DAYS "180"
         }
         Write-Log "Easy-RSA output: $easyrsaOutput"
         
+        Write-Progress -Id 1 -Activity "Certificaat Generatie" -Status "Stap 3 van 6: Server certificaat aanvraag genereren" -PercentComplete 33.33
         if ($Password) {
             $easyrsaOutput = & $sh $easyrsa gen-req $ServerName
         } else {
@@ -567,22 +570,28 @@ set_var EASYRSA_CRL_DAYS "180"
         }
         Write-Log "Easy-RSA output: $easyrsaOutput"
 
-        
+        Write-Progress -Id 1 -Activity "Certificaat Generatie" -Status "Stap 4 van 6: Server certificaat ondertekenen" -PercentComplete 50
         & $sh $easyrsa sign-req server $ServerName
         if ($LASTEXITCODE -ne 0) {
             Write-Log "EasyRSA sign-req server failed with exit code $LASTEXITCODE" -Level "ERROR"
             return $false
         }
+        
+        Write-Progress -Id 1 -Activity "Certificaat Generatie" -Status "Stap 5 van 6: DH parameters genereren" -PercentComplete 66.67
         & $sh $easyrsa gen-dh
         if ($LASTEXITCODE -ne 0) {
             Write-Log "EasyRSA gen-dh failed with exit code $LASTEXITCODE" -Level "ERROR"
             return $false
         }
+        
+        Write-Progress -Id 1 -Activity "Certificaat Generatie" -Status "Stap 6 van 6: CRL genereren" -PercentComplete 83.33
         & $sh $easyrsa gen-crl
         if ($LASTEXITCODE -ne 0) {
             Write-Log "EasyRSA gen-crl failed with exit code $LASTEXITCODE" -Level "ERROR"
             return $false
         }
+        
+        Write-Progress -Id 1 -Activity "Certificaat Generatie" -Completed
         
         # Controleer of alle vereiste certificaat bestanden zijn aangemaakt
         $requiredFiles = @(
@@ -1050,6 +1059,21 @@ function Import-ClientConfiguration {
         $ovpnFile = Get-ChildItem $configPath -Filter "*.ovpn" | Select-Object -First 1
         
         if ($ovpnFile) {
+            # Update the OVPN file to use absolute paths for certificates
+            $ovpnContent = Get-Content $ovpnFile.FullName -Raw
+            $escapedPath = $configPath -replace '\\', '\\\\'
+            $ovpnContent = $ovpnContent -replace 'ca\s+ca\.crt', "ca `"$escapedPath\\ca.crt`""
+            $ovpnContent = $ovpnContent -replace 'cert\s+client1\.crt', "cert `"$escapedPath\\client1.crt`""
+            $ovpnContent = $ovpnContent -replace 'key\s+client1\.key', "key `"$escapedPath\\client1.key`""
+            # Remove Windows-unsupported options
+            $ovpnContent = $ovpnContent -replace 'user\s+nobody.*\n', ''
+            $ovpnContent = $ovpnContent -replace 'group\s+nobody.*\n', ''
+            # Update deprecated cipher
+            $ovpnContent = $ovpnContent -replace 'cipher\s*AES-256-CBC', 'cipher AES-256-GCM'
+            # Disable DCO to avoid device access issues
+            $ovpnContent += "`ndisable-dco`n"
+            Set-Content -Path $ovpnFile.FullName -Value $ovpnContent
+            
             Write-Log "Client configuratie geïmporteerd: $($ovpnFile.FullName)" -Level "SUCCESS"
             return $ovpnFile.FullName
         } else {
@@ -1270,8 +1294,12 @@ function Start-VPNConnection {
             return $false
         }
         
+        # Stop any existing OpenVPN processes
+        Get-Process -Name "openvpn" -ErrorAction SilentlyContinue | Stop-Process -Force
+        
         $arguments = "--config `"$ConfigFile`""
-        Start-Process -FilePath $openVPNPath -ArgumentList $arguments -NoNewWindow
+        $workingDir = Split-Path $ConfigFile
+        Start-Process -FilePath $openVPNPath -ArgumentList $arguments -WorkingDirectory $workingDir -NoNewWindow
         
         Write-Log "VPN verbinding gestart" -Level "SUCCESS"
         return $true
@@ -1296,20 +1324,24 @@ function Test-VPNConnection {
     Write-Log "VPN verbinding testen gestart" -Level "INFO"
     
     try {
-        # Simple ping test to VPN server
+        # Simple ping test to VPN server with retries
         $testIP = $Script:Settings.testIP
         if (-not $testIP) {
             $testIP = $Script:Settings.testIP
         }
-        $pingResult = Test-Connection -ComputerName $testIP -Count 1 -Quiet
         
-        if ($pingResult) {
-            Write-Log "VPN verbinding succesvol getest" -Level "SUCCESS"
-            return $true
-        } else {
-            Write-Log "VPN verbinding test mislukt" -Level "WARNING"
-            return $false
+        for ($i = 1; $i -le 5; $i++) {
+            Write-Log "VPN test poging $i naar $testIP" -Level "INFO"
+            $pingResult = Test-Connection -ComputerName $testIP -Count 1 -Quiet
+            if ($pingResult) {
+                Write-Log "VPN verbinding succesvol getest" -Level "SUCCESS"
+                return $true
+            }
+            Start-Sleep -Seconds 5
         }
+        
+        Write-Log "VPN verbinding test mislukt na 5 pogingen" -Level "WARNING"
+        return $false
     }
     catch {
         Write-Log "Fout tijdens VPN verbinding test: $_" -Level "ERROR"
