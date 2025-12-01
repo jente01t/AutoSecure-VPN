@@ -829,6 +829,23 @@ function Install-RemoteServer {
     }
     catch {
         Write-Log "Fout tijdens remote server configuratie: $_" -Level "ERROR"
+        
+        # Probeer remote rollback uit te voeren
+        try {
+            $rollbackSession = New-PSSession -ComputerName $ComputerName -Credential $Credential -ErrorAction SilentlyContinue
+            if ($rollbackSession) {
+                Invoke-Command -Session $rollbackSession -ScriptBlock {
+                    param($settings, $modulePath)
+                    Import-Module $modulePath -Force
+                    Set-ModuleSettings -Settings $settings -BasePath "C:\Temp"
+                    Invoke-Rollback -SetupType "Server"
+                } -ArgumentList $Script:Settings, $remoteModule
+                Remove-PSSession $rollbackSession
+            }
+        } catch {
+            Write-Log "Kon remote rollback niet uitvoeren: $_" -Level "WARNING"
+        }
+        
         if ($session) { Remove-PSSession $session -ErrorAction SilentlyContinue }
         return $false
     }
@@ -1224,6 +1241,23 @@ function Install-RemoteClient {
     }
     catch {
         Write-Log "Fout tijdens remote client configuratie: $_" -Level "ERROR"
+        
+        # Probeer remote rollback uit te voeren
+        try {
+            $rollbackSession = New-PSSession -ComputerName $ComputerName -Credential $Credential -ErrorAction SilentlyContinue
+            if ($rollbackSession) {
+                Invoke-Command -Session $rollbackSession -ScriptBlock {
+                    param($settings, $modulePath)
+                    Import-Module $modulePath -Force
+                    Set-ModuleSettings -Settings $settings -BasePath "C:\Temp"
+                    Invoke-Rollback -SetupType "Client"
+                } -ArgumentList $Script:Settings, $remoteModule
+                Remove-PSSession $rollbackSession
+            }
+        } catch {
+            Write-Log "Kon remote rollback niet uitvoeren: $_" -Level "WARNING"
+        }
+        
         Remove-PSSession $session -ErrorAction SilentlyContinue
         return $false
     }
@@ -1406,6 +1440,160 @@ function Invoke-BatchClientSetup {
 }
 
 #endregion Batch functies
+
+#region Rollback functies
+
+<#
+.SYNOPSIS
+    Voert rollback uit om alle wijzigingen ongedaan te maken bij falen van setup.
+
+.DESCRIPTION
+    Deze functie probeert alle wijzigingen die tijdens de setup zijn gemaakt ongedaan te maken, inclusief stoppen van services, verwijderen van bestanden en firewall regels.
+
+.PARAMETER SetupType
+    Type van setup ('Server' of 'Client').
+
+.EXAMPLE
+    Invoke-Rollback -SetupType "Server"
+#>
+function Invoke-Rollback {
+    param(
+        [Parameter(Mandatory=$true)]
+        [ValidateSet("Server", "Client")]
+        [string]$SetupType
+    )
+
+    Write-Log "Rollback gestart voor $SetupType setup" -Level "WARNING"
+
+    try {
+        switch ($SetupType) {
+            "Server" {
+                # Stop OpenVPN service
+                Write-Log "Stoppen OpenVPN service" -Level "INFO"
+                try {
+                    $service = Get-Service -Name "OpenVPNService" -ErrorAction SilentlyContinue
+                    if ($service -and $service.Status -eq 'Running') {
+                        Stop-Service -Name "OpenVPNService" -Force
+                        Write-Log "OpenVPN service gestopt" -Level "INFO"
+                    }
+                } catch {
+                    Write-Log "Kon OpenVPN service niet stoppen: $_" -Level "WARNING"
+                }
+
+                # Verwijder firewall regel
+                Write-Log "Verwijderen firewall regel" -Level "INFO"
+                try {
+                    $ruleName = "OpenVPN-Inbound-TCP-443"
+                    $existingRule = Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue
+                    if ($existingRule) {
+                        Remove-NetFirewallRule -Name $ruleName
+                        Write-Log "Firewall regel '$ruleName' verwijderd" -Level "INFO"
+                    }
+                } catch {
+                    Write-Log "Kon firewall regel niet verwijderen: $_" -Level "WARNING"
+                }
+
+                # Verwijder server configuratie bestand
+                Write-Log "Verwijderen server configuratie bestand" -Level "INFO"
+                try {
+                    $serverConfigPath = Join-Path $Script:Settings.configPath "server.ovpn"
+                    if (Test-Path $serverConfigPath) {
+                        Remove-Item -Path $serverConfigPath -Force
+                        Write-Log "Server configuratie bestand verwijderd: $serverConfigPath" -Level "INFO"
+                    }
+                } catch {
+                    Write-Log "Kon server configuratie bestand niet verwijderen: $_" -Level "WARNING"
+                }
+
+                # Verwijder PKI directory
+                Write-Log "Verwijderen certificaten (PKI directory)" -Level "INFO"
+                try {
+                    $pkiPath = Join-Path $Script:Settings.easyRSAPath "pki"
+                    if (Test-Path $pkiPath) {
+                        Remove-Item -Path $pkiPath -Recurse -Force
+                        Write-Log "PKI directory verwijderd: $pkiPath" -Level "INFO"
+                    }
+                } catch {
+                    Write-Log "Kon PKI directory niet verwijderen: $_" -Level "WARNING"
+                }
+
+                # Verwijder client package ZIP
+                Write-Log "Verwijderen client package ZIP" -Level "INFO"
+                try {
+                    $outputPath = Join-Path $Script:BasePath $Script:Settings.outputPath
+                    $zipPath = Join-Path $outputPath "vpn-client-$($Script:Settings.clientNameDefault).zip"
+                    if (Test-Path $zipPath) {
+                        Remove-Item -Path $zipPath -Force
+                        Write-Log "Client package ZIP verwijderd: $zipPath" -Level "INFO"
+                    }
+                } catch {
+                    Write-Log "Kon client package ZIP niet verwijderen: $_" -Level "WARNING"
+                }
+
+                # Verwijder EasyRSA directory (optioneel, alleen als leeg)
+                Write-Log "Verwijderen EasyRSA directory indien leeg" -Level "INFO"
+                try {
+                    $easyRSAPath = $Script:Settings.easyRSAPath
+                    if (Test-Path $easyRSAPath) {
+                        $items = Get-ChildItem -Path $easyRSAPath -Recurse
+                        if ($items.Count -eq 0) {
+                            Remove-Item -Path $easyRSAPath -Recurse -Force
+                            Write-Log "EasyRSA directory verwijderd: $easyRSAPath" -Level "INFO"
+                        }
+                    }
+                } catch {
+                    Write-Log "Kon EasyRSA directory niet verwijderen: $_" -Level "WARNING"
+                }
+            }
+
+            "Client" {
+                # Stop VPN verbinding
+                Write-Log "Stoppen VPN verbinding" -Level "INFO"
+                try {
+                    $openvpnProcesses = Get-Process -Name "openvpn" -ErrorAction SilentlyContinue
+                    if ($openvpnProcesses) {
+                        $openvpnProcesses | Stop-Process -Force
+                        Write-Log "OpenVPN processen gestopt" -Level "INFO"
+                    }
+                } catch {
+                    Write-Log "Kon OpenVPN processen niet stoppen: $_" -Level "WARNING"
+                }
+
+                # Verwijder geïmporteerde configuratie bestanden
+                Write-Log "Verwijderen geïmporteerde configuratie bestanden" -Level "INFO"
+                try {
+                    $configPath = $Script:Settings.configPath
+                    if (Test-Path $configPath) {
+                        $ovpnFiles = Get-ChildItem -Path $configPath -Filter "*.ovpn" -ErrorAction SilentlyContinue
+                        foreach ($file in $ovpnFiles) {
+                            Remove-Item -Path $file.FullName -Force
+                            Write-Log "Configuratie bestand verwijderd: $($file.FullName)" -Level "INFO"
+                        }
+                        $certFiles = Get-ChildItem -Path $configPath -Filter "*.crt" -ErrorAction SilentlyContinue
+                        foreach ($file in $certFiles) {
+                            Remove-Item -Path $file.FullName -Force
+                            Write-Log "Certificaat bestand verwijderd: $($file.FullName)" -Level "INFO"
+                        }
+                        $keyFiles = Get-ChildItem -Path $configPath -Filter "*.key" -ErrorAction SilentlyContinue
+                        foreach ($file in $keyFiles) {
+                            Remove-Item -Path $file.FullName -Force
+                            Write-Log "Key bestand verwijderd: $($file.FullName)" -Level "INFO"
+                        }
+                    }
+                } catch {
+                    Write-Log "Kon configuratie bestanden niet verwijderen: $_" -Level "WARNING"
+                }
+            }
+        }
+
+        Write-Log "Rollback voor $SetupType setup voltooid" -Level "SUCCESS"
+    }
+    catch {
+        Write-Log "Fout tijdens rollback: $_" -Level "ERROR"
+    }
+}
+
+#endregion Rollback functies
 
 
 

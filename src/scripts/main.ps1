@@ -291,6 +291,10 @@ function Invoke-ServerSetup {
         Write-Host "`n[!] FOUT tijdens server setup: $_" -ForegroundColor Red
         Write-Log "Server setup FOUT: $_" -Level "ERROR"
         Write-Host "`nControleer het logbestand voor details: $script:LogFile" -ForegroundColor Yellow
+        
+        # Rollback uitvoeren
+        Write-Host "`n[*] Rollback uitvoeren om wijzigingen ongedaan te maken..." -ForegroundColor Yellow
+        Invoke-Rollback -SetupType "Server"
     }
 }
 
@@ -383,6 +387,10 @@ function Invoke-ClientSetup {
         Write-Host "`n[!] FOUT tijdens client setup: $_" -ForegroundColor Red
         Write-Log "Client setup FOUT: $_" -Level "ERROR"
         Write-Host "`nControleer het logbestand voor details: $script:LogFile" -ForegroundColor Yellow
+        
+        # Rollback uitvoeren
+        Write-Host "`n[*] Rollback uitvoeren om wijzigingen ongedaan te maken..." -ForegroundColor Yellow
+        Invoke-Rollback -SetupType "Client"
     }
 }
 
