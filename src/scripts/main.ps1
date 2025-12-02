@@ -54,10 +54,12 @@ $script:ConfigPath = $Script:Settings.configPath
 $script:EasyRSAPath = $Script:Settings.easyRSAPath
 
 # Start transcript voor logging
-$transcriptPath = Join-Path $logsPath "transcript.log"
+$transcriptPath = Join-Path $logsPath $Script:Settings.transcriptFileName
 Start-Transcript -Path $transcriptPath -Append -NoClobber
 
 # Hoofdfunctie
+#region Menu en UI functies
+
 function Start-VPNSetup {
     <#
     .SYNOPSIS
@@ -187,116 +189,11 @@ function Select-ClientMode {
     }
 }
 
-function Invoke-ServerSetup {
-    <#
-    .SYNOPSIS
-        Voert volledige VPN-server setup uit.
+#endregion Menu en UI functies
 
-    .DESCRIPTION
-        Deze functie voert alle stappen uit voor het opzetten van een OpenVPN server, inclusief installatie, certificaten, configuratie en service start.
 
-    .EXAMPLE
-        Invoke-ServerSetup
-    #>
-    
-    Write-Log "=== Server Setup Gestart ===" -Level "INFO"
-    
-    try {
-        # Stap 1: Administrator check
-        Write-Progress -Activity "Server Setup" -Status "Stap 1 van 8: Controleren administrator rechten" -PercentComplete 0
-        Write-Host "`n[1/8] Controleren administrator rechten..." -ForegroundColor Cyan
-        if (-not (Test-IsAdmin)) {
-            throw "Script moet als Administrator worden uitgevoerd!"
-        }
-        Write-Host "  ✓ Administrator rechten bevestigd" -ForegroundColor Green
-        Write-Verbose "Administrator rechten succesvol gecontroleerd"
-        
-        # Stap 2: OpenVPN installeren
-        Write-Progress -Activity "Server Setup" -Status "Stap 2 van 8: OpenVPN installeren" -PercentComplete 12.5
-        Write-Host "`n[2/8] OpenVPN installeren..." -ForegroundColor Cyan
-        if (-not (Install-OpenVPN)) {
-            throw "OpenVPN installatie mislukt"
-        }
-        Write-Host "  ✓ OpenVPN geïnstalleerd" -ForegroundColor Green
-        Write-Verbose "OpenVPN succesvol geïnstalleerd"
-        
-        # Stap 3: Firewall configureren
-        Write-Progress -Activity "Server Setup" -Status "Stap 3 van 8: Windows Firewall configureren" -PercentComplete 25
-        Write-Host "`n[3/8] Windows Firewall configureren..." -ForegroundColor Cyan
-        if (-not (Set-Firewall -Port 443 -Protocol "TCP")) {
-            throw "Firewall configuratie mislukt"
-        }
-        Write-Host "  ✓ Firewall regels toegevoegd" -ForegroundColor Green
-        Write-Verbose "Firewall regels succesvol toegevoegd"
-        
-        # Stap 4: Gebruikersinput verzamelen
-        Write-Progress -Activity "Server Setup" -Status "Stap 4 van 8: Server configuratie parameters verzamelen" -PercentComplete 37.5
-        Write-Host "`n[4/8] Server configuratie parameters..." -ForegroundColor Cyan
-        $serverConfig = Get-ServerConfiguration
-        Write-Verbose "Server configuratie parameters verzameld: $($serverConfig | ConvertTo-Json)"
-        
-        # Stap 5: EasyRSA en certificaten
-        Write-Progress -Activity "Server Setup" -Status "Stap 5 van 8: Certificaten genereren" -PercentComplete 50
-        Write-Host "`n[5/8] Certificaten genereren (dit kan even duren)..." -ForegroundColor Cyan
-        if (-not (Initialize-EasyRSA -EasyRSAPath $script:EasyRSAPath)) {
-            throw "EasyRSA initialisatie mislukt"
-        }
-        if (-not (Initialize-Certificates -ServerName $serverConfig.ServerName -Password $serverConfig.Password -EasyRSAPath $script:EasyRSAPath)) {
-            throw "Certificaat generatie mislukt"
-        }
-        Write-Host "  ✓ Certificaten gegenereerd" -ForegroundColor Green
-        Write-Verbose "Certificaten succesvol gegenereerd voor server $($serverConfig.ServerName)"
-        
-        # Stap 6: Server configuratie genereren
-        Write-Progress -Activity "Server Setup" -Status "Stap 6 van 8: Server configuratie aanmaken" -PercentComplete 62.5
-        Write-Host "`n[6/8] Server configuratie aanmaken..." -ForegroundColor Cyan
-        if (-not (New-ServerConfig -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -ConfigPath $script:ConfigPath)) {
-            throw "Server configuratie generatie mislukt"
-        }
-        Write-Host "  ✓ Server configuratie aangemaakt" -ForegroundColor Green
-        Write-Verbose "Server configuratie succesvol aangemaakt"
-        
-        # Stap 7: OpenVPN service starten
-        Write-Progress -Activity "Server Setup" -Status "Stap 7 van 8: OpenVPN service starten" -PercentComplete 75
-        Write-Host "`n[7/8] OpenVPN service starten..." -ForegroundColor Cyan
-        if (-not (Start-VPNService)) {
-            throw "OpenVPN service starten mislukt"
-        }
-        Write-Host "  ✓ OpenVPN service actief" -ForegroundColor Green
-        Write-Verbose "OpenVPN service succesvol gestart"
-        
-        # Stap 8: Client package maken
-        Write-Progress -Activity "Server Setup" -Status "Stap 8 van 8: Client configuratie package maken" -PercentComplete 87.5
-        Write-Host "`n[8/8] Client configuratie package maken..." -ForegroundColor Cyan
-        $zipPath = New-ClientPackage -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -OutputPath (Join-Path $PSScriptRoot "..\output")
-        if (-not $zipPath) {
-            throw "Client package aanmaken mislukt"
-        }
-        Write-Host "  ✓ Client package aangemaakt: $zipPath" -ForegroundColor Green
-        Write-Verbose "Client package succesvol aangemaakt: $zipPath"
-        
-        Write-Progress -Activity "Server Setup" -Completed
-        
-        Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Green
-        Write-Host "║     Server Setup Succesvol Voltooid!      ║" -ForegroundColor Green
-        Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Green
-        Write-Host "`nLogbestand: $script:LogFile" -ForegroundColor Yellow
-        Write-Host "Client package: $zipPath" -ForegroundColor Yellow
-        Write-Host "`nDit ZIP-bestand naar de client overzetten om de verbinding te maken." -ForegroundColor Cyan
-        
-        Write-Log "Server setup succesvol voltooid" -Level "SUCCESS"
-    }
-    catch {
-        Write-Progress -Activity "Server Setup" -Completed
-        Write-Host "`n[!] FOUT tijdens server setup: $_" -ForegroundColor Red
-        Write-Log "Server setup FOUT: $_" -Level "ERROR"
-        Write-Host "`nControleer het logbestand voor details: $script:LogFile" -ForegroundColor Yellow
-        
-        # Rollback uitvoeren
-        Write-Host "`n[*] Rollback uitvoeren om wijzigingen ongedaan te maken..." -ForegroundColor Yellow
-        Invoke-Rollback -SetupType "Server"
-    }
-}
+
+#region Client Setup functies
 
 function Invoke-ClientSetup {
     <#
@@ -522,6 +419,121 @@ function Invoke-RemoteClientSetup {
     }
 }
 
+function Invoke-BatchRemoteClientSetup {
+    <#
+    .SYNOPSIS
+        Voert batch remote VPN-client setup uit voor meerdere computers.
+
+    .DESCRIPTION
+        Deze functie leest een CSV-bestand met computer details en voert remote client setup uit voor elke computer parallel.
+
+    .EXAMPLE
+        Invoke-BatchRemoteClientSetup
+    #>
+    
+    Write-Log "=== Batch Remote Client Setup Gestart ===" -Level "INFO"
+    
+    #>
+    
+    Write-Log "=== Server Setup Gestart ===" -Level "INFO"
+    
+    try {
+        # Stap 1: Administrator check
+        Write-Progress -Activity "Server Setup" -Status "Stap 1 van 8: Controleren administrator rechten" -PercentComplete 0
+        Write-Host "`n[1/8] Controleren administrator rechten..." -ForegroundColor Cyan
+        if (-not (Test-IsAdmin)) {
+            throw "Script moet als Administrator worden uitgevoerd!"
+        }
+        Write-Host "  ✓ Administrator rechten bevestigd" -ForegroundColor Green
+        Write-Verbose "Administrator rechten succesvol gecontroleerd"
+        
+        # Stap 2: OpenVPN installeren
+        Write-Progress -Activity "Server Setup" -Status "Stap 2 van 8: OpenVPN installeren" -PercentComplete 12.5
+        Write-Host "`n[2/8] OpenVPN installeren..." -ForegroundColor Cyan
+        if (-not (Install-OpenVPN)) {
+            throw "OpenVPN installatie mislukt"
+        }
+        Write-Host "  ✓ OpenVPN geïnstalleerd" -ForegroundColor Green
+        Write-Verbose "OpenVPN succesvol geïnstalleerd"
+        
+        # Stap 3: Firewall configureren
+        Write-Progress -Activity "Server Setup" -Status "Stap 3 van 8: Windows Firewall configureren" -PercentComplete 25
+        Write-Host "`n[3/8] Windows Firewall configureren..." -ForegroundColor Cyan
+        if (-not (Set-Firewall -Port 443 -Protocol "TCP")) {
+            throw "Firewall configuratie mislukt"
+        }
+        Write-Host "  ✓ Firewall regels toegevoegd" -ForegroundColor Green
+        Write-Verbose "Firewall regels succesvol toegevoegd"
+        
+        # Stap 4: Gebruikersinput verzamelen
+        Write-Progress -Activity "Server Setup" -Status "Stap 4 van 8: Server configuratie parameters verzamelen" -PercentComplete 37.5
+        Write-Host "`n[4/8] Server configuratie parameters..." -ForegroundColor Cyan
+        $serverConfig = Get-ServerConfiguration
+        Write-Verbose "Server configuratie parameters verzameld: $($serverConfig | ConvertTo-Json)"
+        
+        # Stap 5: EasyRSA en certificaten
+        Write-Progress -Activity "Server Setup" -Status "Stap 5 van 8: Certificaten genereren" -PercentComplete 50
+        Write-Host "`n[5/8] Certificaten genereren (dit kan even duren)..." -ForegroundColor Cyan
+        if (-not (Initialize-EasyRSA -EasyRSAPath $script:EasyRSAPath)) {
+            throw "EasyRSA initialisatie mislukt"
+        }
+        if (-not (Initialize-Certificates -ServerName $serverConfig.ServerName -Password $serverConfig.Password -EasyRSAPath $script:EasyRSAPath)) {
+            throw "Certificaat generatie mislukt"
+        }
+        Write-Host "  ✓ Certificaten gegenereerd" -ForegroundColor Green
+        Write-Verbose "Certificaten succesvol gegenereerd voor server $($serverConfig.ServerName)"
+        
+        # Stap 6: Server configuratie genereren
+        Write-Progress -Activity "Server Setup" -Status "Stap 6 van 8: Server configuratie aanmaken" -PercentComplete 62.5
+        Write-Host "`n[6/8] Server configuratie aanmaken..." -ForegroundColor Cyan
+        if (-not (New-ServerConfig -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -ConfigPath $script:ConfigPath)) {
+            throw "Server configuratie generatie mislukt"
+        }
+        Write-Host "  ✓ Server configuratie aangemaakt" -ForegroundColor Green
+        Write-Verbose "Server configuratie succesvol aangemaakt"
+        
+        # Stap 7: OpenVPN service starten
+        Write-Progress -Activity "Server Setup" -Status "Stap 7 van 8: OpenVPN service starten" -PercentComplete 75
+        Write-Host "`n[7/8] OpenVPN service starten..." -ForegroundColor Cyan
+        if (-not (Start-VPNService)) {
+            throw "OpenVPN service starten mislukt"
+        }
+        Write-Host "  ✓ OpenVPN service actief" -ForegroundColor Green
+        Write-Verbose "OpenVPN service succesvol gestart"
+        
+        # Stap 8: Client package maken
+        Write-Progress -Activity "Server Setup" -Status "Stap 8 van 8: Client configuratie package maken" -PercentComplete 87.5
+        Write-Host "`n[8/8] Client configuratie package maken..." -ForegroundColor Cyan
+        $zipPath = New-ClientPackage -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -OutputPath (Join-Path $PSScriptRoot "..\output")
+        if (-not $zipPath) {
+            throw "Client package aanmaken mislukt"
+        }
+        Write-Host "  ✓ Client package aangemaakt: $zipPath" -ForegroundColor Green
+        Write-Verbose "Client package succesvol aangemaakt: $zipPath"
+        
+        Write-Progress -Activity "Server Setup" -Completed
+        
+        Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Green
+        Write-Host "║     Server Setup Succesvol Voltooid!      ║" -ForegroundColor Green
+        Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Green
+        Write-Host "`nLogbestand: $script:LogFile" -ForegroundColor Yellow
+        Write-Host "Client package: $zipPath" -ForegroundColor Yellow
+        Write-Host "`nDit ZIP-bestand naar de client overzetten om de verbinding te maken." -ForegroundColor Cyan
+        
+        Write-Log "Server setup succesvol voltooid" -Level "SUCCESS"
+    }
+    catch {
+        Write-Progress -Activity "Server Setup" -Completed
+        Write-Host "`n[!] FOUT tijdens server setup: $_" -ForegroundColor Red
+        Write-Log "Server setup FOUT: $_" -Level "ERROR"
+        Write-Host "`nControleer het logbestand voor details: $script:LogFile" -ForegroundColor Yellow
+        
+        # Rollback uitvoeren
+        Write-Host "`n[*] Rollback uitvoeren om wijzigingen ongedaan te maken..." -ForegroundColor Yellow
+        Invoke-Rollback -SetupType "Server"
+    }
+}
+
 function Invoke-RemoteServerSetup {
     <#
     .SYNOPSIS
@@ -672,6 +684,9 @@ function Invoke-RemoteServerSetup {
         Write-Host "`nControleer het logbestand voor details: $script:LogFile" -ForegroundColor Yellow
     }
 }
+
+#endregion Server Setup functies
+
 
 
 

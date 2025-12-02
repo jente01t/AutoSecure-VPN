@@ -184,7 +184,7 @@ function Write-Log {
         $LogFile = Join-Path $logsPath $Script:Settings.logFileName
     }
     
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $timestamp = Get-Date -Format $Script:Settings.logTimestampFormat
     $logEntry = "[$timestamp] [$Level] $Message"
     
     try {
@@ -365,7 +365,7 @@ function Get-ServerConfiguration {
     }
     $config.ServerIP = $inputServerIP
     
-    $inputLANSubnet = if ($PSBoundParameters.ContainsKey('LANSubnet')) { $LANSubnet } else { Read-Host "  LAN subnet (default 192.168.1.0, druk Enter voor skip)" }
+    $inputLANSubnet = if ($PSBoundParameters.ContainsKey('LANSubnet')) { $LANSubnet } else { Read-Host "  LAN subnet (default $($Script:Settings.lanSubnetDefault), druk Enter voor skip)" }
     if (-not [string]::IsNullOrWhiteSpace($inputLANSubnet)) {
         $config.LANSubnet = $inputLANSubnet
         $config.LANMask = if ($LANMask) { $LANMask } else { $Script:Settings.lanMaskDefault }
@@ -489,13 +489,13 @@ function Initialize-Certificates {
         $pkiPathUnix = '/' + $drive + $pkiPathUnix.Substring(2) -replace ' ', '\ '
         $varsContent = @"
 set_var EASYRSA_REQ_CN "$ServerName"
-set_var EASYRSA_BATCH "1"
+set_var EASYRSA_BATCH "$($Script:Settings.easyRSABatch)"
 set_var EASYRSA_PKI "pki"
-set_var EASYRSA_ALGO "rsa"
-set_var EASYRSA_KEY_SIZE "2048"
-set_var EASYRSA_CA_EXPIRE "3650"
-set_var EASYRSA_CERT_EXPIRE "3650"
-set_var EASYRSA_CRL_DAYS "180"
+set_var EASYRSA_ALGO "$($Script:Settings.easyRSAAlgo)"
+set_var EASYRSA_KEY_SIZE "$($Script:Settings.easyRSAKeySize)"
+set_var EASYRSA_CA_EXPIRE "$($Script:Settings.easyRSACAExpire)"
+set_var EASYRSA_CERT_EXPIRE "$($Script:Settings.easyRSACertExpire)"
+set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
 "@
         Set-Content -Path $varsFileWin -Value $varsContent -Encoding UTF8
 
@@ -1131,7 +1131,7 @@ function Install-RemoteClient {
         [Parameter(Mandatory=$true)][string]$ComputerName,
         [Parameter(Mandatory=$true)][PSCredential]$Credential,
         [Parameter(Mandatory=$true)][string]$ZipPath,
-        [string]$RemoteConfigPath = 'C:\Program Files\OpenVPN\config'
+        [string]$RemoteConfigPath = $Script:Settings.remoteConfigPath
     )
     
     Write-Log "Remote client configuratie gestart voor $ComputerName" -Level "INFO"
@@ -1258,7 +1258,7 @@ function Install-RemoteClient {
             Write-Log "Kon remote rollback niet uitvoeren: $_" -Level "WARNING"
         }
         
-        Remove-PSSession $session -ErrorAction SilentlyContinue
+        if ($session) { Remove-PSSession $session -ErrorAction SilentlyContinue }
         return $false
     }
 }
@@ -1384,62 +1384,6 @@ function Test-VPNConnection {
 }
 
 #endregion Test functies
-
-#region Batch functies
-
-<#
-.SYNOPSIS
-    Voert batch setup uit voor meerdere clients.
-
-.DESCRIPTION
-    Deze functie leest een CSV bestand met client namen en genereert certificaten voor elke client.
-
-.PARAMETER CsvPath
-    Pad naar het CSV bestand met client namen.
-
-.PARAMETER EasyRSAPath
-    Pad naar EasyRSA (standaard uit settings).
-
-.EXAMPLE
-    Invoke-BatchClientSetup -CsvPath "C:\path\to\clients.csv"
-#>
-function Invoke-BatchClientSetup {
-    param(
-        [string]$CsvPath,
-        [string]$EasyRSAPath = $Script:Settings.easyRSAPath
-    )
-    
-    if (-not (Test-Path $CsvPath)) {
-        Write-Log "CSV bestand niet gevonden: $CsvPath" -Level "ERROR"
-        return
-    }
-    
-    try {
-        $clients = Import-Csv -Path $CsvPath
-        
-        $env:EASYRSA_BATCH = "1"
-        $env:PATH = "$EasyRSAPath;$EasyRSAPath\bin;$env:PATH"
-        $sh = Join-Path $EasyRSAPath "bin\sh.exe"
-        $easyrsa = Join-Path $EasyRSAPath "easyrsa"
-        
-        Push-Location $EasyRSAPath
-        foreach ($client in $clients) {
-            $clientName = $client.Name
-            if (-not $clientName) { continue }
-            
-            & $sh $easyrsa gen-req $clientName nopass
-            & $sh $easyrsa sign-req client $clientName
-        }
-        Pop-Location
-        
-        Write-Log "Batch client setup voltooid" -Level "SUCCESS"
-    }
-    catch {
-        Write-Log "Fout tijdens batch client setup: $_" -Level "ERROR"
-    }
-}
-
-#endregion Batch functies
 
 #region Rollback functies
 
