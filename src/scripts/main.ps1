@@ -288,6 +288,8 @@ function Invoke-ClientSetup {
         # Rollback uitvoeren
         Write-Host "`n[*] Rollback uitvoeren om wijzigingen ongedaan te maken..." -ForegroundColor Yellow
         Invoke-Rollback -SetupType "Client"
+        
+        Read-Host "`nDruk op Enter om door te gaan"
     }
 }
 
@@ -416,6 +418,8 @@ function Invoke-RemoteClientSetup {
         Write-Host "`n[!] FOUT tijdens remote client setup: $_" -ForegroundColor Red
         Write-Log "Remote client setup FOUT: $_" -Level "ERROR"
         Write-Host "`nControleer het logbestand voor details: $script:LogFile" -ForegroundColor Yellow
+        
+        Read-Host "`nDruk op Enter om door te gaan"
     }
 }
 
@@ -531,6 +535,8 @@ function Invoke-BatchRemoteClientSetup {
         # Rollback uitvoeren
         Write-Host "`n[*] Rollback uitvoeren om wijzigingen ongedaan te maken..." -ForegroundColor Yellow
         Invoke-Rollback -SetupType "Server"
+        
+        Read-Host "`nDruk op Enter om door te gaan"
     }
 }
 
@@ -682,6 +688,8 @@ function Invoke-RemoteServerSetup {
         Write-Host "`n[!] FOUT tijdens remote server setup: $_" -ForegroundColor Red
         Write-Log "Remote server setup FOUT: $_" -Level "ERROR"
         Write-Host "`nControleer het logbestand voor details: $script:LogFile" -ForegroundColor Yellow
+        
+        Read-Host "`nDruk op Enter om door te gaan"
     }
 }
 
