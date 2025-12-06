@@ -18,13 +18,14 @@
 [CmdletBinding()]
 param()
 
-# Import module
+# Import module required werken !!!
 try {
 	$ModulePath = Join-Path $PSScriptRoot "../module/AutoSecureVPN.psm1"
 	Import-Module $ModulePath -Force
 }
 catch {
 	Write-Host "FOUT: Kan module AutoSecureVPN niet laden. $_" -ForegroundColor Red
+	Read-Host "`nDruk op Enter om af te sluiten"
 	exit 1
 }
 
@@ -74,7 +75,7 @@ function Start-VPNSetup {
     
     Write-Log "=== OpenVPN Automatische Setup Gestart ===" -Level "INFO"
     Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Cyan
-    Write-Host "║   OpenVPN Automatische Setup v1.0         ║" -ForegroundColor Cyan
+    Write-Host "║   OpenVPN Automatische Setup v1.0          ║" -ForegroundColor Cyan
     Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Kies een optie:" -ForegroundColor Yellow
@@ -163,10 +164,11 @@ function Select-ClientMode {
     Write-Host "`nClient Setup Opties:" -ForegroundColor Yellow
     Write-Host "  [1] Lokaal (VPN-client installeren en verbinden op deze machine)" -ForegroundColor Green
     Write-Host "  [2] Remote (VPN-client installeren en verbinden op afstand)" -ForegroundColor Green
-    Write-Host "  [3] Terug naar hoofdmenu" -ForegroundColor Red
+    Write-Host "  [3] Batch Remote (VPN-client installeren op meerdere machines)" -ForegroundColor Green
+    Write-Host "  [4] Terug naar hoofdmenu" -ForegroundColor Red
     Write-Host ""
     
-    $choice = Read-Host "Voer uw keuze in (1-3)"
+    $choice = Read-Host "Voer uw keuze in (1-4)"
     
     switch ($choice) {
         "1" {
@@ -178,6 +180,10 @@ function Select-ClientMode {
             Invoke-RemoteClientSetup
         }
         "3" {
+            Write-Host "`n[*] Batch Remote Client Setup geselecteerd..." -ForegroundColor Cyan
+            Invoke-BatchRemoteClientSetup
+        }
+        "4" {
             Write-Host "`n[*] Terug naar hoofdmenu..." -ForegroundColor Yellow
             Start-VPNSetup
         }
@@ -437,6 +443,148 @@ function Invoke-BatchRemoteClientSetup {
     
     Write-Log "=== Batch Remote Client Setup Gestart ===" -Level "INFO"
     
+    try {
+        # Stap 1: CSV bestand vragen
+        Write-Progress -Activity "Batch Remote Client Setup" -Status "Stap 1 van 4: CSV bestand selecteren" -PercentComplete 0
+        Write-Host "`n[1/4] CSV bestand selecteren..." -ForegroundColor Cyan
+        $csvPath = Read-Host "  Voer het pad naar het CSV bestand in (bijv. C:\clients.csv)"
+        if (-not (Test-Path $csvPath)) {
+            throw "CSV bestand niet gevonden: $csvPath"
+        }
+        Write-Host "  ✓ CSV bestand gevonden: $csvPath" -ForegroundColor Green
+        Write-Verbose "CSV bestand pad: $csvPath"
+        
+        # Stap 2: Client ZIP bestand vragen
+        Write-Progress -Activity "Batch Remote Client Setup" -Status "Stap 2 van 4: Client ZIP bestand selecteren" -PercentComplete 25
+        Write-Host "`n[2/4] Client ZIP bestand selecteren..." -ForegroundColor Cyan
+        $zipPath = Read-Host "  Voer het pad naar het client ZIP bestand in (bijv. C:\output\client.zip)"
+        if (-not (Test-Path $zipPath)) {
+            throw "Client ZIP bestand niet gevonden: $zipPath"
+        }
+        Write-Host "  ✓ Client ZIP bestand gevonden: $zipPath" -ForegroundColor Green
+        Write-Verbose "Client ZIP bestand pad: $zipPath"
+        
+        # Stap 3: CSV inlezen
+        Write-Progress -Activity "Batch Remote Client Setup" -Status "Stap 3 van 4: CSV bestand inlezen" -PercentComplete 50
+        Write-Host "`n[3/4] CSV bestand inlezen..." -ForegroundColor Cyan
+        $clients = Import-Csv -Path $csvPath
+        Write-Host "  ✓ $($clients.Count) clients gevonden" -ForegroundColor Green
+        Write-Verbose "Clients: $($clients | ConvertTo-Json)"
+        
+        # Stap 4: Parallel uitvoeren
+        Write-Progress -Activity "Batch Remote Client Setup" -Status "Stap 4 van 4: Remote setups uitvoeren" -PercentComplete 75
+        Write-Host "`n[4/4] Remote client setups uitvoeren..." -ForegroundColor Cyan
+        
+        $jobs = @()
+        $totalClients = $clients.Count
+        $completed = 0
+        
+        foreach ($client in $clients) {
+            $name = $client.Name
+            $ip = $client.IP
+            $username = $client.Username
+            $password = $client.Password
+            
+            Write-Host "  Start setup voor $name ($ip)..." -ForegroundColor Yellow
+            
+            # Maak credential object
+            $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
+            $cred = New-Object System.Management.Automation.PSCredential ($username, $securePassword)
+            
+            # Start job voor parallel uitvoering
+            $job = Start-Job -ScriptBlock {
+                param($computerName, $credential, $zipFilePath, $modulePath, $settings, $basePath)
+                
+                # Import module in job
+                Import-Module $modulePath -Force
+                
+                # Stel settings in
+                Set-ModuleSettings -Settings $settings -BasePath $basePath
+                
+                # Voer remote client installatie uit
+                try {
+                    $result = Install-RemoteClient -ComputerName $computerName -Credential $credential -ZipPath $zipFilePath
+                    if ($result) {
+                        return "SUCCESS: $computerName"
+                    } else {
+                        return "ERROR: $computerName - Installation failed"
+                    }
+                }
+                catch {
+                    return "ERROR: $computerName - $_"
+                }
+            } -ArgumentList $ip, $cred, $zipPath, $ModulePath, $Script:Settings, $Script:BasePath
+            
+            $jobs += $job
+        }
+        
+        # Wacht op alle jobs en update progress
+        Write-Host "  Wachten op voltooiing van alle setups..." -ForegroundColor Cyan
+        $results = @()
+        foreach ($job in $jobs) {
+            Wait-Job $job | Out-Null
+            $result = Receive-Job -Job $job
+            $results += $result
+            $completed++
+            $percent = [math]::Round(($completed / $totalClients) * 100)
+            Write-Progress -Activity "Batch Remote Client Setup" -Status "Stap 4 van 4: Remote setups uitvoeren ($completed/$totalClients voltooid)" -PercentComplete (75 + ($percent * 0.25))
+        }
+        
+        Write-Progress -Activity "Batch Remote Client Setup" -Completed
+        
+        # Resultaten tonen
+        Write-Host "`nResultaten:" -ForegroundColor Yellow
+        $successCount = 0
+        foreach ($result in $results) {
+            if ($result -like "SUCCESS:*") {
+                Write-Host "  ✓ $($result -replace 'SUCCESS: ', '')" -ForegroundColor Green
+                $successCount++
+            }
+            else {
+                Write-Host "  ✗ $($result -replace 'ERROR: ', '')" -ForegroundColor Red
+            }
+        }
+        
+        if ($successCount -eq $totalClients) {
+            Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Green
+            Write-Host "║   Batch Remote Client Setup Succesvol!    ║" -ForegroundColor Green
+            Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Green
+            Write-Host "`nLogbestand: $script:LogFile" -ForegroundColor Yellow
+            Write-Log "Batch remote client setup succesvol voltooid ($successCount/$totalClients)" -Level "SUCCESS"
+        }
+        else {
+            Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Red
+            Write-Host "║   Batch Remote Client Setup Gefaald!      ║" -ForegroundColor Red
+            Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Red
+            Write-Host "`n$successCount van $totalClients setups succesvol." -ForegroundColor Yellow
+            Write-Host "Logbestand: $script:LogFile" -ForegroundColor Yellow
+            Write-Log "Batch remote client setup gefaald ($successCount/$totalClients succesvol)" -Level "ERROR"
+        }
+    }
+    catch {
+        Write-Progress -Activity "Batch Remote Client Setup" -Completed
+        Write-Host "`n[!] FOUT tijdens batch remote client setup: $_" -ForegroundColor Red
+        Write-Log "Batch remote client setup FOUT: $_" -Level "ERROR"
+        Write-Host "`nControleer het logbestand voor details: $script:LogFile" -ForegroundColor Yellow
+        
+        Read-Host "`nDruk op Enter om door te gaan"
+    }
+}
+
+#endregion Client Setup functies
+
+#region Server Setup functies
+
+function Invoke-ServerSetup {
+    <#
+    .SYNOPSIS
+        Voert volledige VPN-server setup uit.
+
+    .DESCRIPTION
+        Deze functie voert alle stappen uit voor het opzetten van een OpenVPN server, inclusief installatie, certificaten, configuratie en service start.
+
+    .EXAMPLE
+        Invoke-ServerSetup
     #>
     
     Write-Log "=== Server Setup Gestart ===" -Level "INFO"

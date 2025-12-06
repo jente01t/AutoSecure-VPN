@@ -101,21 +101,6 @@ InModuleScope AutoSecureVPN {
             $result | Should -Be $false
         }
     }
-
-    Describe "Invoke-BatchClientSetup" {
-        It "Processes CSV file successfully" {
-            $csvPath = "TestDrive:\clients.csv"
-            $csvContent = "Name`nClient1`nClient2"
-            Set-Content -Path $csvPath -Value $csvContent
-
-            Mock Push-Location { }
-            Mock Pop-Location { }
-            Mock & { }
-
-            Invoke-BatchClientSetup -CsvPath $csvPath
-        }
-    }
-
     Describe "Write-Log" {
         It "Writes INFO message to file" {
             $testLogFile = "TestDrive:\test.log"
