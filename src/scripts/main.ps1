@@ -475,59 +475,58 @@ function Invoke-BatchRemoteClientSetup {
         Write-Progress -Activity "Batch Remote Client Setup" -Status "Stap 4 van 4: Remote setups uitvoeren" -PercentComplete 75
         Write-Host "`n[4/4] Remote client setups uitvoeren..." -ForegroundColor Cyan
         
-        $jobs = @()
         $totalClients = $clients.Count
-        $completed = 0
+        # Adaptieve ThrottleLimit gebaseerd op systeemresources
+        $cpuCores = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
+        $throttleLimit = [math]::Min([math]::Max(1, $cpuCores - 1), 10)  # Gebruik max 10, minimaal 1, en 1 minder dan totaal cores
         
-        foreach ($client in $clients) {
+        Write-Host "  Systeem heeft $cpuCores CPU cores, ThrottleLimit ingesteld op $throttleLimit" -ForegroundColor Cyan
+        
+        # Parallel uitvoering met Foreach-Object -Parallel
+        $results = $clients | ForEach-Object -Parallel {
+            $client = $_
             $name = $client.Name
             $ip = $client.IP
             $username = $client.Username
             $password = $client.Password
             
-            Write-Host "  Start setup voor $name ($ip)..." -ForegroundColor Yellow
-            
             # Maak credential object
             $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
             $cred = New-Object System.Management.Automation.PSCredential ($username, $securePassword)
             
-            # Start job voor parallel uitvoering
-            $job = Start-Job -ScriptBlock {
-                param($computerName, $credential, $zipFilePath, $modulePath, $settings, $basePath)
-                
-                # Import module in job
-                Import-Module $modulePath -Force
-                
-                # Stel settings in
-                Set-ModuleSettings -Settings $settings -BasePath $basePath
-                
-                # Voer remote client installatie uit
-                try {
-                    $result = Install-RemoteClient -ComputerName $computerName -Credential $credential -ZipPath $zipFilePath
-                    if ($result) {
-                        return "SUCCESS: $computerName"
-                    } else {
-                        return "ERROR: $computerName - Installation failed"
-                    }
-                }
-                catch {
-                    return "ERROR: $computerName - $_"
-                }
-            } -ArgumentList $ip, $cred, $zipPath, $ModulePath, $Script:Settings, $Script:BasePath
+            # Import module in parallel runspace
+            Import-Module $using:ModulePath -Force
             
-            $jobs += $job
-        }
+            # Stel settings in
+            Set-ModuleSettings -Settings $using:Script:Settings -BasePath $using:Script:BasePath
+            
+            # Voer remote client installatie uit
+            try {
+                $result = Install-RemoteClient -ComputerName $ip -Credential $cred -ZipPath $using:zipPath
+                if ($result) {
+                    "SUCCESS: $name ($ip)"
+                } else {
+                    "ERROR: $name ($ip) - Installation failed"
+                }
+            }
+            catch {
+                "ERROR: $name ($ip) - $_"
+            }
+        } -ThrottleLimit $throttleLimit  # Beperk tot $throttleLimit parallelle uitvoeringen om resources te sparen
         
-        # Wacht op alle jobs en update progress
-        Write-Host "  Wachten op voltooiing van alle setups..." -ForegroundColor Cyan
-        $results = @()
-        foreach ($job in $jobs) {
-            Wait-Job $job | Out-Null
-            $result = Receive-Job -Job $job
-            $results += $result
-            $completed++
-            $percent = [math]::Round(($completed / $totalClients) * 100)
-            Write-Progress -Activity "Batch Remote Client Setup" -Status "Stap 4 van 4: Remote setups uitvoeren ($completed/$totalClients voltooid)" -PercentComplete (75 + ($percent * 0.25))
+        Write-Progress -Activity "Batch Remote Client Setup" -Completed
+        
+        # Resultaten tonen
+        Write-Host "`nResultaten:" -ForegroundColor Yellow
+        $successCount = 0
+        foreach ($result in $results) {
+            if ($result -like "SUCCESS:*") {
+                Write-Host "  ✓ $result" -ForegroundColor Green
+                $successCount++
+            }
+            else {
+                Write-Host "  ✗ $result" -ForegroundColor Red
+            }
         }
         
         Write-Progress -Activity "Batch Remote Client Setup" -Completed
