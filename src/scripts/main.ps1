@@ -35,10 +35,22 @@ $Script:BasePath = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 # Load settings
 $Script:Settings = @{}
 try {
-    $configPath = Join-Path $PSScriptRoot '..\config\Settings.psd1'
-    if (Test-Path $configPath) {
-        $loaded = Import-PowerShellDataFile -Path $configPath -ErrorAction Stop
-        if ($loaded) { $Script:Settings = $loaded }
+    # Load stable settings first
+    $stableConfigPath = Join-Path $PSScriptRoot '..\config\Stable.psd1'
+    if (Test-Path $stableConfigPath) {
+        $stableSettings = Import-PowerShellDataFile -Path $stableConfigPath -ErrorAction Stop
+        if ($stableSettings) { $Script:Settings = $stableSettings.Clone() }
+    }
+    
+    # Load variable settings and merge (variable overrides stable)
+    $variableConfigPath = Join-Path $PSScriptRoot '..\config\Variable.psd1'
+    if (Test-Path $variableConfigPath) {
+        $variableSettings = Import-PowerShellDataFile -Path $variableConfigPath -ErrorAction Stop
+        if ($variableSettings) {
+            foreach ($key in $variableSettings.Keys) {
+                $Script:Settings[$key] = $variableSettings[$key]
+            }
+        }
     }
 }
 catch {
@@ -478,7 +490,7 @@ function Invoke-BatchRemoteClientSetup {
         $totalClients = $clients.Count
         # Adaptieve ThrottleLimit gebaseerd op systeemresources
         $cpuCores = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
-        $throttleLimit = [math]::Min([math]::Max(1, $cpuCores - 1), 10)  # Gebruik max 10, minimaal 1, en 1 minder dan totaal cores
+        $throttleLimit = [math]::Max(1, $cpuCores - 1)  # Gebruik max aantal cores minus 1, minimaal 1
         
         Write-Host "  Systeem heeft $cpuCores CPU cores, ThrottleLimit ingesteld op $throttleLimit" -ForegroundColor Cyan
         
@@ -512,7 +524,7 @@ function Invoke-BatchRemoteClientSetup {
             catch {
                 "ERROR: $name ($ip) - $_"
             }
-        } -ThrottleLimit $throttleLimit  # Beperk tot $throttleLimit parallelle uitvoeringen om resources te sparen
+        } -ThrottleLimit $throttleLimit 
         
         Write-Progress -Activity "Batch Remote Client Setup" -Completed
         

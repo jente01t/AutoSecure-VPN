@@ -92,14 +92,26 @@ function Wait-Input {
 
 #endregion Menu en UI functies
 
-# Load module settings from src/config/Settings.psd1 (if present)
+# Load module settings from src/config/Stable.psd1 and Variable.psd1 (if present)
 # Use $PSScriptRoot and $Script: scope so the module is import-safe in test runspaces.
 $Script:Settings = @{}
 try {
-    $configPath = Join-Path $PSScriptRoot '..\config\Settings.psd1'
-    if (Test-Path $configPath) {
-        $loaded = Import-PowerShellDataFile -Path $configPath -ErrorAction Stop
-        if ($loaded) { $Script:Settings = $loaded }
+    # Load stable settings first
+    $stableConfigPath = Join-Path $PSScriptRoot '..\config\Stable.psd1'
+    if (Test-Path $stableConfigPath) {
+        $stableSettings = Import-PowerShellDataFile -Path $stableConfigPath -ErrorAction Stop
+        if ($stableSettings) { $Script:Settings = $stableSettings.Clone() }
+    }
+    
+    # Load variable settings and merge (variable overrides stable)
+    $variableConfigPath = Join-Path $PSScriptRoot '..\config\Variable.psd1'
+    if (Test-Path $variableConfigPath) {
+        $variableSettings = Import-PowerShellDataFile -Path $variableConfigPath -ErrorAction Stop
+        if ($variableSettings) {
+            foreach ($key in $variableSettings.Keys) {
+                $Script:Settings[$key] = $variableSettings[$key]
+            }
+        }
     }
 }
 catch {
@@ -222,11 +234,19 @@ function Write-Log {
 #>
 function Install-OpenVPN {
     param(
-        [string]$Url = $Script:Settings.installerUrl
+        [string]$Url #validaties urls 
     )
     
     if (-not $Url) {
-        $Url = $Script:Settings.installerUrl
+        $version = if ($Script:Settings.openVpnVersion) { $Script:Settings.openVpnVersion } else { 
+            try {
+                $latest = Invoke-RestMethod -Uri 'https://api.github.com/repos/OpenVPN/openvpn/releases/latest'
+                $latest.tag_name -replace '^v', ''
+            } catch {
+                '2.6.15'  # fallback
+            }
+        }
+        $Url = "https://swupdate.openvpn.org/community/releases/OpenVPN-$version-I001-amd64.msi"
     }
     
     $installedPath = $Script:Settings.installedPath
@@ -416,7 +436,15 @@ function Initialize-EasyRSA {
     
     try {
         Add-Type -AssemblyName System.IO.Compression.FileSystem
-        $easyRSAUrl = $Script:Settings.easyRSAUrl
+        $version = if ($Script:Settings.easyRSAVersion) { $Script:Settings.easyRSAVersion } else { 
+            try {
+                $latest = Invoke-RestMethod -Uri 'https://api.github.com/repos/OpenVPN/easy-rsa/releases/latest'
+                $latest.tag_name -replace '^v', ''
+            } catch {
+                '3.2.4'  # fallback
+            }
+        }
+        $easyRSAUrl = "https://github.com/OpenVPN/easy-rsa/releases/download/v$version/EasyRSA-$version-win64.zip"
         $tempZip = Join-Path $env:TEMP "easyrsa.zip"
         
         Invoke-WebRequest -Uri $easyRSAUrl -OutFile $tempZip -UseBasicParsing
