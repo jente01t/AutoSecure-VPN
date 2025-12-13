@@ -1,7 +1,7 @@
 #Requires -Modules Pester
 
-# Create test config files in temp directory
-$configDir = "$env:TEMP\AutoSecureVPNTest\config"
+# Create test config files in the module's expected config directory
+$configDir = Join-Path $PSScriptRoot "..\src\config"
 New-Item -ItemType Directory -Path $configDir -Force
 
 $content = @"
@@ -32,16 +32,20 @@ easyRSACAExpire = 3650
 easyRSACertExpire = 825
 easyRSACRLDays = 180
 remoteConfigPath = "C:\Temp"
+openVPNExePath = "C:\Program Files\OpenVPN\bin\openvpn.exe"
+testIP = "10.8.0.1"
+clientNameDefault = "client1"
 }
 "@
 Set-Content -Path "$configDir\Stable.psd1" -Value $content
 Set-Content -Path "$configDir\Variable.psd1" -Value $content
 
+# Set BasePath before importing module to override the default
+$Script:BasePath = "$env:TEMP\AutoSecureVPNTest\"
+
 # Import the module after creating config files
 $modulePath = Join-Path $PSScriptRoot "..\src\module\AutoSecureVPN.psm1"
 Import-Module $modulePath -Force
-
-$Script:BasePath = "$env:TEMP\AutoSecureVPNTest\"
 
 InModuleScope AutoSecureVPN {
 
