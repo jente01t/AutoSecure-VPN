@@ -1,0 +1,34 @@
+@{
+	# OpenVPN Installatie Instellingen
+	openVpnVersion = '' #wanneer leeg, wordt de laatste stabiele versie gebruikt
+	installerPath  = 'C:\Temp\openvpn-install.msi'
+	installedPath  = 'C:\Program Files\OpenVPN'
+	openVPNExePath = 'C:\Program Files\OpenVPN\bin\openvpn.exe'
+
+	# EasyRSA Certificaat Instellingen
+	easyRSAVersion = '' #wanneer leeg, wordt de laatste stabiele versie gebruikt
+	easyRSAPath    = 'C:\Program Files\OpenVPN\easy-rsa'
+	easyRSAKeySize = 2048
+	easyRSACAExpire = 3650
+	easyRSACertExpire = 3650
+	easyRSACRLDays = 180
+	easyRSAAlgo = 'rsa'
+	easyRSABatch = '1'
+	easyRSAReqCN = 'vpn-server'
+
+	# Paden en Configuratie
+	configPath     = 'C:\Program Files\OpenVPN\config'
+	remoteConfigPath = 'C:\Program Files\OpenVPN\config'
+	logsPath       = 'logs'
+	outputPath     = 'output'
+	certPath       = 'cert'
+	tempPath = 'C:\Temp'
+
+	# Logging Instellingen
+	logFileName    = 'vpn-setup.log'
+	logTimestampFormat = 'yyyy-MM-dd HH:mm:ss'
+	transcriptFileName = 'transcript.log'
+
+	# Remote en TrustedHosts
+	trustedHostsDefault = '*'
+}
