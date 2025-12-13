@@ -1,23 +1,22 @@
 @{
 	# Gebruikersspecifieke instellingen die vaak aangepast worden (Voorbeeld configuratie - kopieer naar Variable.psd1 en pas aan)
 
-	# Server en Client namen (Voorbeeld)
-	serverNameDefault = 'vpn-server'
-	clientNameDefault = 'client1'
-
-	# VPN Poort en Protocol (Voorbeeld)
+	# VPN config (Voorbeeld)
 	port = 443
 	protocol = 'TCP'
-
-	# LAN Subnet (voor routing - voorbeeld)
-	lanSubnetDefault = '192.168.1.0'
-	lanMaskDefault = '255.255.255.0'
-
-	# VPN Subnet (indien aangepast nodig - voorbeeld)
 	vpnSubnet = '10.8.0.0'
 	vpnMask = '255.255.255.0'
-
-	# DNS Servers (Voorbeeld)
+	testIP = '10.8.0.1'
 	dns1 = '8.8.8.8'
 	dns2 = '8.8.4.4'
+	
+	# Server configuratie (stel vooraf in om vragen te vermijden - voorbeeld)
+	serverName = 'vpn-server'  # Verplicht: Naam van de VPN server
+	serverIP = 'jouw.server.ip.hier'  # Verplicht: WAN IP of DDNS van de server
+	lanSubnet = '192.168.1.0' # Verplicht: LAN subnet van het netwerk achter de VPN server
+	lanMask = '255.255.255.0' # Verplicht: Subnet mask van het LAN netwerk
+	noPass = $false  # Of certificaten zonder wachtwoord gemaakt moeten worden
+
+	# client configuratie (Voorbeeld)
+	clientName = 'client1'  # Verplicht: Naam van de VPN client
 }

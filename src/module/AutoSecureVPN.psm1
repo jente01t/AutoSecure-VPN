@@ -362,43 +362,47 @@ function Set-Firewall {
 #>
 function Get-ServerConfiguration {
     param(
-        [string]$ServerName,
-        [string]$ServerIP,
-        [string]$LANSubnet,
-        [string]$LANMask,
-        [switch]$NoPass,
+        [string]$ServerName = $Script:Settings.serverName,
+        [string]$ServerIP = $Script:Settings.serverIP,
+        [string]$LANSubnet = $Script:Settings.lanSubnet,
+        [string]$LANMask = $Script:Settings.lanMask,
+        [switch]$NoPass = $Script:Settings.noPass,
         [string]$Password
     )
     
     $config = @{}
-    
-    Write-Host ""
-    $inputServerName = if ($ServerName) { $ServerName } else { Read-Host "  Servernaam (bijv. vpn-server)" }
+
+    # ServerName: gebruik parameter, anders default
+    $inputServerName = $ServerName
     if ([string]::IsNullOrWhiteSpace($inputServerName)) {
-        $inputServerName = $Script:Settings.serverNameDefault
+        throw "Server naam niet ingesteld in Variable.psd1. Stel serverName in."
     }
     $config.ServerName = $inputServerName
     
-    $inputServerIP = if ($ServerIP) { $ServerIP } else { Read-Host "  Server WAN IP of DDNS (bijv. vpn.example.com)" }
-    while ([string]::IsNullOrWhiteSpace($inputServerIP)) {
-        Write-Host "  ! Server IP/DDNS is verplicht" -ForegroundColor Red
-        $inputServerIP = Read-Host "  Server WAN IP of DDNS"
+    # ServerIP: gebruik parameter, check of geldig
+    $inputServerIP = $ServerIP
+    if ([string]::IsNullOrWhiteSpace($inputServerIP) -or $inputServerIP -eq 'jouw.server.ip.hier') {
+        throw "Server IP niet ingesteld in Variable.psd1. Stel serverIP in op een geldige WAN IP of DDNS."
     }
     $config.ServerIP = $inputServerIP
     
-    $inputLANSubnet = if ($PSBoundParameters.ContainsKey('LANSubnet')) { $LANSubnet } else { Read-Host "  LAN subnet (default $($Script:Settings.lanSubnetDefault), druk Enter voor skip)" }
-    if (-not [string]::IsNullOrWhiteSpace($inputLANSubnet)) {
-        $config.LANSubnet = $inputLANSubnet
-        $config.LANMask = if ($LANMask) { $LANMask } else { $Script:Settings.lanMaskDefault }
+    # LANSubnet: gebruik parameter, check of geldig
+    $inputLANSubnet = $LANSubnet
+    if ([string]::IsNullOrWhiteSpace($inputLANSubnet)) {
+        throw "LAN subnet niet ingesteld in Variable.psd1. Stel lanSubnet in."
     }
-    
-    if ($PSBoundParameters.ContainsKey('NoPass')) {
-        $config.NoPass = $NoPass
-    } else {
-        $noPassInput = Read-Host "  Certificaten zonder wachtwoord? (J/N, standaard N)"
-        $config.NoPass = ($noPassInput -eq "J" -or $noPassInput -eq "j")
+    $config.LANSubnet = $inputLANSubnet
+
+    $inputLANMask = $LANMask
+    if ([string]::IsNullOrWhiteSpace($inputLANMask)) {
+        throw "LAN subnet mask niet ingesteld in Variable.psd1. Stel lanMask in."
     }
+    $config.LANMask = $inputLANMask
     
+    # NoPass: gebruik parameter
+    $config.NoPass = $NoPass
+    
+    # Password: alleen vragen als NoPass false
     if (-not $config.NoPass) {
         $config.Password = if ($Password) { $Password } else { Read-Host "  Voer wachtwoord in voor certificaten" }
     }
@@ -495,7 +499,7 @@ function Initialize-EasyRSA {
 #>
 function Initialize-Certificates {
     param (
-        [string]$ServerName = $Script:Settings.serverNameDefault,
+        [string]$ServerName = $Script:Settings.servername,
         [string]$Password = $null,
         [string]$EasyRSAPath = (Join-Path $Script:BasePath $Script:Settings.certPath)
     )
@@ -958,7 +962,7 @@ function New-ClientPackage {
         New-Item -ItemType Directory -Path $OutputPath -Force
     }
     
-    $clientName = $Script:Settings.clientNameDefault
+    $clientName = $Script:Settings.clientName
     $zipPath = Join-Path $OutputPath "vpn-client-$clientName.zip"
     
     try {
@@ -1086,7 +1090,7 @@ function Import-ClientConfiguration {
     $configPath = $Script:Settings.configPath
     
     # Try to find the default client ZIP file
-    $defaultZipPath = Join-Path (Join-Path $Script:BasePath $Script:Settings.outputPath) "vpn-client-$($Script:Settings.clientNameDefault).zip"
+    $defaultZipPath = Join-Path (Join-Path $Script:BasePath $Script:Settings.outputPath) "vpn-client-$($Script:Settings.clientName).zip"
     if (Test-Path $defaultZipPath) {
         $zipFile = $defaultZipPath
         Write-Log "Standaard client ZIP bestand gevonden: $zipFile" -Level "INFO"
@@ -1495,7 +1499,7 @@ function Invoke-Rollback {
                 Write-Log "Verwijderen client package ZIP" -Level "INFO"
                 try {
                     $outputPath = Join-Path $Script:BasePath $Script:Settings.outputPath
-                    $zipPath = Join-Path $outputPath "vpn-client-$($Script:Settings.clientNameDefault).zip"
+                    $zipPath = Join-Path $outputPath "vpn-client-$($Script:Settings.clientName).zip"
                     if (Test-Path $zipPath) {
                         Remove-Item -Path $zipPath -Force
                         Write-Log "Client package ZIP verwijderd: $zipPath" -Level "INFO"

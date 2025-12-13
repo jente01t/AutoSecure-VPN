@@ -1,11 +1,11 @@
 @{
-	# OpenVPN Installatie Instellingen (Voorbeeld configuratie - kopieer naar Stable.psd1 en pas aan)
+	# OpenVPN Installatie Instellingen
 	openVpnVersion = '' #wanneer leeg, wordt de laatste stabiele versie gebruikt
 	installerPath  = 'C:\Temp\openvpn-install.msi'
 	installedPath  = 'C:\Program Files\OpenVPN'
 	openVPNExePath = 'C:\Program Files\OpenVPN\bin\openvpn.exe'
 
-	# EasyRSA Certificaat Instellingen (Voorbeeld)
+	# EasyRSA Certificaat Instellingen
 	easyRSAVersion = '' #wanneer leeg, wordt de laatste stabiele versie gebruikt
 	easyRSAPath    = 'C:\Program Files\OpenVPN\easy-rsa'
 	easyRSAKeySize = 2048
@@ -16,7 +16,7 @@
 	easyRSABatch = '1'
 	easyRSAReqCN = 'vpn-server'
 
-	# Paden en Configuratie (Voorbeeld)
+	# Paden en Configuratie
 	configPath     = 'C:\Program Files\OpenVPN\config'
 	remoteConfigPath = 'C:\Program Files\OpenVPN\config'
 	logsPath       = 'logs'
@@ -24,26 +24,11 @@
 	certPath       = 'cert'
 	tempPath = 'C:\Temp'
 
-	# VPN Netwerk Instellingen (standaard waarden - voorbeeld)
-	port           = 443
-	protocol       = 'TCP'
-	vpnSubnet      = '10.8.0.0'
-	vpnMask        = '255.255.255.0'
-	testIP         = '10.8.0.1'
-	dns1           = '8.8.8.8'
-	dns2           = '8.8.4.4'
-
-	# Defaults voor Server en Client (Voorbeeld)
-	serverNameDefault = 'vpn-server'
-	clientNameDefault = 'client1'
-	lanSubnetDefault = '192.168.1.0'
-	lanMaskDefault = '255.255.255.0'
-
-	# Logging Instellingen (Voorbeeld)
+	# Logging Instellingen
 	logFileName    = 'vpn-setup.log'
 	logTimestampFormat = 'yyyy-MM-dd HH:mm:ss'
 	transcriptFileName = 'transcript.log'
 
-	# Remote en TrustedHosts (Voorbeeld)
+	# Remote en TrustedHosts
 	trustedHostsDefault = '*'
 }
