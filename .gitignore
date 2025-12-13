@@ -12,6 +12,9 @@ logs/**
 certs/
 certs/**
 
+# Configuration files (user-specific, keep templates)
+src/config/Stable.psd1
+src/config/Variable.psd1
 
 # Sensitive file types
 *.key
