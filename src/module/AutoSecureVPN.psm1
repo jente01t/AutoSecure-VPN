@@ -234,19 +234,20 @@ function Write-Log {
 #>
 function Install-OpenVPN {
     param(
-        [string]$Url #validaties urls 
+        [string]$openVpnUrl #validaties urls 
     )
     
-    if (-not $Url) {
+    if (-not $openVpnUrl) {
         $version = if ($Script:Settings.openVpnVersion) { $Script:Settings.openVpnVersion } else { 
             try {
                 $latest = Invoke-RestMethod -Uri 'https://api.github.com/repos/OpenVPN/openvpn/releases/latest'
                 $latest.tag_name -replace '^v', ''
             } catch {
-                '2.6.15'  # fallback
+                Write-Log "2.6.15 gebuikt als fallback bij ophalen van laatste OpenVPN versie: $_" -Level "WARNING"
+                '2.6.15'  #fllback
             }
         }
-        $Url = "https://swupdate.openvpn.org/community/releases/OpenVPN-$version-I001-amd64.msi"
+        $openVpnUrl = "https://swupdate.openvpn.org/community/releases/OpenVPN-$version-I001-amd64.msi"
     }
     
     $installedPath = $Script:Settings.installedPath
@@ -263,7 +264,7 @@ function Install-OpenVPN {
     $tempPath = [System.IO.Path]::GetTempFileName() + ".msi"
     
     try {
-        Invoke-WebRequest -Uri $Url -OutFile $tempPath -UseBasicParsing
+        Invoke-WebRequest -Uri $openVpnUrl -OutFile $tempPath -UseBasicParsing
         Write-Log "OpenVPN MSI gedownload naar $tempPath" -Level "INFO"
         
         $arguments = "/i `"$tempPath`" /qn /norestart"
@@ -441,6 +442,7 @@ function Initialize-EasyRSA {
                 $latest = Invoke-RestMethod -Uri 'https://api.github.com/repos/OpenVPN/easy-rsa/releases/latest'
                 $latest.tag_name -replace '^v', ''
             } catch {
+                Write-Log "3.2.4 gebuikt als fallback bij ophalen van laatste EasyRSA versie: $_" -Level "WARNING"
                 '3.2.4'  # fallback
             }
         }
