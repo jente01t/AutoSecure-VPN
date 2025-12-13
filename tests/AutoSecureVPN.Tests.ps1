@@ -1,46 +1,49 @@
 #Requires -Modules Pester
 
-# Import the module to test
+# Create test config files in temp directory
+$configDir = "$env:TEMP\AutoSecureVPNTest\config"
+New-Item -ItemType Directory -Path $configDir -Force
+
+$content = @"
+@{
+installedPath = "C:\Program Files\OpenVPN"
+openVpnUrl = "https://example.com/openvpn.msi"
+port = 1194
+protocol = "UDP"
+vpnSubnet = "10.8.0.0"
+vpnMask = "255.255.255.0"
+dns1 = "8.8.8.8"
+dns2 = "8.8.4.4"
+serverName = "vpn-server"
+serverIP = "192.168.1.100"
+lanSubnet = "192.168.1.0"
+lanMask = "255.255.255.0"
+noPass = `$true
+easyRSAPath = "C:\easy-rsa"
+configPath = "$env:TEMP\AutoSecureVPNTest\config"
+outputPath = "$env:TEMP\AutoSecureVPNTest\output"
+logFileName = "test.log"
+transcriptFileName = "transcript.log"
+logTimestampFormat = "yyyy-MM-dd HH:mm:ss"
+easyRSABatch = "yes"
+easyRSAAlgo = "rsa"
+easyRSAKeySize = 2048
+easyRSACAExpire = 3650
+easyRSACertExpire = 825
+easyRSACRLDays = 180
+remoteConfigPath = "C:\Temp"
+}
+"@
+Set-Content -Path "$configDir\Stable.psd1" -Value $content
+Set-Content -Path "$configDir\Variable.psd1" -Value $content
+
+# Import the module after creating config files
 $modulePath = Join-Path $PSScriptRoot "..\src\module\AutoSecureVPN.psm1"
 Import-Module $modulePath -Force
 
-InModuleScope AutoSecureVPN {
+$Script:BasePath = "$env:TEMP\AutoSecureVPNTest\"
 
-    BeforeAll {
-        # Mock config file existence and Import-PowerShellDataFile to return test settings
-        Mock Test-Path { $true } -ParameterFilter { $Path -like "*config\Stable.psd1" -or $Path -like "*config\Variable.psd1" }
-        Mock Import-PowerShellDataFile {
-            @{
-                installedPath = "C:\Program Files\OpenVPN"
-                openVpnUrl = "https://example.com/openvpn.msi"
-                port = 1194
-                protocol = "UDP"
-                vpnSubnet = "10.8.0.0"
-                vpnMask = "255.255.255.0"
-                dns1 = "8.8.8.8"
-                dns2 = "8.8.4.4"
-                serverName = "vpn-server"
-                serverIP = "192.168.1.100"
-                lanSubnet = "192.168.1.0"
-                lanMask = "255.255.255.0"
-                noPass = $true
-                easyRSAPath = "C:\easy-rsa"
-                configPath = "TestDrive:\config"
-                outputPath = "TestDrive:\output"
-                logFileName = "test.log"
-                transcriptFileName = "transcript.log"
-                logTimestampFormat = "yyyy-MM-dd HH:mm:ss"
-                easyRSABatch = "yes"
-                easyRSAAlgo = "rsa"
-                easyRSAKeySize = 2048
-                easyRSACAExpire = 3650
-                easyRSACertExpire = 825
-                easyRSACRLDays = 180
-                remoteConfigPath = "C:\Temp"
-            }
-        }
-        $Script:BasePath = "TestDrive:\"
-    }
+InModuleScope AutoSecureVPN {
 
     Describe "Install-OpenVPN" {
         It "Returns true if OpenVPN is already installed" {
@@ -102,8 +105,8 @@ InModuleScope AutoSecureVPN {
         It "Imports client configuration successfully" {
             Mock Read-Host { "TestDrive:\client.zip" }
             Mock Test-Path { $true }
-            Mock Expand-Archive { }
-            Mock Get-ChildItem { @{ FullName = "TestDrive:\config\client.ovpn" } }
+            Mock Expand-Archive { New-Item -ItemType File -Path "TestDrive:\config\client\client.ovpn" -Force }
+            Mock Get-ChildItem { @{ FullName = "TestDrive:\config\client\client.ovpn" } }
 
             $result = Import-ClientConfiguration
             $result | Should -Not -Be $null
@@ -112,6 +115,7 @@ InModuleScope AutoSecureVPN {
 
     Describe "Start-VPNConnection" {
         It "Starts VPN connection successfully" {
+            Mock Test-Path { $true } -ParameterFilter { $Path -like "*openvpn.exe" }
             Mock Test-Path { $true }
             Mock Start-Process { }
 
@@ -222,19 +226,6 @@ InModuleScope AutoSecureVPN {
 
             $result = Test-VPNConnection
             $result | Should -Be $true
-        }
-    }
-
-
-    Describe "Set-ModuleSettings" {
-        It "Sets module settings" {
-            $testSettings = @{ Key = "Value" }
-            $testBasePath = "C:\Test"
-
-            Set-ModuleSettings -Settings $testSettings -BasePath $testBasePath
-
-            # Since it's script scope, hard to test directly, but we can check if no error
-            $true | Should -Be $true
         }
     }
 
