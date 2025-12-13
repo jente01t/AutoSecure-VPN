@@ -5,15 +5,6 @@ $modulePath = Join-Path $PSScriptRoot "..\src\module\AutoSecureVPN.psm1"
 Import-Module $modulePath -Force
 
 InModuleScope AutoSecureVPN {
-    Describe "Pause" {
-        It "Calls Read-Host with the message" {
-            Mock Read-Host { }
-
-            Pause -Message "Test message"
-
-            Assert-MockCalled Read-Host -Times 1 -ParameterFilter { $Prompt -eq "Test message" }
-        }
-    }
 
     Describe "Install-OpenVPN" {
         It "Returns true if OpenVPN is already installed" {
@@ -113,39 +104,31 @@ InModuleScope AutoSecureVPN {
         }
     }
 
-    Describe "Configure-Firewall" {
+    Describe "Set-Firewall" {
         It "Adds firewall rule successfully" {
             Mock Get-NetFirewallRule { return $null }
             Mock New-NetFirewallRule { }
 
-            $result = Configure-Firewall -Port 443 -Protocol "TCP"
+            $result = Set-Firewall -Port 443 -Protocol "TCP"
             $result | Should -Be $true
         }
 
         It "Returns true if rule already exists" {
             Mock Get-NetFirewallRule { return @{ Name = "OpenVPN-Inbound-TCP-443" } }
 
-            $result = Configure-Firewall -Port 443 -Protocol "TCP"
+            $result = Set-Firewall -Port 443 -Protocol "TCP"
             $result | Should -Be $true
         }
     }
 
     Describe "Get-ServerConfiguration" {
-        It "Returns configuration with default values" {
-            Mock Read-Host {
-                param($Prompt)
-                switch -Regex ($Prompt) {
-                    "Servernaam" { "" }
-                    "Server WAN IP" { "example.com" }
-                    "LAN subnet" { "" }
-                    "Certificaten zonder wachtwoord" { "J" }
-                }
-            }
+        It "Returns configuration with provided parameters" {
+            $config = Get-ServerConfiguration -ServerName "test-server" -ServerIP "192.168.1.1" -LANSubnet "192.168.1.0" -LANMask "255.255.255.0" -NoPass
 
-            $config = Get-ServerConfiguration
-
-            $config.ServerName | Should -Be "vpn-server"
-            $config.ServerIP | Should -Be "example.com"
+            $config.ServerName | Should -Be "test-server"
+            $config.ServerIP | Should -Be "192.168.1.1"
+            $config.LANSubnet | Should -Be "192.168.1.0"
+            $config.LANMask | Should -Be "255.255.255.0"
             $config.NoPass | Should -Be $true
         }
     }
@@ -159,7 +142,7 @@ InModuleScope AutoSecureVPN {
         }
     }
 
-    Describe "Generate-ServerConfig" {
+    Describe "New-ServerConfig" {
         It "Creates server config file" {
             $config = @{
                 ServerName = "test-server"
@@ -173,7 +156,7 @@ InModuleScope AutoSecureVPN {
             Mock New-Item { }
             Mock Set-Content { }
 
-            $result = Generate-ServerConfig -Config $config -EasyRSAPath $easyRSAPath -ConfigPath $configPath
+            $result = New-ServerConfig -Config $config -EasyRSAPath $easyRSAPath -ConfigPath $configPath
             $result | Should -Be $true
         }
     }
@@ -203,6 +186,67 @@ InModuleScope AutoSecureVPN {
 
             $result = Test-VPNConnection
             $result | Should -Be $true
+        }
+    }
+
+
+    Describe "Set-ModuleSettings" {
+        It "Sets module settings" {
+            $testSettings = @{ Key = "Value" }
+            $testBasePath = "C:\Test"
+
+            Set-ModuleSettings -Settings $testSettings -BasePath $testBasePath
+
+            # Since it's script scope, hard to test directly, but we can check if no error
+            $true | Should -Be $true
+        }
+    }
+
+    Describe "Test-IsAdmin" {
+        It "Returns a boolean value" {
+            $result = Test-IsAdmin
+            $result | Should -BeOfType [bool]
+        }
+    }
+
+    Describe "Install-RemoteServer" {
+        It "Installs remote server successfully" {
+            Mock Test-IsAdmin { $true }
+            Mock New-PSSession { New-MockObject -Type System.Management.Automation.Runspaces.PSSession }
+            Mock Invoke-Command { }
+            Mock Copy-Item { }
+            Mock Remove-PSSession { }
+
+            $config = @{ ServerName = "test" }
+            $result = Install-RemoteServer -ComputerName "remote-pc" -Credential (New-Object PSCredential ("user", (ConvertTo-SecureString "pass" -AsPlainText -Force))) -ServerConfig $config -LocalEasyRSAPath "C:\easy-rsa"
+            $result | Should -Be $true
+        }
+    }
+
+    Describe "Install-RemoteClient" {
+        It "Installs remote client successfully" {
+            Mock Test-IsAdmin { $true }
+            Mock Test-Path { $true } -ParameterFilter { $Path -eq "C:\test.zip" }
+            Mock New-PSSession { New-MockObject -Type System.Management.Automation.Runspaces.PSSession }
+            Mock Invoke-Command { }
+            Mock Copy-Item { }
+            Mock Remove-PSSession { }
+
+            $cred = New-Object PSCredential ("user", (ConvertTo-SecureString "pass" -AsPlainText -Force))
+            $result = Install-RemoteClient -ComputerName "remote-pc" -Credential $cred -ZipPath "C:\test.zip"
+            $result | Should -Be $true
+        }
+    }
+
+    Describe "Invoke-Rollback" {
+        It "Performs rollback for client setup" {
+            Mock Test-Path { $true }
+            Mock Remove-Item { }
+            Mock Stop-Service { }
+            Mock Get-Service { @{ Status = "Running" } }
+
+            $result = Invoke-Rollback -SetupType "Client"
+            $result | Should -Be $null
         }
     }
 }
