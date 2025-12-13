@@ -6,6 +6,42 @@ Import-Module $modulePath -Force
 
 InModuleScope AutoSecureVPN {
 
+    BeforeAll {
+        # Mock config file existence and Import-PowerShellDataFile to return test settings
+        Mock Test-Path { $true } -ParameterFilter { $Path -like "*config\Stable.psd1" -or $Path -like "*config\Variable.psd1" }
+        Mock Import-PowerShellDataFile {
+            @{
+                installedPath = "C:\Program Files\OpenVPN"
+                openVpnUrl = "https://example.com/openvpn.msi"
+                port = 1194
+                protocol = "UDP"
+                vpnSubnet = "10.8.0.0"
+                vpnMask = "255.255.255.0"
+                dns1 = "8.8.8.8"
+                dns2 = "8.8.4.4"
+                serverName = "vpn-server"
+                serverIP = "192.168.1.100"
+                lanSubnet = "192.168.1.0"
+                lanMask = "255.255.255.0"
+                noPass = $true
+                easyRSAPath = "C:\easy-rsa"
+                configPath = "TestDrive:\config"
+                outputPath = "TestDrive:\output"
+                logFileName = "test.log"
+                transcriptFileName = "transcript.log"
+                logTimestampFormat = "yyyy-MM-dd HH:mm:ss"
+                easyRSABatch = "yes"
+                easyRSAAlgo = "rsa"
+                easyRSAKeySize = 2048
+                easyRSACAExpire = 3650
+                easyRSACertExpire = 825
+                easyRSACRLDays = 180
+                remoteConfigPath = "C:\Temp"
+            }
+        }
+        $Script:BasePath = "TestDrive:\"
+    }
+
     Describe "Install-OpenVPN" {
         It "Returns true if OpenVPN is already installed" {
             Mock Test-Path { $true } -ParameterFilter { $Path -like "*OpenVPN*" }
