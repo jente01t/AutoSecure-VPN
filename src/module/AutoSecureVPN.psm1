@@ -37,14 +37,14 @@
 #>
 function Show-Menu {
     param(
-        [Parameter(Mandatory=$true)][string]$Title,
-        [Parameter(Mandatory=$true)][string[]]$Options,
-        [ConsoleColor]$HeaderColor = 'Cyan',
-        [ConsoleColor]$OptionColor = 'White',
-        [ConsoleColor]$FooterColor = 'Cyan',
-        [string]$SeparatorChar = '=',
-        [switch]$NoPrompt,
-        [string]$Prompt = 'Keuze: '
+        [Parameter(Mandatory=$true, Position=0)][string]$Title,
+        [Parameter(Mandatory=$true, Position=1)][string[]]$Options,
+        [Parameter(Position=2)][ConsoleColor]$HeaderColor = 'Cyan',
+        [Parameter(Position=3)][ConsoleColor]$OptionColor = 'White',
+        [Parameter(Position=4)][ConsoleColor]$FooterColor = 'Cyan',
+        [Parameter(Position=5)][string]$SeparatorChar = '=',
+        [Parameter(Position=6)][switch]$NoPrompt,
+        [Parameter(Position=7)][string]$Prompt = 'Keuze: '
     )
 
     Clear-Host
@@ -86,7 +86,7 @@ function Show-Menu {
     Wait-Input
 #>
 function Wait-Input {
-	param([string]$Message = 'Druk Enter om door te gaan...')
+	param([Parameter(Position=0)][string]$Message = 'Druk Enter om door te gaan...')
 	Read-Host -Prompt $Message | Out-Null
 }
 
@@ -138,8 +138,8 @@ $Script:BasePath = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 #>
 function Set-ModuleSettings {
     param(
-        [hashtable]$Settings,
-        [string]$BasePath
+        [Parameter(Mandatory=$true, Position=0)][hashtable]$Settings,
+        [Parameter(Mandatory=$true, Position=1)][string]$BasePath
     )
     $Script:Settings = $Settings
     $Script:BasePath = $BasePath
@@ -182,9 +182,9 @@ function Test-IsAdmin {
 #>
 function Write-Log {
     param(
-        [string]$Message,
-        [string]$Level = "INFO",
-        [string]$LogFile = $null
+        [Parameter(Mandatory=$true, Position=0)][string]$Message,
+        [Parameter(Position=1)][string]$Level = "INFO",
+        [Parameter(Position=2)][string]$LogFile = $null
     )
     
     if (-not $LogFile) {
@@ -234,7 +234,7 @@ function Write-Log {
 #>
 function Install-OpenVPN {
     param(
-        [string]$openVpnUrl #validaties urls 
+        [Parameter(Position=0)][string]$openVpnUrl #validaties urls 
     )
     
     if (-not $openVpnUrl) {
@@ -311,8 +311,8 @@ function Install-OpenVPN {
 #>
 function Set-Firewall {
     param(
-        [int]$Port = $Script:Settings.port,
-        [string]$Protocol = $Script:Settings.protocol
+        [Parameter(Position=0)][ValidateRange(1,65535)][int]$Port = $Script:Settings.port,
+        [Parameter(Position=1)][ValidateSet('TCP','UDP')][string]$Protocol = $Script:Settings.protocol
     )
     
     Write-Log "Firewall configuratie gestart voor poort $Port $Protocol" -Level "INFO"
@@ -362,12 +362,12 @@ function Set-Firewall {
 #>
 function Get-ServerConfiguration {
     param(
-        [string]$ServerName = $Script:Settings.serverName,
-        [string]$ServerIP = $Script:Settings.serverIP,
-        [string]$LANSubnet = $Script:Settings.lanSubnet,
-        [string]$LANMask = $Script:Settings.lanMask,
-        [switch]$NoPass = $Script:Settings.noPass,
-        [string]$Password
+        [Parameter(Position=0)][ValidatePattern('^[a-zA-Z0-9_-]{1,63}$')][string]$ServerName = $Script:Settings.serverName,
+        [Parameter(Position=1)][string]$ServerIP = $Script:Settings.serverIP,
+        [Parameter(Position=2)][string]$LANSubnet = $Script:Settings.lanSubnet,
+        [Parameter(Position=3)][string]$LANMask = $Script:Settings.lanMask,
+        [Parameter(Position=4)][switch]$NoPass = $Script:Settings.noPass,
+        [Parameter(Position=5)][ValidateLength(8,128)][string]$Password
     )
     
     $config = @{}
@@ -384,6 +384,10 @@ function Get-ServerConfiguration {
     if ([string]::IsNullOrWhiteSpace($inputServerIP) -or $inputServerIP -eq 'jouw.server.ip.hier') {
         throw "Server IP niet ingesteld in Variable.psd1. Stel serverIP in op een geldige WAN IP of DDNS."
     }
+    # Valideer ServerIP: moet IP adres of hostname zijn
+    if ($inputServerIP -notmatch '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$' -and $inputServerIP -notmatch '^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$') { # https://stackoverflow.com/questions/5284147/validating-ipv4-addresses-with-regexp 
+        throw "ServerIP '$inputServerIP' is geen geldig IP adres of hostname."
+    }
     $config.ServerIP = $inputServerIP
     
     # LANSubnet: gebruik parameter, check of geldig
@@ -391,11 +395,19 @@ function Get-ServerConfiguration {
     if ([string]::IsNullOrWhiteSpace($inputLANSubnet)) {
         throw "LAN subnet niet ingesteld in Variable.psd1. Stel lanSubnet in."
     }
+    # Valideer LANSubnet: moet IP adres zijn
+    if ($inputLANSubnet -notmatch '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$') {
+        throw "LANSubnet '$inputLANSubnet' is geen geldig IP adres."
+    }
     $config.LANSubnet = $inputLANSubnet
 
     $inputLANMask = $LANMask
     if ([string]::IsNullOrWhiteSpace($inputLANMask)) {
         throw "LAN subnet mask niet ingesteld in Variable.psd1. Stel lanMask in."
+    }
+    # Valideer LANMask: moet IP adres zijn
+    if ($inputLANMask -notmatch '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$') {
+        throw "LANMask '$inputLANMask' is geen geldig IP adres."
     }
     $config.LANMask = $inputLANMask
     
@@ -404,7 +416,19 @@ function Get-ServerConfiguration {
     
     # Password: alleen vragen als NoPass false
     if (-not $config.NoPass) {
-        $config.Password = if ($Password) { $Password } else { Read-Host "  Voer wachtwoord in voor certificaten" }
+        if ($Password) {
+            $config.Password = $Password
+        } else {
+            while ($true) {
+                $pwd = Read-Host "Voer wachtwoord in voor certificaten (minimaal 8 karakters)"
+                if ($pwd.Length -ge 8) {
+                    $config.Password = $pwd
+                    break
+                } else {
+                    Write-Host "Wachtwoord moet minimaal 8 karakters lang zijn." -ForegroundColor Red
+                }
+            }
+        }
     }
     
     Write-Log "Server configuratie verzameld: ServerName=$($config.ServerName), ServerIP=$($config.ServerIP)" -Level "INFO"
@@ -431,7 +455,7 @@ function Get-ServerConfiguration {
 #>
 function Initialize-EasyRSA {
     param(
-        [string]$EasyRSAPath = $Script:Settings.easyRSAPath
+        [Parameter(Position=0)][string]$EasyRSAPath = $Script:Settings.easyRSAPath
     )
     
     if (Test-Path $EasyRSAPath) {
@@ -499,9 +523,9 @@ function Initialize-EasyRSA {
 #>
 function Initialize-Certificates {
     param (
-        [string]$ServerName = $Script:Settings.servername,
-        [string]$Password = $null,
-        [string]$EasyRSAPath = (Join-Path $Script:BasePath $Script:Settings.certPath)
+        [Parameter(Position=0)][ValidatePattern('^[a-zA-Z0-9_-]{1,63}$')][string]$ServerName = $Script:Settings.servername,
+        [Parameter(Position=1)][ValidateLength(8,128)][string]$Password = $null,
+        [Parameter(Position=2)][string]$EasyRSAPath = (Join-Path $Script:BasePath $Script:Settings.certPath)
     )
     
     try {
@@ -678,9 +702,9 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
 #>
 function New-ServerConfig {
     param(
-        [hashtable]$Config,
-        [string]$EasyRSAPath = $Script:Settings.easyRSAPath,
-        [string]$ConfigPath = $Script:Settings.configPath
+        [Parameter(Mandatory=$true, Position=0)][hashtable]$Config,
+        [Parameter(Position=1)][string]$EasyRSAPath = $Script:Settings.easyRSAPath,
+        [Parameter(Position=2)][string]$ConfigPath = $Script:Settings.configPath
     )
     
     Write-Log "Server configuratie generatie gestart" -Level "INFO"
@@ -767,10 +791,10 @@ verb 3
 #>
 function Install-RemoteServer {
     param (
-        [Parameter(Mandatory=$true)][string]$ComputerName,
-        [Parameter(Mandatory=$true)][PSCredential]$Credential,
-        [Parameter(Mandatory=$true)][hashtable]$ServerConfig,
-        [Parameter(Mandatory=$true)][string]$LocalEasyRSAPath
+        [Parameter(Mandatory=$true, Position=0)][ValidatePattern('^[a-zA-Z0-9.-]+$')][string]$ComputerName,
+        [Parameter(Mandatory=$true, Position=1)][PSCredential]$Credential,
+        [Parameter(Mandatory=$true, Position=2)][hashtable]$ServerConfig,
+        [Parameter(Mandatory=$true, Position=3)][string]$LocalEasyRSAPath
     )
 
     Write-Log "Remote server configuratie gestart voor $ComputerName" -Level "INFO"
@@ -951,9 +975,9 @@ function Start-VPNService {
 #>
 function New-ClientPackage {
     param(
-        [hashtable]$Config,
-        [string]$EasyRSAPath = $Script:Settings.easyRSAPath,
-        [string]$OutputPath = (Join-Path $Script:BasePath $Script:Settings.outputPath)
+        [Parameter(Mandatory=$true, Position=0)][hashtable]$Config,
+        [Parameter(Position=1)][string]$EasyRSAPath = $Script:Settings.easyRSAPath,
+        [Parameter(Position=2)][string]$OutputPath = (Join-Path $Script:BasePath $Script:Settings.outputPath)
     )
     
     $pkiPath = Join-Path $EasyRSAPath "pki"
@@ -1095,8 +1119,14 @@ function Import-ClientConfiguration {
         $zipFile = $defaultZipPath
         Write-Log "Standaard client ZIP bestand gevonden: $zipFile" -Level "INFO"
     } else {
-        Write-Host "Standaard client ZIP bestand niet gevonden op $defaultZipPath" -ForegroundColor Yellow
-        $zipFile = Read-Host "Pad naar client ZIP bestand"
+        while ($true) {
+            $zipFile = Read-Host "Pad naar client ZIP bestand"
+            if ($zipFile -match '\.zip$' -and (Test-Path $zipFile)) {
+                break
+            } else {
+                Write-Host "Ongeldig pad of geen ZIP bestand. Probeer opnieuw." -ForegroundColor Red
+            }
+        }
     }
     
     if (-not (Test-Path $zipFile)) {
@@ -1162,10 +1192,10 @@ function Import-ClientConfiguration {
 #>
 function Install-RemoteClient {
     param(
-        [Parameter(Mandatory=$true)][string]$ComputerName,
-        [Parameter(Mandatory=$true)][PSCredential]$Credential,
-        [Parameter(Mandatory=$true)][string]$ZipPath,
-        [string]$RemoteConfigPath = $Script:Settings.remoteConfigPath
+        [Parameter(Mandatory=$true, Position=0)][ValidatePattern('^[a-zA-Z0-9.-]+$')][string]$ComputerName,
+        [Parameter(Mandatory=$true, Position=1)][PSCredential]$Credential,
+        [Parameter(Mandatory=$true, Position=2)][ValidatePattern('\.zip$')][string]$ZipPath,
+        [Parameter(Position=3)][string]$RemoteConfigPath = $Script:Settings.remoteConfigPath
     )
     
     Write-Log "Remote client configuratie gestart voor $ComputerName" -Level "INFO"
@@ -1346,7 +1376,7 @@ function Test-TAPAdapter {
 #>
 function Start-VPNConnection {
     param(
-        [string]$ConfigFile
+        [Parameter(Mandatory=$true, Position=0)][ValidatePattern('\.ovpn$')][string]$ConfigFile
     )
     
     Write-Log "VPN verbinding starten met config: $ConfigFile" -Level "INFO"
@@ -1436,7 +1466,7 @@ function Test-VPNConnection {
 #>
 function Invoke-Rollback {
     param(
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory=$true, Position=0)]
         [ValidateSet("Server", "Client")]
         [string]$SetupType
     )
