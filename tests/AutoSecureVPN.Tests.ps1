@@ -9,6 +9,18 @@ InModuleScope AutoSecureVPN {
     BeforeAll {
         # Mock Write-Log globally to prevent log file issues in CI
         Mock Write-Log { } -ModuleName AutoSecureVPN
+        
+        # Initialize Script-scoped variables used by the module
+        $Script:Settings = @{
+            configPath = "TestDrive:\config"
+            outputPath = "output"
+            clientName = "client1"
+            openVPNExePath = "C:\Program Files\OpenVPN\bin\openvpn.exe"
+            testIP = "10.8.0.1"
+            installedPath = "C:\Program Files\OpenVPN"
+            openVpnVersion = "2.6.15"
+        }
+        $Script:BasePath = "TestDrive:"
     }
 
     Describe "Install-OpenVPN" {
@@ -89,26 +101,38 @@ InModuleScope AutoSecureVPN {
 
     Describe "Import-ClientConfiguration" {
         It "Imports client configuration successfully" {
-            New-Item -ItemType Directory -Path "TestDrive:\config\client" -Force | Out-Null
-            New-Item -ItemType File -Path "TestDrive:\client.zip" -Force | Out-Null
+            # Setup test environment
+            New-Item -ItemType Directory -Path "TestDrive:\config" -Force | Out-Null
+            New-Item -ItemType Directory -Path "TestDrive:\output" -Force | Out-Null
+            $zipPath = "TestDrive:\output\vpn-client-client1.zip"
+            New-Item -ItemType File -Path $zipPath -Force | Out-Null
             
-            Mock Read-Host { "TestDrive:\client.zip" }
+            # Don't need Read-Host mock since default file will be found
             Mock Test-Path { 
                 param($Path)
-                # Return true for paths that should exist
+                # Return true for the default zip path
+                if ($Path -like "*vpn-client-client1.zip") { return $true }
                 if ($Path -like "*client.zip") { return $true }
-                if ($Path -like "*config*") { return $true }
-                if ($Path -like "*client.ovpn") { return $true }
-                return $false
+                return $true
             }
             Mock Expand-Archive { 
-                New-Item -ItemType File -Path "TestDrive:\config\client\client.ovpn" -Force | Out-Null
+                param($Path, $DestinationPath)
+                New-Item -ItemType File -Path "$DestinationPath\client1.ovpn" -Force | Out-Null
             }
-            Mock Get-ChildItem { @{ FullName = "TestDrive:\config\client\client.ovpn" } }
+            Mock Get-ChildItem { 
+                param($Path, $Filter)
+                if ($Filter -eq "*.ovpn") {
+                    return @{ FullName = "TestDrive:\config\client1.ovpn" }
+                }
+                return $null
+            }
+            Mock Get-Content { "ca ca.crt`ncert client1.crt`nkey client1.key" }
+            Mock Set-Content { }
             Mock Write-Log { }
 
             $result = Import-ClientConfiguration
             $result | Should -Not -Be $null
+            $result | Should -Be "TestDrive:\config\client1.ovpn"
         }
     }
 
@@ -119,15 +143,15 @@ InModuleScope AutoSecureVPN {
             Mock Test-Path { 
                 param($Path)
                 # Match OpenVPN executable path patterns
-                if ($Path -like "*openvpn*.exe*") { return $true }
-                if ($Path -like "*OpenVPN*.exe*") { return $true }
+                if ($Path -like "*openvpn*.exe") { return $true }
+                if ($Path -like "*OpenVPN*.exe") { return $true }
                 if ($Path -like "*Program Files*OpenVPN*") { return $true }
-                # Match config file
-                if ($Path -like "*client.ovpn*") { return $true }
-                if ($Path -like "*TestDrive*") { return $true }
                 return $false
             }
+            Mock Get-Process { return @() }  # No existing processes
+            Mock Stop-Process { }
             Mock Start-Process { }
+            Mock Split-Path { return "TestDrive:" }
             Mock Write-Log { }
 
             $result = Start-VPNConnection -ConfigFile "TestDrive:\client.ovpn"
@@ -138,6 +162,7 @@ InModuleScope AutoSecureVPN {
 
         It "Returns false if OpenVPN executable not found" {
             Mock Test-Path { param($Path) return $false }
+            Mock Get-Process { return @() }
             Mock Write-Log { }
 
             $result = Start-VPNConnection -ConfigFile "TestDrive:\client.ovpn"
@@ -250,12 +275,13 @@ InModuleScope AutoSecureVPN {
     Describe "Test-VPNConnection" {
         It "Returns true if ping succeeds" {
             Mock Test-Connection { 
-                param($TargetName, $Count, $Quiet)
+                param($ComputerName, $Count, $Quiet)
                 return $true
             }
+            Mock Start-Sleep { }
             Mock Write-Log { }
 
-            $result = Test-VPNConnection -TargetIP "10.8.0.1"
+            $result = Test-VPNConnection
             $result | Should -Be $true
         }
     }
