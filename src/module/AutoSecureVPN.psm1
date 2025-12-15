@@ -202,18 +202,15 @@ function Wait-Input {
 # Use $PSScriptRoot and $Script: scope so the module is import-safe in test runspaces.
 $Script:Settings = @{}
 try {
-    # Determine the module path
-    $modulePath = Split-Path $MyInvocation.MyCommand.Path
-    
     # Load stable settings first
-    $stableConfigPath = Join-Path $modulePath '..\config\Stable.psd1'
+    $stableConfigPath = Join-Path $PWD 'src\config\Stable.psd1'
     if (Test-Path $stableConfigPath) {
         $stableSettings = Import-PowerShellDataFile -Path $stableConfigPath -ErrorAction Stop
         if ($stableSettings) { $Script:Settings = $stableSettings.Clone() }
     }
     
     # Load variable settings and merge (variable overrides stable)
-    $variableConfigPath = Join-Path $modulePath '..\config\Variable.psd1'
+    $variableConfigPath = Join-Path $PWD 'src\config\Variable.psd1'
     if (Test-Path $variableConfigPath) {
         $variableSettings = Import-PowerShellDataFile -Path $variableConfigPath -ErrorAction Stop
         if ($variableSettings) {
@@ -227,7 +224,7 @@ catch {
     Write-Host "Kon settings niet laden: $($_.Exception.Message)" -ForegroundColor Yellow
 }
 
-$Script:BasePath = Split-Path (Split-Path $modulePath -Parent) -Parent
+$Script:BasePath = $PWD
 
 <#
 .SYNOPSIS
