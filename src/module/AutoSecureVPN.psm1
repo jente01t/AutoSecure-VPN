@@ -203,14 +203,14 @@ function Wait-Input {
 $Script:Settings = @{}
 try {
     # Load stable settings first
-    $stableConfigPath = Join-Path $PWD 'src\config\Stable.psd1'
+    $stableConfigPath = Join-Path $PSScriptRoot '..\config\Stable.psd1'
     if (Test-Path $stableConfigPath) {
         $stableSettings = Import-PowerShellDataFile -Path $stableConfigPath -ErrorAction Stop
         if ($stableSettings) { $Script:Settings = $stableSettings.Clone() }
     }
     
     # Load variable settings and merge (variable overrides stable)
-    $variableConfigPath = Join-Path $PWD 'src\config\Variable.psd1'
+    $variableConfigPath = Join-Path $PSScriptRoot '..\config\Variable.psd1'
     if (Test-Path $variableConfigPath) {
         $variableSettings = Import-PowerShellDataFile -Path $variableConfigPath -ErrorAction Stop
         if ($variableSettings) {
@@ -224,7 +224,7 @@ catch {
     Write-Host "Kon settings niet laden: $($_.Exception.Message)" -ForegroundColor Yellow
 }
 
-$Script:BasePath = $PWD
+$Script:BasePath = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 
 <#
 .SYNOPSIS
