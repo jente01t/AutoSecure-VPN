@@ -48,12 +48,9 @@ clientNameDefault = "client1"
     $modulePath = Join-Path $PSScriptRoot "..\src\module\AutoSecureVPN.psm1"
     Import-Module $modulePath -Force
 
-    # Set BasePath after importing module to override the default
-    $Script:BasePath = "$env:TEMP\AutoSecureVPNTest\"
-
     InModuleScope AutoSecureVPN {
         # Set BasePath after importing module to override the default
-        $Script:BasePath = "$env:TEMP\AutoSecureVPNTest\"
+        $Script:BasePath = "$env:TEMP\AutoSecureVPNTest"
 
     Describe "Install-OpenVPN" {
         It "Returns true if OpenVPN is already installed" {
