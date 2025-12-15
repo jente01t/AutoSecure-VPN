@@ -203,7 +203,7 @@ function Wait-Input {
 $Script:Settings = @{}
 try {
     # Determine the module path
-    $modulePath = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path $MyInvocation.MyCommand.Path }
+    $modulePath = Split-Path $MyInvocation.MyCommand.Path
     
     # Load stable settings first
     $stableConfigPath = Join-Path $modulePath '..\config\Stable.psd1'
