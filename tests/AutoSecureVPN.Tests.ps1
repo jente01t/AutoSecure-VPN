@@ -1,10 +1,14 @@
 #Requires -Modules Pester
 
-# Create test config files in the module's expected config directory
-$configDir = Join-Path $PSScriptRoot "..\src\config"
-New-Item -ItemType Directory -Path $configDir -Force
+try {
+    # Set environment variable to use test config path
+    $env:AutoSecureVPNTestConfigPath = "$env:TEMP\AutoSecureVPNTest\config"
 
-$content = @"
+    # Create test config files in the temp directory
+    $configDir = $env:AutoSecureVPNTestConfigPath
+    New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+
+    $content = @"
 @{
 installedPath = "C:\Program Files\OpenVPN"
 openVpnUrl = "https://example.com/openvpn.msi"
@@ -37,17 +41,17 @@ testIP = "10.8.0.1"
 clientNameDefault = "client1"
 }
 "@
-Set-Content -Path "$configDir\Stable.psd1" -Value $content
-Set-Content -Path "$configDir\Variable.psd1" -Value $content
+    Set-Content -Path "$configDir\Stable.psd1" -Value $content
+    Set-Content -Path "$configDir\Variable.psd1" -Value $content
 
-# Set BasePath before importing module to override the default
-$Script:BasePath = "$env:TEMP\AutoSecureVPNTest\"
+    # Set BasePath before importing module to override the default
+    $Script:BasePath = "$env:TEMP\AutoSecureVPNTest\"
 
-# Import the module after creating config files
-$modulePath = Join-Path $PSScriptRoot "..\src\module\AutoSecureVPN.psm1"
-Import-Module $modulePath -Force
+    # Import the module after creating config files
+    $modulePath = Join-Path $PSScriptRoot "..\src\module\AutoSecureVPN.psm1"
+    Import-Module $modulePath -Force
 
-InModuleScope AutoSecureVPN {
+    InModuleScope AutoSecureVPN {
 
     Describe "Install-OpenVPN" {
         It "Returns true if OpenVPN is already installed" {
@@ -280,4 +284,9 @@ InModuleScope AutoSecureVPN {
             $result | Should -Be $null
         }
     }
+}
+}
+finally {
+    # Clean up environment variable
+    $env:AutoSecureVPNTestConfigPath = $null
 }
