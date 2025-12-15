@@ -41,17 +41,19 @@ testIP = "10.8.0.1"
 clientNameDefault = "client1"
 }
 "@
-    Set-Content -Path "$configDir\Stable.psd1" -Value $content
-    Set-Content -Path "$configDir\Variable.psd1" -Value $content
-
-    # Set BasePath before importing module to override the default
-    $Script:BasePath = "$env:TEMP\AutoSecureVPNTest\"
+    Set-Content -Path "$configDir\Stable.psd1" -Value $content -Encoding UTF8
+    Set-Content -Path "$configDir\Variable.psd1" -Value $content -Encoding UTF8
 
     # Import the module after creating config files
     $modulePath = Join-Path $PSScriptRoot "..\src\module\AutoSecureVPN.psm1"
     Import-Module $modulePath -Force
 
+    # Set BasePath after importing module to override the default
+    $Script:BasePath = "$env:TEMP\AutoSecureVPNTest\"
+
     InModuleScope AutoSecureVPN {
+        # Set BasePath after importing module to override the default
+        $Script:BasePath = "$env:TEMP\AutoSecureVPNTest\"
 
     Describe "Install-OpenVPN" {
         It "Returns true if OpenVPN is already installed" {
