@@ -1,38 +1,10 @@
 #Requires -Modules Pester
 
-try {
-    # Set environment variable to use test config path
-    $env:AutoSecureVPNTestConfigPath = "$env:TEMP\AutoSecureVPNTest\config"
+# Import the module
+$modulePath = Join-Path $PSScriptRoot '..\src\module\AutoSecureVPN.psm1'
+Import-Module $modulePath -Force
 
-    # Create test config files in the temp directory
-    $configDir = $env:AutoSecureVPNTestConfigPath
-    New-Item -ItemType Directory -Path $configDir -Force | Out-Null
-
-    $content = @"
-@{
-installedPath = "C:\Program Files\OpenVPN"
-openVpnUrl = "https://example.com/openvpn.msi"
-configPath = "$env:TEMP\AutoSecureVPNTest\config"
-outputPath = "$env:TEMP\AutoSecureVPNTest\output"
-logsPath = "logs"
-logFileName = "test.log"
-logTimestampFormat = "yyyy-MM-dd HH:mm:ss"
-easyRSAPath = "C:\easy-rsa"
-openVPNExePath = "C:\Program Files\OpenVPN\bin\openvpn.exe"
-testIP = "10.8.0.1"
-clientNameDefault = "client1"
-}
-"@
-    Set-Content -Path "$configDir\Stable.psd1" -Value $content -Encoding UTF8
-    Set-Content -Path "$configDir\Variable.psd1" -Value $content -Encoding UTF8
-
-    # Import the module after creating config files
-    $modulePath = Join-Path $PSScriptRoot "..\src\module\AutoSecureVPN.psm1"
-    Import-Module $modulePath -Force
-
-    InModuleScope AutoSecureVPN {
-        # Set BasePath after importing module to override the default
-        $Script:BasePath = "$env:TEMP\AutoSecureVPNTest"
+InModuleScope AutoSecureVPN {
 
     Describe "Install-OpenVPN" {
         It "Returns true if OpenVPN is already installed" {
@@ -265,9 +237,4 @@ clientNameDefault = "client1"
             $result | Should -Be $null
         }
     }
-}
-}
-finally {
-    # Clean up environment variable
-    $env:AutoSecureVPNTestConfigPath = $null
 }
