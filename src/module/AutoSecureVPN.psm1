@@ -4,17 +4,33 @@
 
 <#
 .SYNOPSIS
-    Toont een menu met opties en vraagt om keuze.
+    Toont een menu met opties en vraagt om keuze, of toont een succes bericht.
 
 .DESCRIPTION
     Deze functie toont een menu met een titel, lijst van opties, en wacht op gebruikersinvoer.
     Het valideert de keuze en retourneert het gekozen nummer.
+    Als Mode 'Success' is, toont het een succes bericht in een box.
+
+.PARAMETER Mode
+    'Menu' voor menu tonen, 'Success' voor succes bericht.
 
 .PARAMETER Title
-    De titel van het menu.
+    De titel van het menu of succes bericht.
 
 .PARAMETER Options
-    Een array van opties om te tonen.
+    Een array van opties om te tonen (alleen voor Menu).
+
+.PARAMETER SuccessTitle
+    De titel voor succes bericht (alleen voor Success).
+
+.PARAMETER LogFile
+    Pad naar logbestand (voor Success).
+
+.PARAMETER ExtraMessage
+    Extra bericht (voor Success).
+
+.PARAMETER ComputerName
+    Naam van computer voor log (voor Success).
 
 .PARAMETER HeaderColor
     Kleur voor de header (standaard Cyan).
@@ -29,55 +45,130 @@
     Karakter voor de scheiding (standaard '=').
 
 .PARAMETER NoPrompt
-    Als true, geen prompt tonen en null retourneren.
+    Als true, geen prompt tonen en null retourneren (alleen voor Menu).
 
 .PARAMETER Prompt
-    De prompt tekst (standaard 'Keuze: ').
+    De prompt tekst (standaard 'Keuze: ') (alleen voor Menu).
 
 .OUTPUTS
-    System.Int32
-    Het gekozen nummer van de optie, of $null als NoPrompt is opgegeven.
+    System.Int32 voor Menu, None voor Success.
 
 .EXAMPLE
-    Show-Menu -Title "Hoofdmenu" -Options @("Optie 1", "Optie 2")
+    Show-Menu -Mode Menu -Title "Hoofdmenu" -Options @("Optie 1", "Optie 2")
+
+.EXAMPLE
+    Show-Menu -Mode Success -SuccessTitle "Remote Client Setup Succesvol Voltooid!" -LogFile $script:LogFile -ExtraMessage "Op de remote machine kun je nu de VPN verbinding starten via OpenVPN." -ComputerName $computerName
 
 .NOTES
     Deze functie gebruikt Write-Host voor console output en Read-Host voor input.
 #>
 function Show-Menu {
     param(
-        [Parameter(Mandatory=$true, Position=0)][string]$Title,
-        [Parameter(Mandatory=$true, Position=1)][string[]]$Options,
-        [Parameter(Position=2)][ConsoleColor]$HeaderColor = 'Cyan',
-        [Parameter(Position=3)][ConsoleColor]$OptionColor = 'White',
-        [Parameter(Position=4)][ConsoleColor]$FooterColor = 'Cyan',
-        [Parameter(Position=5)][string]$SeparatorChar = '=',
-        [Parameter(Position=6)][switch]$NoPrompt,
-        [Parameter(Position=7)][string]$Prompt = 'Keuze: '
+        [Parameter(Mandatory=$true, Position=0)][ValidateSet('Menu','Success','Error')][string]$Mode,
+        [Parameter(Mandatory=$false, Position=1)][string]$Title,
+        [Parameter(Mandatory=$false, Position=2)][string[]]$Options,
+        [Parameter(Mandatory=$false, Position=3)][string]$SuccessTitle,
+        [Parameter(Mandatory=$false, Position=4)][string]$LogFile,
+        [Parameter(Mandatory=$false, Position=5)][string]$ExtraMessage,
+        [Parameter(Mandatory=$false, Position=6)][string]$ComputerName,
+        [Parameter(Mandatory=$false, Position=7)][string]$ExtraInfo,
+        [Parameter(Position=8)][ConsoleColor]$HeaderColor = 'Cyan',
+        [Parameter(Position=9)][ConsoleColor]$OptionColor = 'White',
+        [Parameter(Position=10)][ConsoleColor]$FooterColor = 'Cyan',
+        [Parameter(Position=11)][string]$SeparatorChar = '=',
+        [Parameter(Position=12)][switch]$NoPrompt,
+        [Parameter(Position=13)][string]$Prompt = 'Keuze: '
     )
 
-    Clear-Host
-    $sep = ($SeparatorChar * 30)
-    Write-Host $sep -ForegroundColor $HeaderColor
-    Write-Host "      $Title" -ForegroundColor $HeaderColor
-    Write-Host $sep -ForegroundColor $HeaderColor
-
-    for ($i = 0; $i -lt $Options.Count; $i++) {
-        $num = $i + 1
-        Write-Host "$num. $($Options[$i])" -ForegroundColor $OptionColor
-    }
-
-    Write-Host $sep -ForegroundColor $FooterColor
-
-    if ($NoPrompt) { return $null }
-
-    while ($true) {
-        $userInput = Read-Host -Prompt $Prompt
-        if ($userInput -match '^[0-9]+$') {
-            $n = [int]$userInput
-            if ($n -ge 1 -and $n -le $Options.Count) { return $n }
+    if ($Mode -eq 'Menu') {
+        if (-not $Title -or -not $Options) {
+            throw "Voor Mode 'Menu' zijn Title en Options verplicht."
         }
-        Write-Host "Ongeldige keuze, probeer opnieuw." -ForegroundColor Red
+        Clear-Host
+        $sep = ($SeparatorChar * 30)
+        Write-Host $sep -ForegroundColor $HeaderColor
+        Write-Host "      $Title" -ForegroundColor $HeaderColor
+        Write-Host $sep -ForegroundColor $HeaderColor
+
+        for ($i = 0; $i -lt $Options.Count; $i++) {
+            $num = $i + 1
+            Write-Host "$num. $($Options[$i])" -ForegroundColor $OptionColor
+        }
+
+        Write-Host $sep -ForegroundColor $FooterColor
+
+        if ($NoPrompt) { return $null }
+
+        while ($true) {
+            $userInput = Read-Host -Prompt $Prompt
+            if ($userInput -match '^[0-9]+$') {
+                $n = [int]$userInput
+                if ($n -ge 1 -and $n -le $Options.Count) { return $n }
+            }
+            Write-Host "Ongeldige keuze, probeer opnieuw." -ForegroundColor Red
+        }
+    }
+    elseif ($Mode -eq 'Success') {
+        if (-not $SuccessTitle) {
+            throw "Voor Mode 'Success' is SuccessTitle verplicht."
+        }
+        Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Green
+        Write-Host "║  $SuccessTitle  ║" -ForegroundColor Green
+        Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Green
+        if ($LogFile) {
+            Write-Host "`nLogbestand: $LogFile" -ForegroundColor Yellow
+        }
+        if ($ExtraInfo) {
+            Write-Host "$ExtraInfo" -ForegroundColor Yellow
+        }
+        if ($ExtraMessage) {
+            Write-Host "`n$ExtraMessage" -ForegroundColor Cyan
+        }
+        if ($ComputerName) {
+            Write-Log "Remote client setup succesvol voltooid voor $ComputerName" -Level "SUCCESS"
+        }
+    }
+    elseif ($Mode -eq 'Error') {
+        if (-not $SuccessTitle) {
+            throw "Voor Mode 'Error' is SuccessTitle verplicht."
+        }
+        Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Red
+        Write-Host "║  $SuccessTitle  ║" -ForegroundColor Red
+        Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Red
+        if ($LogFile) {
+            Write-Host "`nLogbestand: $LogFile" -ForegroundColor Yellow
+        }
+        if ($ExtraInfo) {
+            Write-Host "$ExtraInfo" -ForegroundColor Yellow
+        }
+        if ($ExtraMessage) {
+            Write-Host "`n$ExtraMessage" -ForegroundColor Yellow
+        }
+        if ($ComputerName) {
+            Write-Log "Batch remote client setup gefaald ($ComputerName)" -Level "ERROR"
+        }
+        if ($Options) {
+            Clear-Host
+            $sep = ($SeparatorChar * 30)
+            Write-Host $sep -ForegroundColor $HeaderColor
+            Write-Host "      Fout opgetreden - Kies een optie" -ForegroundColor $HeaderColor
+            Write-Host $sep -ForegroundColor $HeaderColor
+            for ($i = 0; $i -lt $Options.Count; $i++) {
+                $num = $i + 1
+                Write-Host "$num. $($Options[$i])" -ForegroundColor $OptionColor
+            }
+            Write-Host $sep -ForegroundColor $FooterColor
+            if (-not $NoPrompt) {
+                while ($true) {
+                    $userInput = Read-Host -Prompt $Prompt
+                    if ($userInput -match '^[0-9]+$') {
+                        $n = [int]$userInput
+                        if ($n -ge 1 -and $n -le $Options.Count) { return $n }
+                    }
+                    Write-Host "Ongeldige keuze, probeer opnieuw." -ForegroundColor Red
+                }
+            }
+        }
     }
 }
 
@@ -182,8 +273,7 @@ function Set-ModuleSettings {
 .EXAMPLE
     if (-not (Test-IsAdmin)) { Write-Host "Administrator rechten vereist" }
 
-.NOTES
-    Gebaseerd op .NET Security.Principal.WindowsPrincipal en WindowsIdentity (Microsoft .NET Framework Documentatie: https://docs.microsoft.com/en-us/dotnet/api/system.security.principal.windowsprincipal, https://docs.microsoft.com/en-us/dotnet/api/system.security.principal.windowsidentity). Voorbeeld code van https://codeandkeep.com/Check-If-Running-As-Admin/.
+Referentie: https://codeandkeep.com/Check-If-Running-As-Admin/.
 #>
 function Test-IsAdmin {
     return ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -270,8 +360,7 @@ function Write-Log {
 .EXAMPLE
     Install-OpenVPN
 
-.NOTES
-    Gebaseerd op OpenVPN MSI installatieproces (OpenVPN Community Downloads: https://swupdate.openvpn.org/community/releases/), Invoke-WebRequest voor download (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-webrequest), en Start-Process voor MSI installatie (https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/start-process).
+Referentie: Gebaseerd op OpenVPN MSI installatieproces (OpenVPN Community Downloads: https://swupdate.openvpn.org/community/releases/), Invoke-WebRequest voor download (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-webrequest), en Start-Process voor MSI installatie (https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/start-process).
 #>
 function Install-OpenVPN {
     param(
@@ -354,8 +443,7 @@ function Install-OpenVPN {
 .EXAMPLE
     Set-Firewall -Port 443 -Protocol "TCP"
 
-.NOTES
-    Gebaseerd op New-NetFirewallRule cmdlet (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/netsecurity/new-netfirewallrule), en Get-NetFirewallRule voor controle (https://docs.microsoft.com/en-us/powershell/module/netsecurity/get-netfirewallrule).
+Referentie: Gebaseerd op New-NetFirewallRule cmdlet (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/netsecurity/new-netfirewallrule), en Get-NetFirewallRule voor controle (https://docs.microsoft.com/en-us/powershell/module/netsecurity/get-netfirewallrule).
 #>
 function Set-Firewall {
     param(
@@ -430,8 +518,7 @@ function Set-Firewall {
 .EXAMPLE
     $config = Get-ServerConfiguration
 
-.NOTES
-    IP adres validatie gebaseerd op regex van Stack Overflow (https://stackoverflow.com/questions/5284147/validating-ipv4-addresses-with-regexp)
+Referentie: IP adres validatie gebaseerd op regex van Stack Overflow (https://stackoverflow.com/questions/5284147/validating-ipv4-addresses-with-regexp)
 #>
 function Get-ServerConfiguration {
     param(
@@ -530,8 +617,7 @@ function Get-ServerConfiguration {
 .EXAMPLE
     Initialize-EasyRSA
 
-.NOTES
-    Gebaseerd op EasyRSA installatieproces (EasyRSA GitHub: https://github.com/OpenVPN/easy-rsa), Invoke-WebRequest voor download (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-webrequest), en System.IO.Compression.ZipFile voor extractie (Microsoft .NET Framework Documentatie: https://docs.microsoft.com/en-us/dotnet/api/system.io.compression.zipfile).
+Referentie: Gebaseerd op EasyRSA installatieproces (EasyRSA GitHub: https://github.com/OpenVPN/easy-rsa), Invoke-WebRequest voor download (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-webrequest), en System.IO.Compression.ZipFile voor extractie (Microsoft .NET Framework Documentatie: https://docs.microsoft.com/en-us/dotnet/api/system.io.compression.zipfile).
 #>
 function Initialize-EasyRSA {
     param(
@@ -605,8 +691,7 @@ function Initialize-EasyRSA {
 .EXAMPLE
     Initialize-Certificates -ServerName "vpn-server"
 
-.NOTES
-    Gebaseerd op EasyRSA commands voor certificaatgeneratie (EasyRSA Documentatie: https://github.com/OpenVPN/easy-rsa), zoals init-pki, build-ca, gen-req, sign-req, gen-dh, gen-crl.
+Referentie: Gebaseerd op EasyRSA commands voor certificaatgeneratie (EasyRSA Documentatie: https://github.com/OpenVPN/easy-rsa), zoals init-pki, build-ca, gen-req, sign-req, gen-dh, gen-crl. 
 #>
 function Initialize-Certificates {
     param (
@@ -791,8 +876,7 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
 .EXAMPLE
     New-ServerConfig -Config $config
 
-.NOTES
-    Gebaseerd op OpenVPN server configuratie syntax (OpenVPN Reference Manual: https://openvpn.net/community-resources/reference-manual-for-openvpn-2-6/), inclusief opties zoals port, proto, dev, ca, cert, key, dh, server, push, etc. Gebruikt Set-Content voor bestand schrijven (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/set-content).
+Referentie: Gebaseerd op OpenVPN server configuratie syntax (OpenVPN Reference Manual: https://openvpn.net/community-resources/reference-manual-for-openvpn-2-6/), inclusief opties zoals port, proto, dev, ca, cert, key, dh, server, push, etc. Gebruikt Set-Content voor bestand schrijven (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/set-content).
 #>
 function New-ServerConfig {
     param(
@@ -890,8 +974,7 @@ verb 3
     $config = Get-ServerConfiguration -ServerName "vpn-server" -ServerIP "example.com"
     Install-RemoteServer -ComputerName "remote-pc" -Credential $cred -ServerConfig $config
 
-.NOTES
-    Gebaseerd op PowerShell Remoting met New-PSSession, Invoke-Command, en Copy-Item (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/new-pssession, https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/invoke-command, https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/copy-item).
+Referentie: Gebaseerd op PowerShell Remoting met New-PSSession, Invoke-Command, en Copy-Item (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/new-pssession, https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/invoke-command, https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/copy-item).
 #>
 function Install-RemoteServer {
     param (
@@ -1032,8 +1115,7 @@ function Install-RemoteServer {
 .EXAMPLE
     Start-VPNService
 
-.NOTES
-    Start-Service cmdlets (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/start-service).
+Referentie:  Start-Service cmdlets (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/start-service).
 #>
 function Start-VPNService {
     Write-Log "OpenVPN service starten" -Level "INFO"
@@ -1088,8 +1170,7 @@ function Start-VPNService {
 .EXAMPLE
     New-ClientPackage -Config $config
 
-.NOTES
-    Gebaseerd op EasyRSA client certificaat generatie (EasyRSA Documentatie: https://github.com/OpenVPN/easy-rsa), OpenVPN client config syntax (OpenVPN Reference Manual: https://openvpn.net/community-resources/reference-manual-for-openvpn-2-6/), en Compress-Archive voor ZIP creatie (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.archive/compress-archive).
+Referentie: Gebaseerd op EasyRSA client certificaat generatie (EasyRSA Documentatie: https://github.com/OpenVPN/easy-rsa), OpenVPN client config syntax (OpenVPN Reference Manual: https://openvpn.net/community-resources/reference-manual-for-openvpn-2-6/), en Compress-Archive voor ZIP creatie (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.archive/compress-archive).
 #>
 function New-ClientPackage {
     param(
@@ -1319,8 +1400,7 @@ function Import-ClientConfiguration {
 .EXAMPLE
     Install-RemoteClient -ComputerName "remote-pc" -Credential $cred -ZipPath "C:\path\to\client.zip"
 
-.NOTES
-    Gebaseerd op PowerShell Remoting met New-PSSession, Invoke-Command, Copy-Item (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/new-pssession, https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/invoke-command, https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/copy-item), en System.IO.Compression.ZipFile voor extractie (Microsoft .NET Framework Documentatie: https://docs.microsoft.com/en-us/dotnet/api/system.io.compression.zipfile).
+Referentie: Gebaseerd op PowerShell Remoting met New-PSSession, Invoke-Command, Copy-Item (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/new-pssession, https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/invoke-command, https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/copy-item), en System.IO.Compression.ZipFile voor extractie (Microsoft .NET Framework Documentatie: https://docs.microsoft.com/en-us/dotnet/api/system.io.compression.zipfile).
 #>
 function Install-RemoteClient {
     param(
@@ -1477,8 +1557,7 @@ function Install-RemoteClient {
 .EXAMPLE
     Test-TAPAdapter
 
-.NOTES
-    Gebaseerd op Get-NetAdapter cmdlet (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/netadapter/get-netadapter), gebruikt om TAP adapters te detecteren die door OpenVPN worden geïnstalleerd.
+Referentie: Gebaseerd op Get-NetAdapter cmdlet (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/netadapter/get-netadapter), gebruikt om TAP adapters te detecteren die door OpenVPN worden geïnstalleerd.
 #>
 function Test-TAPAdapter {
     Write-Log "TAP adapter controle gestart" -Level "INFO"
@@ -1517,8 +1596,7 @@ function Test-TAPAdapter {
 .EXAMPLE
     Start-VPNConnection -ConfigFile "C:\path\to\client.ovpn"
 
-.NOTES
-    Gebaseerd op Start-Process voor OpenVPN executable (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/start-process), en Get-Process/Stop-Process voor bestaande processen stoppen (https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/get-process, https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/stop-process).
+Referentie: Gebaseerd op Start-Process voor OpenVPN executable (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/start-process), en Get-Process/Stop-Process voor bestaande processen stoppen (https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/get-process, https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/stop-process).
 #>
 function Start-VPNConnection {
     param(
@@ -1568,8 +1646,7 @@ function Start-VPNConnection {
 .EXAMPLE
     Test-VPNConnection
 
-.NOTES
-    Gebaseerd op Test-Connection cmdlet voor ping testen (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/test-connection), gebruikt om VPN connectiviteit te verifiëren.
+Referentie: Gebaseerd op Test-Connection cmdlet voor ping testen (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/test-connection), gebruikt om VPN connectiviteit te verifiëren.
 #>
 function Test-VPNConnection {
     Write-Log "VPN verbinding testen gestart" -Level "INFO"
