@@ -226,6 +226,9 @@ catch {
 
 $Script:BasePath = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 
+# Ensure a single canonical output path (project root + configured outputPath)
+$Script:OutputPath = Join-Path $Script:BasePath $Script:Settings.outputPath
+
 <#
 .SYNOPSIS
     Stelt de module settings in voor remote operaties.
@@ -1176,7 +1179,7 @@ function New-ClientPackage {
     param(
         [Parameter(Mandatory=$true, Position=0)][hashtable]$Config,
         [Parameter(Position=1)][string]$EasyRSAPath = $Script:Settings.easyRSAPath,
-        [Parameter(Position=2)][string]$OutputPath = (Join-Path $Script:BasePath $Script:Settings.outputPath)
+        [Parameter(Position=2)][string]$OutputPath = $Script:OutputPath
     )
     
     $pkiPath = Join-Path $EasyRSAPath "pki"
@@ -1320,7 +1323,7 @@ function Import-ClientConfiguration {
     $configPath = $Script:Settings.configPath
     
     # Try to find the default client ZIP file
-    $defaultZipPath = Join-Path (Join-Path $Script:BasePath $Script:Settings.outputPath) "vpn-client-$($Script:Settings.clientName).zip"
+    $defaultZipPath = Join-Path $Script:OutputPath "vpn-client-$($Script:Settings.clientName).zip"
     if (Test-Path $defaultZipPath) {
         $zipFile = $defaultZipPath
         Write-Log "Standaard client ZIP bestand gevonden: $zipFile" -Level "INFO"
