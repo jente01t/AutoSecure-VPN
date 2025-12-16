@@ -7,9 +7,6 @@
     Het biedt volledige automatisering van certificaatgeneratie, firewall-configuratie en VPN-verbinding.
     
 .NOTES
-    Auteur: VPN-AutoSetup Project
-    Datum: 31 oktober 2025
-    Versie: 1.0
     Vereist: PowerShell 5.1+, Administrator rechten
 #>
 
@@ -86,28 +83,19 @@ function Start-VPNSetup {
     #>
     
     Write-Log "=== OpenVPN Automatische Setup Gestart ===" -Level "INFO"
-    Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Cyan
-    Write-Host "║   OpenVPN Automatische Setup v1.0          ║" -ForegroundColor Cyan
-    Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "Kies een optie:" -ForegroundColor Yellow
-    Write-Host "  [1] Server Setup" -ForegroundColor Green
-    Write-Host "  [2] Client Setup" -ForegroundColor Green
-    Write-Host "  [3] Afsluiten" -ForegroundColor Red
-    Write-Host ""
     
-    $choice = Read-Host "Voer uw keuze in (1-3)"
+    $choice = Show-Menu -Mode Menu -Title "OpenVPN Automatische Setup v1.0" -Options @("Server Setup", "Client Setup", "Afsluiten") -HeaderColor Cyan -OptionColor Green -FooterColor Cyan -Prompt "Voer uw keuze in (1-3)"
     
     switch ($choice) {
-        "1" {
+        1 {
             Write-Host "`n[*] Server Setup geselecteerd..." -ForegroundColor Cyan
             Select-ServerMode
         }
-        "2" {
+        2 {
             Write-Host "`n[*] Client Setup geselecteerd..." -ForegroundColor Cyan
             Select-ClientMode
         }
-        "3" {
+        3 {
             Write-Host "`n[*] Setup wordt afgesloten..." -ForegroundColor Yellow
             Write-Log "Setup afgesloten door gebruiker" -Level "INFO"
             exit 0
@@ -132,24 +120,18 @@ function Select-ServerMode {
         Select-ServerMode
     #>
     
-    Write-Host "`nServer Setup Opties:" -ForegroundColor Yellow
-    Write-Host "  [1] Lokaal (VPN-server installeren en configureren op deze machine)" -ForegroundColor Green
-    Write-Host "  [2] Remote (VPN-server installeren en configureren op afstand)" -ForegroundColor Green
-    Write-Host "  [3] Terug naar hoofdmenu" -ForegroundColor Red
-    Write-Host ""
-    
-    $choice = Read-Host "Voer uw keuze in (1-3)"
+    $choice = Show-Menu -Mode Menu -Title "Server Setup Opties" -Options @("Lokaal (VPN-server installeren en configureren op deze machine)", "Remote (VPN-server installeren en configureren op afstand)", "Terug naar hoofdmenu") -HeaderColor Yellow -OptionColor Green -FooterColor Red -Prompt "Voer uw keuze in (1-3)"
     
     switch ($choice) {
-        "1" {
+        1 {
             Write-Host "`n[*] Lokale Server Setup geselecteerd..." -ForegroundColor Cyan
             Invoke-ServerSetup
         }
-        "2" {
+        2 {
             Write-Host "`n[*] Remote Server Setup geselecteerd..." -ForegroundColor Cyan
             Invoke-RemoteServerSetup
         }
-        "3" {
+        3 {
             Write-Host "`n[*] Terug naar hoofdmenu..." -ForegroundColor Yellow
             Start-VPNSetup
         }
@@ -173,29 +155,22 @@ function Select-ClientMode {
         Select-ClientMode
     #>
     
-    Write-Host "`nClient Setup Opties:" -ForegroundColor Yellow
-    Write-Host "  [1] Lokaal (VPN-client installeren en verbinden op deze machine)" -ForegroundColor Green
-    Write-Host "  [2] Remote (VPN-client installeren en verbinden op afstand)" -ForegroundColor Green
-    Write-Host "  [3] Batch Remote (VPN-client installeren op meerdere machines)" -ForegroundColor Green
-    Write-Host "  [4] Terug naar hoofdmenu" -ForegroundColor Red
-    Write-Host ""
-    
-    $choice = Read-Host "Voer uw keuze in (1-4)"
+    $choice = Show-Menu -Mode Menu -Title "Client Setup Opties" -Options @("Lokaal (VPN-client installeren en verbinden op deze machine)", "Remote (VPN-client installeren en verbinden op afstand)", "Batch Remote (VPN-client installeren op meerdere machines)", "Terug naar hoofdmenu") -HeaderColor Yellow -OptionColor Green -FooterColor Red -Prompt "Voer uw keuze in (1-4)"
     
     switch ($choice) {
-        "1" {
+        1 {
             Write-Host "`n[*] Lokale Client Setup geselecteerd..." -ForegroundColor Cyan
             Invoke-ClientSetup
         }
-        "2" {
+        2 {
             Write-Host "`n[*] Remote Client Setup geselecteerd..." -ForegroundColor Cyan
             Invoke-RemoteClientSetup
         }
-        "3" {
+        3 {
             Write-Host "`n[*] Batch Remote Client Setup geselecteerd..." -ForegroundColor Cyan
             Invoke-BatchRemoteClientSetup
         }
-        "4" {
+        4 {
             Write-Host "`n[*] Terug naar hoofdmenu..." -ForegroundColor Yellow
             Start-VPNSetup
         }
@@ -290,18 +265,11 @@ function Invoke-ClientSetup {
         
         Write-Progress -Activity "Client Setup" -Completed
         
-        Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Green
-        Write-Host "║     Client Setup Succesvol Voltooid!      ║" -ForegroundColor Green
-        Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Green
-        Write-Host "`nLogbestand: $script:LogFile" -ForegroundColor Yellow
-        
-        Write-Log "Client setup succesvol voltooid" -Level "SUCCESS"
+        Show-Menu -Mode Success -SuccessTitle "Client Setup Succesvol Voltooid!" -LogFile $script:LogFile
     }
     catch {
         Write-Progress -Activity "Client Setup" -Completed
-        Write-Host "`n[!] FOUT tijdens client setup: $_" -ForegroundColor Red
-        Write-Log "Client setup FOUT: $_" -Level "ERROR"
-        Write-Host "`nControleer het logbestand voor details: $script:LogFile" -ForegroundColor Yellow
+        Show-Menu -Mode Error -SuccessTitle "Client Setup Gefaald!" -LogFile $script:LogFile -ExtraMessage "Controleer het logbestand voor details."
         
         # Rollback uitvoeren
         Write-Host "`n[*] Rollback uitvoeren om wijzigingen ongedaan te maken..." -ForegroundColor Yellow
@@ -423,19 +391,11 @@ function Invoke-RemoteClientSetup {
         
         Write-Progress -Activity "Remote Client Setup" -Completed
         
-        Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Green
-        Write-Host "║  Remote Client Setup Succesvol Voltooid!  ║" -ForegroundColor Green
-        Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Green
-        Write-Host "`nLogbestand: $script:LogFile" -ForegroundColor Yellow
-        Write-Host "`nOp de remote machine kun je nu de VPN verbinding starten via OpenVPN." -ForegroundColor Cyan
-        
-        Write-Log "Remote client setup succesvol voltooid voor $computerName" -Level "SUCCESS"
+        Show-Menu -Mode Success -SuccessTitle "Remote Client Setup Succesvol Voltooid!" -LogFile $script:LogFile -ExtraMessage "Op de remote machine kun je nu de VPN verbinding starten via OpenVPN." -ComputerName $computerName
     }
     catch {
         Write-Progress -Activity "Remote Client Setup" -Completed
-        Write-Host "`n[!] FOUT tijdens remote client setup: $_" -ForegroundColor Red
-        Write-Log "Remote client setup FOUT: $_" -Level "ERROR"
-        Write-Host "`nControleer het logbestand voor details: $script:LogFile" -ForegroundColor Yellow
+        Show-Menu -Mode Error -SuccessTitle "Remote Client Setup Gefaald!" -LogFile $script:LogFile -ExtraMessage "Controleer het logbestand voor details."
         
         Read-Host "`nDruk op Enter om door te gaan"
     }
@@ -557,26 +517,15 @@ function Invoke-BatchRemoteClientSetup {
         }
         
         if ($successCount -eq $totalClients) {
-            Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Green
-            Write-Host "║   Batch Remote Client Setup Succesvol!    ║" -ForegroundColor Green
-            Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Green
-            Write-Host "`nLogbestand: $script:LogFile" -ForegroundColor Yellow
-            Write-Log "Batch remote client setup succesvol voltooid ($successCount/$totalClients)" -Level "SUCCESS"
+            Show-Menu -Mode Success -SuccessTitle "Batch Remote Client Setup Succesvol!" -LogFile $script:LogFile
         }
         else {
-            Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Red
-            Write-Host "║   Batch Remote Client Setup Gefaald!      ║" -ForegroundColor Red
-            Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Red
-            Write-Host "`n$successCount van $totalClients setups succesvol." -ForegroundColor Yellow
-            Write-Host "Logbestand: $script:LogFile" -ForegroundColor Yellow
-            Write-Log "Batch remote client setup gefaald ($successCount/$totalClients succesvol)" -Level "ERROR"
+            Show-Menu -Mode Error -SuccessTitle "Batch Remote Client Setup Gefaald!" -LogFile $script:LogFile -ExtraMessage "$successCount van $totalClients setups succesvol." -ComputerName "$successCount/$totalClients succesvol"
         }
     }
     catch {
         Write-Progress -Activity "Batch Remote Client Setup" -Completed
-        Write-Host "`n[!] FOUT tijdens batch remote client setup: $_" -ForegroundColor Red
-        Write-Log "Batch remote client setup FOUT: $_" -Level "ERROR"
-        Write-Host "`nControleer het logbestand voor details: $script:LogFile" -ForegroundColor Yellow
+        Show-Menu -Mode Error -SuccessTitle "Batch Remote Client Setup Gefaald!" -LogFile $script:LogFile -ExtraMessage "Controleer het logbestand voor details."
         
         Read-Host "`nDruk op Enter om door te gaan"
     }
@@ -676,20 +625,11 @@ function Invoke-ServerSetup {
         
         Write-Progress -Activity "Server Setup" -Completed
         
-        Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Green
-        Write-Host "║     Server Setup Succesvol Voltooid!      ║" -ForegroundColor Green
-        Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Green
-        Write-Host "`nLogbestand: $script:LogFile" -ForegroundColor Yellow
-        Write-Host "Client package: $zipPath" -ForegroundColor Yellow
-        Write-Host "`nDit ZIP-bestand naar de client overzetten om de verbinding te maken." -ForegroundColor Cyan
-        
-        Write-Log "Server setup succesvol voltooid" -Level "SUCCESS"
+        Show-Menu -Mode Success -SuccessTitle "Server Setup Succesvol Voltooid!" -LogFile $script:LogFile -ExtraInfo "Client package: $zipPath" -ExtraMessage "Dit ZIP-bestand naar de client overzetten om de verbinding te maken."
     }
     catch {
         Write-Progress -Activity "Server Setup" -Completed
-        Write-Host "`n[!] FOUT tijdens server setup: $_" -ForegroundColor Red
-        Write-Log "Server setup FOUT: $_" -Level "ERROR"
-        Write-Host "`nControleer het logbestand voor details: $script:LogFile" -ForegroundColor Yellow
+        Show-Menu -Mode Error -SuccessTitle "Server Setup Gefaald!" -LogFile $script:LogFile -ExtraMessage "Controleer het logbestand voor details."
         
         # Rollback uitvoeren
         Write-Host "`n[*] Rollback uitvoeren om wijzigingen ongedaan te maken..." -ForegroundColor Yellow
@@ -833,22 +773,16 @@ function Invoke-RemoteServerSetup {
         
         Write-Progress -Activity "Remote Server Setup" -Completed
         
-        Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Green
-        Write-Host "║  Remote Server Setup Succesvol Voltooid!  ║" -ForegroundColor Green
-        Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Green
-        Write-Host "`nLogbestand: $script:LogFile" -ForegroundColor Yellow
-        Write-Host "`nDe VPN server draait nu op de remote machine." -ForegroundColor Cyan
-        Write-Host "Client package beschikbaar: $zipPath" -ForegroundColor Cyan
-        
-        Write-Log "Remote server setup succesvol voltooid voor $computerName" -Level "SUCCESS"
+        Show-Menu -Mode Success -SuccessTitle "Remote Server Setup Succesvol Voltooid!" -LogFile $script:LogFile -ExtraMessage "De VPN server draait nu op de remote machine.`nClient package beschikbaar: $zipPath" -ComputerName $computerName
     }
     catch {
         Write-Progress -Activity "Remote Server Setup" -Completed
-        Write-Host "`n[!] FOUT tijdens remote server setup: $_" -ForegroundColor Red
-        Write-Log "Remote server setup FOUT: $_" -Level "ERROR"
-        Write-Host "`nControleer het logbestand voor details: $script:LogFile" -ForegroundColor Yellow
-        
-        Read-Host "`nDruk op Enter om door te gaan"
+        $choice = Show-Menu -Mode Error -SuccessTitle "Remote Server Setup Gefaald!" -LogFile $script:LogFile -ExtraMessage "Controleer het logbestand voor details." -Options @("Opnieuw proberen", "Terug naar hoofdmenu", "Afsluiten")
+        switch ($choice) {
+            1 { Invoke-RemoteServerSetup }
+            2 { Start-VPNSetup }
+            3 { exit }
+        }
     }
 }
 
