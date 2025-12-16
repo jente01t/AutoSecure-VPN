@@ -451,41 +451,12 @@ function Invoke-BatchRemoteClientSetup {
         # Adaptieve ThrottleLimit gebaseerd op systeemresources
         $cpuCores = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
         $throttleLimit = [math]::Max(1, $cpuCores - 1)  # Gebruik max aantal cores minus 1, minimaal 1
-        
+
         Write-Host "  Systeem heeft $cpuCores CPU cores, ThrottleLimit ingesteld op $throttleLimit" -ForegroundColor Cyan
-        
-        # Parallel uitvoering met Foreach-Object -Parallel
-        $results = $clients | ForEach-Object -Parallel {
-            $client = $_
-            $name = $client.Name
-            $ip = $client.IP
-            $username = $client.Username
-            $password = $client.Password
-            
-            # Maak credential object
-            $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
-            $cred = New-Object System.Management.Automation.PSCredential ($username, $securePassword)
-            
-            # Import module in parallel runspace
-            Import-Module $using:ModulePath -Force
-            
-            # Stel settings in
-            Set-ModuleSettings -Settings $using:Script:Settings -BasePath $using:Script:BasePath
-            
-            # Voer remote client installatie uit
-            try {
-                $result = Install-RemoteClient -ComputerName $ip -Credential $cred -ZipPath $using:zipPath
-                if ($result) {
-                    "SUCCESS: $name ($ip)"
-                } else {
-                    "ERROR: $name ($ip) - Installation failed"
-                }
-            }
-            catch {
-                "ERROR: $name ($ip) - $_"
-            }
-        } -ThrottleLimit $throttleLimit 
-        
+
+        # Call module function that performs the parallel remote installs
+        $results = Invoke-BatchRemoteClientInstall -Clients $clients -ZipPath $zipPath -ModulePath $ModulePath -Settings $Script:Settings -BasePath $Script:BasePath -ThrottleLimit $throttleLimit
+
         Write-Progress -Activity "Batch Remote Client Setup" -Completed
         
         # Resultaten tonen

@@ -1542,6 +1542,92 @@ function Install-RemoteClient {
     }
 }
 
+<#
+.SYNOPSIS
+    Perform batch remote client installs in parallel.
+
+.DESCRIPTION
+    Accepts an array of client objects (Name, IP, Username, Password) and runs
+    `Install-RemoteClient` in parallel runspaces. This centralizes the parallel
+    logic so callers (scripts) remain small and focused.
+
+.PARAMETER Clients
+    Array of client objects as imported from CSV.
+
+.PARAMETER ZipPath
+    Path to the client ZIP package to deploy to each remote host.
+
+.PARAMETER ModulePath
+    Path to this module file (used to import module inside parallel runspaces).
+
+.PARAMETER Settings
+    Hashtable of module settings to apply in each runspace.
+
+.PARAMETER BasePath
+    Base path to set in each runspace.
+
+.PARAMETER ThrottleLimit
+    Maximum degree of parallelism. If omitted or less than 1, it will be computed
+    based on local CPU cores (cores - 1, minimum 1).
+
+.OUTPUTS
+    Array of result strings (SUCCESS: / ERROR:)
+#>
+function Invoke-BatchRemoteClientInstall {
+    
+    param(
+        [Parameter(Mandatory=$true, Position=0)] [object[]]$Clients,
+        [Parameter(Mandatory=$true, Position=1)] [string]$ZipPath,
+        [Parameter(Mandatory=$true, Position=2)] [string]$ModulePath,
+        [Parameter(Mandatory=$true, Position=3)] [hashtable]$Settings,
+        [Parameter(Mandatory=$true, Position=4)] [string]$BasePath,
+        [int]$ThrottleLimit = 0
+    )
+
+    # Local copies for use with $using: in the parallel scriptblock
+    $clientsLocal = $Clients
+    $zipPathLocal = $ZipPath
+    $modulePathLocal = $ModulePath
+    $settingsLocal = $Settings
+    $basePathLocal = $BasePath
+
+    if (-not $ThrottleLimit -or $ThrottleLimit -lt 1) {
+        try {
+            $cpuCores = (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).NumberOfLogicalProcessors
+        } catch {
+            $cpuCores = 2
+        }
+        $ThrottleLimit = [math]::Max(1, $cpuCores - 1)
+    }
+
+    $results = $clientsLocal | ForEach-Object -Parallel {
+        $client = $_
+        $name = $client.Name
+        $ip = $client.IP
+        $username = $client.Username
+        $password = $client.Password
+
+        $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
+        $cred = New-Object System.Management.Automation.PSCredential ($username, $securePassword)
+
+        # Ensure module and settings are available in this runspace
+        Import-Module $using:modulePathLocal -Force
+        Set-ModuleSettings -Settings $using:settingsLocal -BasePath $using:basePathLocal
+
+        try {
+            $result = Install-RemoteClient -ComputerName $ip -Credential $cred -ZipPath $using:zipPathLocal
+            if ($result) { "SUCCESS: $name ($ip)" } else { "ERROR: $name ($ip) - Installation failed" }
+        }
+        catch {
+            "ERROR: $name ($ip) - $_"
+        }
+    } -ThrottleLimit $ThrottleLimit
+
+    return ,$results
+}
+
+
+
 #endregion Client functies
 
 #region Test functies
@@ -1841,6 +1927,4 @@ function Invoke-Rollback {
 }
 
 #endregion Rollback functies
-
-
 
