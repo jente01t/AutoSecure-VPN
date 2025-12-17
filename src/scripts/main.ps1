@@ -303,15 +303,21 @@ function Invoke-RemoteClientSetup {
         Write-Host "  ✓ Administrator rechten bevestigd" -ForegroundColor Green
         Write-Verbose "Lokale administrator rechten succesvol gecontroleerd"
         
-        # Stap 2: Remote computer details
+        # Stap 2: Remote computer details - gebruik settings wanneer beschikbaar
         Write-Progress -Activity "Remote Client Setup" -Status "Stap 2 van 5: Remote computer configuratie" -PercentComplete 20
         Write-Host "`n[2/5] Remote computer configuratie..." -ForegroundColor Cyan
-        $computerName = Read-Host "  Voer de naam of IP van de remote computer in"
-        if ([string]::IsNullOrWhiteSpace($computerName)) {
-            throw "Remote computer naam is verplicht"
+        # remoteClientIP ophalen
+        try {
+            if ($Script:Settings.ContainsKey('remoteClientIP') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.remoteClientIP) -and $Script:Settings.remoteClientIP -ne 'jouw.client.ip.hier') {
+                $computerName = $Script:Settings.remoteClientIP
+                Write-Verbose "Remote client afkomstig uit settings: $computerName"
+            }
+        } catch {
+            Write-Verbose "Fout bij ophalen remoteClientIP uit settings: $_"
         }
+        
         Write-Host "  ✓ Remote computer: $computerName" -ForegroundColor Green
-        Write-Verbose "Remote computer naam ingevoerd: $computerName"
+        Write-Verbose "Remote computer naam gebruikt: $computerName"
         
         # Stap 3: WinRM configuratie
         Write-Progress -Activity "Remote Client Setup" -Status "Stap 3 van 5: WinRM configuratie controleren" -PercentComplete 40
@@ -365,7 +371,9 @@ function Invoke-RemoteClientSetup {
         # Stap 5: Client ZIP bestand
         Write-Progress -Activity "Remote Client Setup" -Status "Stap 5 van 5: Client configuratie bestand" -PercentComplete 80
         Write-Host "`n[5/5] Client configuratie bestand..." -ForegroundColor Cyan
-        $defaultZipPath = Join-Path $PSScriptRoot "..\$($Script:Settings.outputPath)\vpn-client-$($Script:Settings.clientNameDefault).zip"
+        # Bepaal standaard client naam (verschillende settings keys mogelijk)
+        $clientDefaultName = if ($Script:Settings.ContainsKey('clientName') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.clientName)) { $Script:Settings.clientName } else { 'client' }
+        $defaultZipPath = Join-Path $PSScriptRoot "..\$($Script:Settings.outputPath)\vpn-client-$clientDefaultName.zip"
         if (Test-Path $defaultZipPath) {
             $zipPath = $defaultZipPath
             Write-Host "  ✓ Standaard client ZIP bestand gevonden: $zipPath" -ForegroundColor Green
@@ -650,12 +658,19 @@ function Invoke-RemoteServerSetup {
         # Stap 2: Remote computer details
         Write-Progress -Activity "Remote Server Setup" -Status "Stap 2 van 7: Remote computer configuratie" -PercentComplete 14
         Write-Host "`n[2/7] Remote computer configuratie..." -ForegroundColor Cyan
-        $computerName = Read-Host "  Voer de naam of IP van de remote computer in"
-        if ([string]::IsNullOrWhiteSpace($computerName)) {
-            throw "Remote computer naam is verplicht"
+        # Settings.serverIP ophalen
+        try {
+            if ($Script:Settings.ContainsKey('serverIP') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.serverIP) -and $Script:Settings.serverIP -ne 'jouw.server.ip.hier') {
+                $computerName = $Script:Settings.serverIP
+                Write-Verbose "Remote server IP afkomstig uit settings: $computerName"
+            } 
+        }      
+        catch {
+            throw "Server IP address is leeg in variabel.psd1"
         }
+        
         Write-Host "  ✓ Remote computer: $computerName" -ForegroundColor Green
-        Write-Verbose "Remote computer naam ingevoerd: $computerName"
+        Write-Verbose "Remote computer naam gebruikt: $computerName"
         
         # Stap 3: WinRM configuratie
         Write-Progress -Activity "Remote Server Setup" -Status "Stap 3 van 7: WinRM configuratie controleren" -PercentComplete 21
