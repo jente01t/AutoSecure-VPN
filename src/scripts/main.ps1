@@ -664,7 +664,7 @@ function Invoke-RemoteServerSetup {
                 $computerName = $Script:Settings.serverIP
                 Write-Verbose "Remote server IP afkomstig uit settings: $computerName"
             } 
-        }      
+        }    
         catch {
             throw "Server IP address is leeg in variabel.psd1"
         }

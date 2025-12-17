@@ -1917,24 +1917,44 @@ function Start-VPNConnection {
     Write-Log "VPN verbinding starten met config: $ConfigFile" -Level "INFO"
     
     try {
-        $openVPNPath = $Script:Settings.openVPNExePath
-        if (-not $openVPNPath) {
-            $openVPNPath = $Script:Settings.openVPNExePath
+        $openVPNGuiPath = $Script:Settings.openVPNGuiPath
+        if (-not $openVPNGuiPath) {
+            $openVPNGuiPath = $Script:Settings.openVPNGuiPath
         }
         
-        if (-not (Test-Path $openVPNPath)) {
-            Write-Log "OpenVPN executable niet gevonden: $openVPNPath" -Level "ERROR"
+        if (-not (Test-Path $openVPNGuiPath)) {
+            Write-Log "OpenVPN GUI executable niet gevonden: $openVPNGuiPath" -Level "ERROR"
             return $false
         }
+        
+        # Copy config to OpenVPN config directory
+        $configDir = $Script:Settings.configPath
+        if (-not (Test-Path $configDir)) {
+            New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+        }
+        
+        $configFileName = Split-Path $ConfigFile -Leaf
+        $destConfigFile = Join-Path $configDir $configFileName
+        Copy-Item -Path $ConfigFile -Destination $destConfigFile -Force
+        
+        # Also copy any referenced certs/keys if in the same dir
+        $sourceDir = Split-Path $ConfigFile
+        $certs = Get-ChildItem -Path $sourceDir -Include "*.crt","*.key" -File
+        foreach ($cert in $certs) {
+            Copy-Item -Path $cert.FullName -Destination $configDir -Force
+        }
+        
+        # Get profile name (filename without extension)
+        $profileName = [System.IO.Path]::GetFileNameWithoutExtension($configFileName)
         
         # Stop any existing OpenVPN processes
         Get-Process -Name "openvpn" -ErrorAction SilentlyContinue | Stop-Process -Force
         
-        $arguments = "--config `"$ConfigFile`""
-        $workingDir = Split-Path $ConfigFile
-        Start-Process -FilePath $openVPNPath -ArgumentList $arguments -WorkingDirectory $workingDir -NoNewWindow
+        # Start connection using OpenVPN GUI
+        $arguments = "--connect $profileName"
+        Start-Process -FilePath $openVPNGuiPath -ArgumentList $arguments -NoNewWindow
         
-        Write-Log "VPN verbinding gestart" -Level "SUCCESS"
+        Write-Log "VPN verbinding gestart via GUI met profiel: $profileName" -Level "SUCCESS"
         return $true
     }
     catch {
