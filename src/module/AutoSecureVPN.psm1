@@ -78,6 +78,7 @@ function Show-Menu {
         [Parameter(Position=11)][string]$SeparatorChar = '=',
         [Parameter(Position=12)][switch]$NoPrompt,
         [Parameter(Position=13)][string]$Prompt = 'Keuze: '
+        ,[Parameter(Position=14)][string]$ErrorMessage
     )
 
     if ($Mode -eq 'Menu') {
@@ -135,20 +136,33 @@ function Show-Menu {
         Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Red
         Write-Host "║  $SuccessTitle  ║" -ForegroundColor Red
         Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Red
-        if ($LogFile) {
+        # Determine the best error text to display (explicit param > extra fields > global Error)
+        $displayError = $null
+        if ($ErrorMessage) { $displayError = $ErrorMessage }
+        elseif ($ExtraMessage) { $displayError = $ExtraMessage }
+        elseif ($ExtraInfo) { $displayError = $ExtraInfo }
+        elseif ($LogFile) { $displayError = "Zie logbestand: $LogFile" }
+        elseif ($global:Error.Count -gt 0) {
+            try {
+                $err = $global:Error[0]
+                $msg = $err.Exception.Message
+                if ($err.ScriptStackTrace) { $msg += "`n$($err.ScriptStackTrace)" }
+                $displayError = $msg
+            } catch { $displayError = $null }
+        }
+
+        if ($displayError) {
+            Write-Host "`nERROR:" -ForegroundColor Red
+            Write-Host "$displayError" -ForegroundColor Yellow
+        }
+        elseif ($LogFile) {
             Write-Host "`nLogbestand: $LogFile" -ForegroundColor Yellow
-        }
-        if ($ExtraInfo) {
-            Write-Host "$ExtraInfo" -ForegroundColor Yellow
-        }
-        if ($ExtraMessage) {
-            Write-Host "`n$ExtraMessage" -ForegroundColor Yellow
         }
         if ($ComputerName) {
             Write-Log "Batch remote client setup gefaald ($ComputerName)" -Level "ERROR"
         }
         if ($Options) {
-            Clear-Host
+            # Keep the error output visible above the options menu (do not clear host)
             $sep = ($SeparatorChar * 30)
             Write-Host $sep -ForegroundColor $HeaderColor
             Write-Host "      Fout opgetreden - Kies een optie" -ForegroundColor $HeaderColor
