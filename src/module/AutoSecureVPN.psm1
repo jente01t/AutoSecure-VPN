@@ -1911,50 +1911,109 @@ Referentie: Gebaseerd op Start-Process voor OpenVPN executable (Microsoft PowerS
 #>
 function Start-VPNConnection {
     param(
-        [Parameter(Mandatory=$true, Position=0)][ValidatePattern('\.ovpn$')][string]$ConfigFile
+        [Parameter(Mandatory=$true, Position=0)][ValidatePattern('\.ovpn$')][string]$ConfigFile,
+        [Parameter(Mandatory=$false)][string]$ComputerName,
+        [Parameter(Mandatory=$false)][PSCredential]$Credential
     )
     
-    Write-Log "VPN verbinding starten met config: $ConfigFile" -Level "INFO"
+    Write-Log "VPN verbinding starten met config: $ConfigFile $(if ($ComputerName) { "op $ComputerName" })" -Level "INFO"
     
     try {
-        $openVPNGuiPath = $Script:Settings.openVPNGuiPath
-        if (-not $openVPNGuiPath) {
+        if ($ComputerName) {
+            # Remote execution - use Task Scheduler to start GUI interactively
+            $session = New-PSSession -ComputerName $ComputerName -Credential $Credential -ErrorAction Stop
+
+            # Treat the provided ConfigFile as a path on the remote machine.
+            # Do NOT attempt to Test-Path or copy from the local host when starting remotely.
+            $remoteConfigFile = $ConfigFile
+            $remoteConfigDir = Split-Path $remoteConfigFile -Parent
+            $profileName = [System.IO.Path]::GetFileNameWithoutExtension($remoteConfigFile)
+
+            # Remote script block using Task Scheduler for GUI
+            #Wanneer je Invoke-Command gebruikt, draait je script in een onzichtbare "service-sessie". Een GUI (zoals OpenVPN) kan daar niet tekenen (geen taakbalk, geen systray). Omdat OpenVPN GUI zijn icoontje niet in de taakbalk kan zetten, loopt het proces vast op Need hold release....
+
+            # Om dit te omzeilen moet je via een omweg uitbreken naar de interactieve sessie van de ingelogde gebruiker.
+
+            #  We maken via PowerShell een taak aan op de remote PC die zegt: "Start OpenVPN GUI zodra ik dit commando geef, maar doe het zichtbaar op het bureaublad van de ingelogde gebruiker."
+             $scriptBlock = {
+                param($openVPNGuiPath, $profileName, $remoteConfigDir)
+
+                # 1. Stop oude processen
+                Get-Process -Name "openvpn" -ErrorAction SilentlyContinue | Stop-Process -Force
+                Get-Process -Name "openvpn-gui" -ErrorAction SilentlyContinue | Stop-Process -Force
+
+                # 2. Definieer de actie (OpenVPN GUI starten met argumenten)
+                $argument = "--connect `"$profileName`""
+                $action = New-ScheduledTaskAction -Execute $openVPNGuiPath -Argument $argument
+
+                # 3. BELANGRIJK: De taak moet draaien als 'Interactive' (alleen als gebruiker is ingelogd)
+                # We gebruiken de 'Users' groep zodat het start voor wie er ook maar is ingelogd.
+                $principal = New-ScheduledTaskPrincipal -GroupId "BUILTIN\Users" -RunLevel Highest
+
+                # 4. Maak de taak instellingen (RunOnlyIfLoggedOn is cruciaal voor GUI)
+                $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit 0
+
+                $taskName = "StartOpenVPNGUI_Remote"
+
+                # 5. Registreer de taak
+                Register-ScheduledTask -Action $action -Principal $principal -Settings $settings -TaskName $taskName -Force | Out-Null
+
+                # 6. Start de taak (Dit lanceert de GUI op het scherm van de gebruiker)
+                Start-ScheduledTask -TaskName $taskName
+
+                # Even wachten tot hij zeker gestart is
+                Start-Sleep -Seconds 5
+
+                # 7. Opruimen: verwijder de taak weer zodat het systeem schoon blijft
+                Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+
+                Write-Output "OpenVPN GUI is interactief gestart via Task Scheduler."
+            }
+
+            Invoke-Command -Session $session -ScriptBlock $scriptBlock -ArgumentList $Script:Settings.openVPNGuiPath, $profileName, $remoteConfigDir
+
+            Remove-PSSession -Session $session
+        } else {
+            # Local execution
             $openVPNGuiPath = $Script:Settings.openVPNGuiPath
+            if (-not $openVPNGuiPath) {
+                $openVPNGuiPath = $Script:Settings.openVPNGuiPath
+            }
+            
+            if (-not (Test-Path $openVPNGuiPath)) {
+                Write-Log "OpenVPN GUI executable niet gevonden: $openVPNGuiPath" -Level "ERROR"
+                return $false
+            }
+            
+            # Copy config to OpenVPN config directory
+            $configDir = $Script:Settings.configPath
+            if (-not (Test-Path $configDir)) {
+                New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+            }
+            
+            $configFileName = Split-Path $ConfigFile -Leaf
+            $destConfigFile = Join-Path $configDir $configFileName
+            Copy-Item -Path $ConfigFile -Destination $destConfigFile -Force
+            
+            # Also copy any referenced certs/keys if in the same dir
+            $sourceDir = Split-Path $ConfigFile
+            $certs = Get-ChildItem -Path $sourceDir -Include "*.crt","*.key" -File
+            foreach ($cert in $certs) {
+                Copy-Item -Path $cert.FullName -Destination $configDir -Force
+            }
+            
+            # Get profile name (filename without extension)
+            $profileName = [System.IO.Path]::GetFileNameWithoutExtension($configFileName)
+            
+            # Stop any existing OpenVPN processes
+            Get-Process -Name "openvpn" -ErrorAction SilentlyContinue | Stop-Process -Force
+            
+            # Start connection using OpenVPN GUI
+            $arguments = "--connect $profileName"
+            Start-Process -FilePath $openVPNGuiPath -ArgumentList $arguments -NoNewWindow
         }
         
-        if (-not (Test-Path $openVPNGuiPath)) {
-            Write-Log "OpenVPN GUI executable niet gevonden: $openVPNGuiPath" -Level "ERROR"
-            return $false
-        }
-        
-        # Copy config to OpenVPN config directory
-        $configDir = $Script:Settings.configPath
-        if (-not (Test-Path $configDir)) {
-            New-Item -ItemType Directory -Path $configDir -Force | Out-Null
-        }
-        
-        $configFileName = Split-Path $ConfigFile -Leaf
-        $destConfigFile = Join-Path $configDir $configFileName
-        Copy-Item -Path $ConfigFile -Destination $destConfigFile -Force
-        
-        # Also copy any referenced certs/keys if in the same dir
-        $sourceDir = Split-Path $ConfigFile
-        $certs = Get-ChildItem -Path $sourceDir -Include "*.crt","*.key" -File
-        foreach ($cert in $certs) {
-            Copy-Item -Path $cert.FullName -Destination $configDir -Force
-        }
-        
-        # Get profile name (filename without extension)
-        $profileName = [System.IO.Path]::GetFileNameWithoutExtension($configFileName)
-        
-        # Stop any existing OpenVPN processes
-        Get-Process -Name "openvpn" -ErrorAction SilentlyContinue | Stop-Process -Force
-        
-        # Start connection using OpenVPN GUI
-        $arguments = "--connect $profileName"
-        Start-Process -FilePath $openVPNGuiPath -ArgumentList $arguments -NoNewWindow
-        
-        Write-Log "VPN verbinding gestart via GUI met profiel: $profileName" -Level "SUCCESS"
+        Write-Log "VPN verbinding gestart via GUI met profiel: $profileName $(if ($ComputerName) { "op $ComputerName" })" -Level "SUCCESS"
         return $true
     }
     catch {

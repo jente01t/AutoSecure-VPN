@@ -746,6 +746,16 @@ function Invoke-RemoteServerSetup {
         }
         Write-Host "  ✓ Remote installatie voltooid" -ForegroundColor Green
         Write-Verbose "Remote server installatie succesvol voltooid voor $computerName"
+
+        # Remote OpenVPN service starten via GUI
+        Write-Progress -Activity "Remote Server Setup" -Status "OpenVPN service op remote machine starten" -PercentComplete 71
+        Write-Host "`n[*] OpenVPN service op remote machine starten..." -ForegroundColor Cyan
+            $remoteOvpn = Join-Path $Script:Settings.remoteConfigPath "server.ovpn"
+            if (-not (Start-VPNConnection -ConfigFile $remoteOvpn -ComputerName $computerName -Credential $cred)) {
+            throw "Remote OpenVPN service starten mislukt"
+        }
+        Write-Host " ✓ Remote OpenVPN starten voltooid" -ForegroundColor Green
+        Write-Verbose "Remote OpenVPN starten succesvol volottoid voor $computerName"
         
         # Stap 7: Client package maken
         Write-Progress -Activity "Remote Server Setup" -Status "Stap 7 van 7: Client configuratie package maken" -PercentComplete 86
