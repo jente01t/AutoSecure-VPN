@@ -215,21 +215,25 @@ function Wait-Input {
 # Load module settings from src/config/Stable.psd1 and Variable.psd1 (if present)
 # Use $PSScriptRoot and $Script: scope so the module is import-safe in test runspaces.
 $Script:Settings = @{}
-try {
-    # Load stable settings first
-    $stableConfigPath = Join-Path $PSScriptRoot '..\config\Stable.psd1'
-    if (Test-Path $stableConfigPath) {
-        $stableSettings = Import-PowerShellDataFile -Path $stableConfigPath -ErrorAction Stop
-        if ($stableSettings) { $Script:Settings = $stableSettings.Clone() }
-    }
-    
-    # Load variable settings and merge (variable overrides stable)
-    $variableConfigPath = Join-Path $PSScriptRoot '..\config\Variable.psd1'
-    if (Test-Path $variableConfigPath) {
-        $variableSettings = Import-PowerShellDataFile -Path $variableConfigPath -ErrorAction Stop
-        if ($variableSettings) {
-            foreach ($key in $variableSettings.Keys) {
-                $Script:Settings[$key] = $variableSettings[$key]
+
+# Only load config files if $PSScriptRoot is available (not available when loaded via Invoke-Expression)
+if ($PSScriptRoot -and -not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+    try {
+        # Load stable settings first
+        $stableConfigPath = Join-Path $PSScriptRoot '..\config\Stable.psd1'
+        if (Test-Path $stableConfigPath) {
+            $stableSettings = Import-PowerShellDataFile -Path $stableConfigPath -ErrorAction Stop
+            if ($stableSettings) { $Script:Settings = $stableSettings.Clone() }
+        }
+        
+        # Load variable settings and merge (variable overrides stable)
+        $variableConfigPath = Join-Path $PSScriptRoot '..\config\Variable.psd1'
+        if (Test-Path $variableConfigPath) {
+            $variableSettings = Import-PowerShellDataFile -Path $variableConfigPath -ErrorAction Stop
+            if ($variableSettings) {
+                foreach ($key in $variableSettings.Keys) {
+                    $Script:Settings[$key] = $variableSettings[$key]
+                }
             }
         }
     }
