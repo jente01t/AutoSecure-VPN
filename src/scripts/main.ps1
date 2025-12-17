@@ -373,7 +373,7 @@ function Invoke-RemoteClientSetup {
         Write-Host "`n[5/5] Client configuratie bestand..." -ForegroundColor Cyan
         # Bepaal standaard client naam (verschillende settings keys mogelijk)
         $clientDefaultName = if ($Script:Settings.ContainsKey('clientName') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.clientName)) { $Script:Settings.clientName } else { 'client' }
-        $defaultZipPath = Join-Path $PSScriptRoot "..\$($Script:Settings.outputPath)\vpn-client-$clientDefaultName.zip"
+        $defaultZipPath = Join-Path $Script:OutputPath "vpn-client-$clientDefaultName.zip"
         if (Test-Path $defaultZipPath) {
             $zipPath = $defaultZipPath
             Write-Host "  ✓ Standaard client ZIP bestand gevonden: $zipPath" -ForegroundColor Green
@@ -595,7 +595,7 @@ function Invoke-ServerSetup {
         # Stap 8: Client package maken
         Write-Progress -Activity "Server Setup" -Status "Stap 8 van 8: Client configuratie package maken" -PercentComplete 87.5
         Write-Host "`n[8/8] Client configuratie package maken..." -ForegroundColor Cyan
-        $zipPath = New-ClientPackage -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -OutputPath (Join-Path $PSScriptRoot "..\output")
+        $zipPath = New-ClientPackage -Config $serverConfig -EasyRSAPath $script:EasyRSAPath
         if (-not $zipPath) {
             throw "Client package aanmaken mislukt"
         }
@@ -760,7 +760,7 @@ function Invoke-RemoteServerSetup {
         # Stap 7: Client package maken
         Write-Progress -Activity "Remote Server Setup" -Status "Stap 7 van 7: Client configuratie package maken" -PercentComplete 86
         Write-Host "`n[7/7] Client configuratie package maken..." -ForegroundColor Cyan
-        $zipPath = New-ClientPackage -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -OutputPath (Join-Path $PSScriptRoot "..\output")
+        $zipPath = New-ClientPackage -Config $serverConfig -EasyRSAPath $script:EasyRSAPath
         if (-not $zipPath) {
             throw "Client package aanmaken mislukt"
         }
