@@ -70,6 +70,10 @@ Start-Transcript -Path $transcriptPath -Append -NoClobber
 # Hoofdfunctie
 #region Menu en UI functies
 
+########################################################################################################################
+# Menu en UI functies
+########################################################################################################################
+
 function Start-VPNSetup {
     <#
     .SYNOPSIS
@@ -187,6 +191,10 @@ function Select-ClientMode {
 
 
 #region Client Setup functies
+
+########################################################################################################################
+# Client Setup functies
+########################################################################################################################
 
 function Invoke-ClientSetup {
     <#
@@ -513,6 +521,10 @@ function Invoke-BatchRemoteClientSetup {
 #endregion Client Setup functies
 
 #region Server Setup functies
+
+########################################################################################################################
+# Server Setup functies
+########################################################################################################################
 
 function Invoke-ServerSetup {
     <#
