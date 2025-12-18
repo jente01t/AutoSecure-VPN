@@ -10,12 +10,16 @@ InModuleScope AutoSecureVPN {
         # Mock Write-Log globally to prevent log file issues in CI
         Mock Write-Log { } -ModuleName AutoSecureVPN
         
+        # Mock Copy-Item globally to prevent path issues
+        Mock Copy-Item { } -ModuleName AutoSecureVPN
+        
         # Initialize Script-scoped variables used by the module
         $Script:Settings = @{
             configPath = "TestDrive:\config"
             outputPath = "output"
             clientName = "client1"
             openVPNExePath = "C:\Program Files\OpenVPN\bin\openvpn.exe"
+            openVPNGuiPath = "C:\Program Files\OpenVPN\bin\openvpn-gui.exe"
             testIP = "10.8.0.1"
             installedPath = "C:\Program Files\OpenVPN"
             openVpnVersion = "2.6.15"
@@ -211,7 +215,7 @@ InModuleScope AutoSecureVPN {
         It "Returns configuration with provided parameters" {
             Mock Write-Log { }
             
-            $config = Get-ServerConfiguration -ServerName "test-server" -ServerIP "192.168.1.1" -LANSubnet "192.168.1.0" -LANMask "255.255.255.0" -NoPass
+            $config = Get-ServerConfiguration -ServerName "test-server" -serverWanIP "192.168.1.1" -LANSubnet "192.168.1.0" -LANMask "255.255.255.0" -NoPass
 
             $config.ServerName | Should -Be "test-server"
             $config.ServerIP | Should -Be "192.168.1.1"
@@ -301,6 +305,9 @@ InModuleScope AutoSecureVPN {
             Mock Copy-Item { }
             Mock Remove-PSSession { }
             Mock Write-Log { }
+            Mock Test-Path { $true }  # Mock all Test-Path calls to true
+            Mock Compress-Archive { }
+            Mock Get-Content { "mock module content" }
 
             $config = @{ ServerName = "test" }
             $result = Install-RemoteServer -ComputerName "remote-pc" -Credential (New-Object PSCredential ("user", (ConvertTo-SecureString "pass" -AsPlainText -Force))) -ServerConfig $config -LocalEasyRSAPath "C:\easy-rsa"
@@ -311,7 +318,7 @@ InModuleScope AutoSecureVPN {
     Describe "Install-RemoteClient" {
         It "Installs remote client successfully" {
             Mock Test-IsAdmin { $true }
-            Mock Test-Path { param($Path) return ($Path -eq "C:\test.zip") }
+            Mock Test-Path { $true }  # Mock all Test-Path calls to true
             Mock New-PSSession { New-MockObject -Type System.Management.Automation.Runspaces.PSSession }
             Mock Invoke-Command { }
             Mock Copy-Item { }

@@ -238,7 +238,7 @@ if ($PSScriptRoot -and -not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
         }
     }
     catch {
-        Write-Host "Kon settings niet laden: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Log "Kon settings niet laden: $($_.Exception.Message)" -Level "WARNING"
     }
 }
 
@@ -298,7 +298,7 @@ function Set-ModuleSettings {
     $true als administrator, anders $false.
 
 .EXAMPLE
-    if (-not (Test-IsAdmin)) { Write-Host "Administrator rechten vereist" }
+    if (-not (Test-IsAdmin)) { Write-Log "Administrator rechten vereist" -Level "ERROR" }
 
 Referentie: https://codeandkeep.com/Check-If-Running-As-Admin/.
 #>
@@ -329,7 +329,7 @@ function Test-IsAdmin {
     Write-Log "Operatie voltooid" -Level "SUCCESS"
 
 .NOTES
-    Deze functie gebruikt Add-Content voor bestand output en Write-Host voor console.
+    Deze functie gebruikt Add-Content voor bestand output en Write-Verbose voor console.
 #>
 function Write-Log {
     param(
@@ -354,7 +354,7 @@ function Write-Log {
         Add-Content -Path $LogFile -Value $logEntry -Encoding UTF8
     }
     catch {
-        Write-Host "Kan niet schrijven naar logbestand: $_" -ForegroundColor Red
+        Write-Verbose "Kan niet schrijven naar logbestand: $_"
     }
     
     # Also write to console based on level
@@ -629,7 +629,7 @@ function Get-ServerConfiguration {
                     $config.Password = $pwd
                     break
                 } else {
-                    Write-Host "Wachtwoord moet minimaal 8 karakters lang zijn." -ForegroundColor Red
+                    Write-Log "Wachtwoord moet minimaal 8 karakters lang zijn." -Level "ERROR"
                 }
             }
         }
@@ -854,7 +854,7 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
             $buildCaCmd = "$bashPathSetup ./easyrsa build-ca nopass"
         }
         Write-Verbose "Command: $sh -c `"$buildCaCmd`""
-        Write-Host "  Executing build-ca command..." -ForegroundColor Gray
+        Write-Verbose "  Executing build-ca command..."
         $easyrsaOutput = & $sh -c "$buildCaCmd" 2>&1
         Write-Verbose "build-ca completed with exit code: $LASTEXITCODE"
         Write-Verbose "build-ca output: $easyrsaOutput"
@@ -872,7 +872,7 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
             $genReqCmd = "$bashPathSetup ./easyrsa gen-req $ServerName nopass"
         }
         Write-Verbose "Command: $sh -c `"$genReqCmd`""
-        Write-Host "  Executing gen-req command..." -ForegroundColor Gray
+        Write-Verbose "  Executing gen-req command..."
         $easyrsaOutput = & $sh -c "$genReqCmd" 2>&1
         Write-Verbose "gen-req completed with exit code: $LASTEXITCODE"
         Write-Verbose "gen-req output: $easyrsaOutput"
@@ -887,7 +887,7 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
         # EASYRSA_BATCH=1 handles confirmation prompts
         $signReqCmd = "$bashPathSetup ./easyrsa sign-req server $ServerName"
         Write-Verbose "Command: $sh -c `"$signReqCmd`""
-        Write-Host "  Executing sign-req command..." -ForegroundColor Gray
+        Write-Verbose "  Executing sign-req command..."
         $easyrsaOutput = & $sh -c "$signReqCmd" 2>&1
         Write-Verbose "sign-req completed with exit code: $LASTEXITCODE"
         Write-Verbose "sign-req output: $easyrsaOutput"
@@ -900,7 +900,7 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
         Write-Verbose "Starting gen-dh (this may take a while)..."
         $genDhCmd = "$bashPathSetup ./easyrsa gen-dh"
         Write-Verbose "Command: $sh -c `"$genDhCmd`""
-        Write-Host "  Executing gen-dh command (dit kan even duren)..." -ForegroundColor Gray
+        Write-Verbose "  Executing gen-dh command (dit kan even duren)..."
         $easyrsaOutput = & $sh -c "$genDhCmd" 2>&1
         Write-Verbose "gen-dh completed with exit code: $LASTEXITCODE"
         Write-Verbose "gen-dh output: $easyrsaOutput"
@@ -913,7 +913,7 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
         Write-Verbose "Starting gen-crl..."
         $genCrlCmd = "$bashPathSetup ./easyrsa gen-crl"
         Write-Verbose "Command: $sh -c `"$genCrlCmd`""
-        Write-Host "  Executing gen-crl command..." -ForegroundColor Gray
+        Write-Verbose "  Executing gen-crl command..."
         $easyrsaOutput = & $sh -c "$genCrlCmd" 2>&1
         Write-Verbose "gen-crl completed with exit code: $LASTEXITCODE"
         Write-Verbose "gen-crl output: $easyrsaOutput"
@@ -1169,10 +1169,10 @@ function Install-RemoteServer {
             $ErrorActionPreference = 'Stop'
             
             # Extract EasyRSA ZIP using .NET (more reliable than Expand-Archive)
-            Write-Host "Extracting EasyRSA..."
+            Write-Verbose "Extracting EasyRSA..."
             # Remove existing directory to avoid extraction conflicts
             if (Test-Path $remoteEasyRSA) {
-                Write-Host "Removing existing EasyRSA directory..."
+                Write-Verbose "Removing existing EasyRSA directory..."
                 Remove-Item $remoteEasyRSA -Recurse -Force -ErrorAction SilentlyContinue
             }
             New-Item -ItemType Directory -Path $remoteEasyRSA -Force | Out-Null
@@ -1197,12 +1197,12 @@ function Install-RemoteServer {
             if (-not $moduleSettings.configPath) { $moduleSettings.configPath = 'C:\Program Files\OpenVPN\config' }
             if (-not $moduleSettings.installedPath) { $moduleSettings.installedPath = 'C:\Program Files\OpenVPN\bin\openvpn.exe' }
             
-            Write-Host "Remote settings configured: Port=$($moduleSettings.port), Protocol=$($moduleSettings.protocol)"
+            Write-Log "Remote settings configured: Port=$($moduleSettings.port), Protocol=$($moduleSettings.protocol)" -Level "INFO"
             
-            Write-Host "Settings after defaults: $($moduleSettings | ConvertTo-Json)"
+            Write-Verbose "Settings after defaults: $($moduleSettings | ConvertTo-Json)"
             
             # Bypass execution policy by loading script content directly
-            Write-Host "Loading module functions..."
+            Write-Verbose "Loading module functions..."
             try {
                 $moduleContent = Get-Content -Path $modulePath -Raw
                 # Execute the module content in the current scope
@@ -1218,54 +1218,54 @@ function Install-RemoteServer {
             # Disable file logging for remote operations
             function global:Write-Log {
                 param($Message, $Level = "INFO")
-                Write-Host "[$Level] $Message"
+                Write-Verbose "[$Level] $Message"
             }
             
             try {
-                Write-Host "Starting remote server setup..."
+                Write-Verbose "Starting remote server setup..."
                 
                 if (-not (Test-IsAdmin)) {
                     throw "Administrator rights required"
                 }
                 
-                Write-Host "Installing OpenVPN..."
+                Write-Verbose "Installing OpenVPN..."
                 if (-not (Install-OpenVPN)) {
                     throw "OpenVPN installation failed"
                 }
                 
-                Write-Host "Configuring firewall..."
+                Write-Verbose "Configuring firewall..."
                 if (-not (Set-Firewall -Port $Script:Settings.port -Protocol $Script:Settings.protocol)) {
                     throw "Firewall configuration failed"
                 }
                 
-                Write-Host "Copying EasyRSA with certificates..."
+                Write-Verbose "Copying EasyRSA with certificates..."
                 $targetEasyRSAPath = $Script:Settings.easyRSAPath
-                Write-Host "Target EasyRSA path: $targetEasyRSAPath"
+                Write-Verbose "Target EasyRSA path: $targetEasyRSAPath"
                 # easyRSAPath should now have a default value set above
                 if (-not (Test-Path $targetEasyRSAPath)) {
-                    Write-Host "Creating target directory: $targetEasyRSAPath"
+                    Write-Verbose "Creating target directory: $targetEasyRSAPath"
                     New-Item -ItemType Directory -Path $targetEasyRSAPath -Force | Out-Null
                 }
                 if (-not (Test-Path $remoteEasyRSA)) {
                     throw "Remote EasyRSA directory not found: $remoteEasyRSA"
                 }
-                Write-Host "Copying from $remoteEasyRSA to $targetEasyRSAPath..."
+                Write-Verbose "Copying from $remoteEasyRSA to $targetEasyRSAPath..."
                 Copy-Item -Path "$remoteEasyRSA\*" -Destination $targetEasyRSAPath -Recurse -Force
                 
-                Write-Host "Creating server config..."
+                Write-Verbose "Creating server config..."
                 if (-not (New-ServerConfig -Config $config)) {
                     throw "Server config generation failed"
                 }
                 
-                Write-Host "Starting VPN service..."
+                Write-Verbose "Starting VPN service..."
                 if (-not (Start-VPNService)) {
                     throw "VPN service start failed"
                 }
                 
-                Write-Host "Remote server setup completed successfully"
+                Write-Log "Remote server setup completed successfully" -Level "SUCCESS"
             }
             catch {
-                Write-Host "Error during remote server setup: $_"
+                Write-Log "Error during remote server setup: $_" -Level "ERROR"
                 throw
             }
             
@@ -1288,10 +1288,10 @@ function Install-RemoteServer {
                 Invoke-Command -Session $rollbackSession -ScriptBlock {
                     param($settings, $remoteEasyRSA, $remoteModule)
                     # Clean up transferred files
-                    Write-Host "Rolling back: cleaning up transferred files..."
+                    Write-Verbose "Rolling back: cleaning up transferred files..."
                     Remove-Item $remoteModule -Force -ErrorAction SilentlyContinue
                     Remove-Item $remoteEasyRSA -Recurse -Force -ErrorAction SilentlyContinue
-                    Write-Host "Rollback cleanup completed"
+                    Write-Verbose "Rollback cleanup completed"
                 } -ArgumentList $Script:Settings, $remoteEasyRSA, $remoteModule
                 Remove-PSSession $rollbackSession
             }
@@ -1542,7 +1542,7 @@ function Import-ClientConfiguration {
             if ($zipFile -match '\.zip$' -and (Test-Path $zipFile)) {
                 break
             } else {
-                Write-Host "Ongeldig pad of geen ZIP bestand. Probeer opnieuw." -ForegroundColor Red
+                Write-Log "Ongeldig pad of geen ZIP bestand. Probeer opnieuw." -Level "ERROR"
             }
         }
     }
@@ -1678,12 +1678,12 @@ function Install-RemoteClient {
             # Disable file logging for remote operations
             function global:Write-Log {
                 param($Message, $Level = "INFO")
-                Write-Host "[$Level] $Message"
+                Write-Verbose "[$Level] $Message"
             }
             
             # Perform client setup
             try {
-                Write-Host "Starting remote client setup..."
+                Write-Verbose "Starting remote client setup..."
                 
                 # Check admin (assume true since we have session)
                 if (-not (Test-IsAdmin)) {
@@ -1712,7 +1712,7 @@ function Install-RemoteClient {
                 
                 # Test TAP adapter
                 if (-not (Test-TAPAdapter)) {
-                    Write-Host "TAP adapter not found, OpenVPN may need reinstallation" -ForegroundColor Yellow
+                    Write-Log "TAP adapter not found, OpenVPN may need reinstallation" -Level "WARNING"
                 }
                 
                 # Start VPN connection
@@ -1721,7 +1721,7 @@ function Install-RemoteClient {
                 }
             }
             catch {
-                Write-Host "Error during remote client setup: $_"
+                Write-Log "Error during remote client setup: $_" -Level "ERROR"
                 throw
             }
             
@@ -1729,7 +1729,7 @@ function Install-RemoteClient {
             Start-Sleep -Seconds 5
             Test-VPNConnection
             
-            Write-Host "Remote client setup completed successfully"
+            Write-Log "Remote client setup completed successfully" -Level "SUCCESS"
             
             # Clean up temp files
             Remove-Item $modulePath, $zipPath -Force
