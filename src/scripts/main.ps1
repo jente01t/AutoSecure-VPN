@@ -7,10 +7,11 @@
     Het biedt volledige automatisering van certificaatgeneratie, firewall-configuratie en VPN-verbinding.
     
 .NOTES
-    Vereist: PowerShell 5.1+, Administrator rechten
+    Vereist: PowerShell 7.0, Administrator rechten
 #>
 
-# Requires -RunAsAdministrator
+#Requires -RunAsAdministrator
+#Requires -Version 7.0
 
 [CmdletBinding()]
 param()
