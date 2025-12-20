@@ -275,8 +275,6 @@ if ($PSScriptRoot -and -not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
     $Script:BasePath = "C:\Temp"
 }
 
-# Ensure a single canonical output path (project root + configured outputPath)
-$Script:OutputPath = Join-Path $Script:BasePath $Script:Settings.outputPath
 
 
 function Set-ModuleSettings {
@@ -1607,7 +1605,14 @@ function Import-ClientConfiguration {
     #>
     Write-Log "Client configuratie importeren gestart" -Level "INFO"
     
+    if (-not $Script:OutputPath -or [string]::IsNullOrWhiteSpace($Script:OutputPath)) {
+        $Script:OutputPath = Join-Path $Script:BasePath "output"
+    }
+    
     $configPath = $Script:Settings.configPath
+    if (-not $configPath -or [string]::IsNullOrWhiteSpace($configPath)) {
+        $configPath = 'C:\Program Files\OpenVPN\config'
+    }
     
     # Try to find the default client ZIP file
     $defaultZipPath = Join-Path $Script:OutputPath "vpn-client-$($Script:Settings.clientName).zip"
@@ -1682,9 +1687,6 @@ function Install-RemoteClient {
     .PARAMETER ZipPath
         Pad naar het client ZIP bestand.
 
-    .PARAMETER RemoteConfigPath
-        Pad op de remote machine waar config wordt geplaatst (standaard 'C:\Program Files\OpenVPN\config').
-
     .OUTPUTS
         System.Boolean
         $true bij succes, anders $false.
@@ -1698,7 +1700,7 @@ function Install-RemoteClient {
         [Parameter(Mandatory=$true, Position=0)][ValidatePattern('^[a-zA-Z0-9.-]+$')][string]$ComputerName,
         [Parameter(Mandatory=$true, Position=1)][PSCredential]$Credential,
         [Parameter(Mandatory=$true, Position=2)][ValidatePattern('\.zip$')][string]$ZipPath,
-        [Parameter(Position=3)][string]$RemoteConfigPath = $Script:Settings.remoteConfigPath
+        [Parameter(Position=3)][string]$RemoteConfigPath = "C:\Program Files\OpenVPN\config"
     )
     
     Write-Log "Remote client configuratie gestart voor $ComputerName" -Level "INFO"
@@ -1747,18 +1749,24 @@ function Install-RemoteClient {
             # Stop on errors from the start
             $ErrorActionPreference = 'Stop'
             
-            # Import module (execution policy is bypassed at session level)
-            Import-Module $modulePath -Force -ErrorAction Stop
-            if (-not (Get-Module -Name "AutoSecureVPN")) { throw "Failed to import module" }
-            
-            # Override settings
-            Set-ModuleSettings -Settings $settings -BasePath "C:\Temp"
+            # Bypass execution policy by loading script content directly
+            try {
+                $moduleContent = Get-Content -Path $modulePath -Raw
+                # Execute the module content in the current scope
+                Invoke-Expression $moduleContent
+            } catch {
+                throw "Failed to load module: $_"
+            }
             
             # Disable file logging for remote operations
             function global:Write-Log {
                 param($Message, $Level = "INFO")
                 Write-Verbose "[$Level] $Message"
             }
+            
+            # Set module settings manually
+            $Script:Settings = $settings
+            $Script:BasePath = "C:\Temp"
             
             # Perform client setup
             try {
@@ -1793,11 +1801,6 @@ function Install-RemoteClient {
                 if (-not (Test-TAPAdapter)) {
                     Write-Log "TAP adapter not found, OpenVPN may need reinstallation" -Level "WARNING"
                 }
-                
-                # Start VPN connection
-                if (-not (Start-VPNConnection -ConfigFile $ovpnFile.FullName)) {
-                    throw "Failed to start VPN connection on remote machine"
-                }
             }
             catch {
                 Write-Log "Error during remote client setup: $_" -Level "ERROR"
@@ -1812,7 +1815,7 @@ function Install-RemoteClient {
             
             # Clean up temp files
             Remove-Item $modulePath, $zipPath -Force
-        } -ArgumentList $Script:Settings, $remoteModule, $remoteZip, $RemoteConfigPath -ErrorAction Stop
+        } -ArgumentList $Script:Settings, $remoteModule, $remoteZip, $remoteConfigPath -ErrorAction Stop
         
         Remove-PSSession $session
         
@@ -1828,8 +1831,19 @@ function Install-RemoteClient {
             if ($rollbackSession) {
                 Invoke-Command -Session $rollbackSession -ScriptBlock {
                     param($settings, $modulePath)
-                    Import-Module $modulePath -Force
-                    Set-ModuleSettings -Settings $settings -BasePath "C:\Temp"
+                    try {
+                        $moduleContent = Get-Content -Path $modulePath -Raw
+                        Invoke-Expression $moduleContent
+                    } catch {
+                        throw "Failed to load module: $_"
+                    }
+                    # Disable file logging for remote operations
+                    function global:Write-Log {
+                        param($Message, $Level = "INFO")
+                        Write-Verbose "[$Level] $Message"
+                    }
+                    $Script:Settings = $settings
+                    $Script:BasePath = "C:\Temp"
                     Invoke-Rollback -SetupType "Client"
                 } -ArgumentList $Script:Settings, $remoteModule
                 Remove-PSSession $rollbackSession
@@ -1918,7 +1932,18 @@ function Invoke-BatchRemoteClientInstall {
 
         try {
             $result = Install-RemoteClient -ComputerName $ip -Credential $cred -ZipPath $using:zipPathLocal
-            if ($result) { "SUCCESS: $name ($ip)" } else { "ERROR: $name ($ip) - Installation failed" }
+            if ($result) { 
+                # Start VPN connection after successful installation
+                $configPath = $using:settingsLocal.configPath
+                if (-not $configPath -or [string]::IsNullOrWhiteSpace($configPath)) {
+                    $configPath = 'C:\Program Files\OpenVPN\config'
+                }
+                $ovpnPath = Join-Path $configPath "client.ovpn"
+                [void](Start-VPNConnection -ComputerName $ip -Credential $cred -ConfigFile $ovpnPath)
+                "SUCCESS: $name ($ip)" 
+            } else { 
+                "ERROR: $name ($ip) - Installation failed" 
+            }
         }
         catch {
             "ERROR: $name ($ip) - $_"
@@ -2053,7 +2078,7 @@ function Start-VPNConnection {
                 # 7. Opruimen: verwijder de taak weer zodat het systeem schoon blijft
                 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
 
-                Write-Output "OpenVPN GUI is interactief gestart via Task Scheduler."
+                Write-Verbose "OpenVPN GUI is interactief gestart via Task Scheduler."
             }
 
             Invoke-Command -Session $session -ScriptBlock $scriptBlock -ArgumentList $Script:Settings.openVPNGuiPath, $profileName, $remoteConfigDir
@@ -2079,7 +2104,9 @@ function Start-VPNConnection {
             
             $configFileName = Split-Path $ConfigFile -Leaf
             $destConfigFile = Join-Path $configDir $configFileName
-            Copy-Item -Path $ConfigFile -Destination $destConfigFile -Force
+            if ($ConfigFile -ne $destConfigFile) {
+                Copy-Item -Path $ConfigFile -Destination $destConfigFile -Force
+            }
             
             # Also copy any referenced certs/keys if in the same dir
             $sourceDir = Split-Path $ConfigFile

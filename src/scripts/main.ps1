@@ -63,6 +63,7 @@ if (-not (Test-Path $logsPath)) {
 $script:LogFile = Join-Path $logsPath $Script:Settings.logFileName
 $script:ConfigPath = $Script:Settings.configPath
 $script:EasyRSAPath = $Script:Settings.easyRSAPath
+$Script:OutputPath = Join-Path $Script:BasePath $Script:Settings.outputPath
 
 # Start transcript voor logging
 $transcriptPath = Join-Path $logsPath $Script:Settings.transcriptFileName
@@ -444,12 +445,23 @@ function Invoke-RemoteClientSetup {
         # Remote installatie uitvoeren
         Write-Progress -Activity "Remote Client Setup" -Status "Remote installatie uitvoeren" -PercentComplete 90
         Write-Host "`n[*] Remote installatie starten..." -ForegroundColor Cyan
-        if (-not (Install-RemoteClient -ComputerName $computerName -Credential $cred -ZipPath $zipPath)) {
+        if (-not (Install-RemoteClient -ComputerName $computerName -Credential $cred -ZipPath $zipPath -RemoteConfigPath $Script:Settings.remoteConfigPath)) {
             throw "Remote client installatie mislukt"
         }
         Write-Host "  ✓ Remote installatie voltooid" -ForegroundColor Green
         Write-Verbose "Remote client installatie succesvol voltooid voor $computerName"
         Write-Log "Remote client installatie voltooid voor $computerName" -Level "INFO"
+
+        # Remote OpenVPN service starten via GUI
+        Write-Progress -Activity "Remote Client Setup" -Status "OpenVPN service op remote machine starten" -PercentComplete 71
+        Write-Host "`n[*] OpenVPN service op remote machine starten..." -ForegroundColor Cyan
+            $remoteOvpn = Join-Path $Script:Settings.remoteConfigPath "client.ovpn"
+            if (-not (Start-VPNConnection -ConfigFile $remoteOvpn -ComputerName $computerName -Credential $cred)) {
+            throw "Remote OpenVPN service starten mislukt"
+        }
+        Write-Host " ✓ Remote OpenVPN starten voltooid" -ForegroundColor Green
+        Write-Verbose "Remote OpenVPN starten succesvol volottoid voor $computerName"
+        Write-Log "Remote OpenVPN service gestart voor $computerName" -Level "INFO"
         
         Write-Progress -Activity "Remote Client Setup" -Completed
         
@@ -493,16 +505,27 @@ function Invoke-BatchRemoteClientSetup {
         Write-Verbose "CSV bestand pad: $csvPath"
         Write-Log "CSV bestand gevonden: $csvPath" -Level "INFO"
         
-        # Stap 2: Client ZIP bestand vragen
+        # Stap 2: Client ZIP bestand
         Write-Progress -Activity "Batch Remote Client Setup" -Status "Stap 2 van 4: Client ZIP bestand selecteren" -PercentComplete 25
         Write-Host "`n[2/4] Client ZIP bestand selecteren..." -ForegroundColor Cyan
-        $zipPath = Read-Host "  Voer het pad naar het client ZIP bestand in (bijv. C:\output\client.zip)"
-        if (-not (Test-Path $zipPath)) {
-            throw "Client ZIP bestand niet gevonden: $zipPath"
+        # Bepaal standaard client naam (verschillende settings keys mogelijk)
+        $clientDefaultName = if ($Script:Settings.ContainsKey('clientName') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.clientName)) { $Script:Settings.clientName } else { 'client' }
+        $defaultZipPath = Join-Path $Script:OutputPath "vpn-client-$clientDefaultName.zip"
+        if (Test-Path $defaultZipPath) {
+            $zipPath = $defaultZipPath
+            Write-Host "  ✓ Standaard client ZIP bestand gevonden: $zipPath" -ForegroundColor Green
+            Write-Verbose "Standaard client ZIP bestand gebruikt: $zipPath"
+            Write-Log "Standaard client ZIP bestand gevonden: $zipPath" -Level "INFO"
+        } else {
+            Write-Host "  Standaard client ZIP bestand niet gevonden op $defaultZipPath" -ForegroundColor Yellow
+            $zipPath = Read-Host "  Pad naar client ZIP bestand (gegenereerd door server setup)"
+            Write-Verbose "Handmatig ZIP pad ingevoerd: $zipPath"
         }
-        Write-Host "  ✓ Client ZIP bestand gevonden: $zipPath" -ForegroundColor Green
-        Write-Verbose "Client ZIP bestand pad: $zipPath"
-        Write-Log "Client ZIP bestand gevonden: $zipPath" -Level "INFO"
+        if (-not (Test-Path $zipPath)) {
+            throw "ZIP bestand niet gevonden: $zipPath"
+        }
+        Write-Host "  ✓ ZIP bestand gevonden: $zipPath" -ForegroundColor Green
+        Write-Log "ZIP bestand gevonden: $zipPath" -Level "INFO"
         
         # Stap 3: CSV inlezen
         Write-Progress -Activity "Batch Remote Client Setup" -Status "Stap 3 van 4: CSV bestand inlezen" -PercentComplete 50
@@ -543,19 +566,6 @@ function Invoke-BatchRemoteClientSetup {
         
         Write-Progress -Activity "Batch Remote Client Setup" -Completed
         Write-Log "Batch Remote Client Setup voltooid met $successCount van $totalClients succesvolle setups" -Level "INFO"
-
-        # Resultaten tonen
-        Write-Host "`nResultaten:" -ForegroundColor Yellow
-        $successCount = 0
-        foreach ($result in $results) {
-            if ($result -like "SUCCESS:*") {
-                Write-Host "  ✓ $($result -replace 'SUCCESS: ', '')" -ForegroundColor Green
-                $successCount++
-            }
-            else {
-                Write-Host "  ✗ $($result -replace 'ERROR: ', '')" -ForegroundColor Red
-            }
-        }
         
         if ($successCount -eq $totalClients) {
             Show-Menu -Mode Success -SuccessTitle "Batch Remote Client Setup Succesvol!" -LogFile $script:LogFile
@@ -845,7 +855,7 @@ function Invoke-RemoteServerSetup {
         # Remote installatie uitvoeren
         Write-Progress -Activity "Remote Server Setup" -Status "Remote server installatie uitvoeren" -PercentComplete 57
         Write-Host "`n[*] Remote server installatie starten..." -ForegroundColor Cyan
-        if (-not (Install-RemoteServer -ComputerName $computerName -Credential $cred -ServerConfig $serverConfig -LocalEasyRSAPath $localEasyRSA)) {
+        if (-not (Install-RemoteServer -ComputerName $computerName -Credential $cred -ServerConfig $serverConfig -LocalEasyRSAPath $localEasyRSA -RemoteConfigPath $Script:Settings.remoteConfigPath)) {
             throw "Remote server installatie mislukt"
         }
         Write-Host "  ✓ Remote installatie voltooid" -ForegroundColor Green
