@@ -393,13 +393,13 @@ function Write-Log {
         Write-Verbose "Kan niet schrijven naar logbestand: $_"
     }
     
-    # Schrijf ook naar de console afhankelijk van het logniveau
-    switch ($Level.ToUpper()) {
-        "ERROR" { Write-Host $logEntry -ForegroundColor Red }
-        "WARNING" { Write-Host $logEntry -ForegroundColor Yellow }
-        "SUCCESS" { Write-Host $logEntry -ForegroundColor Green }
-        default { Write-Host $logEntry -ForegroundColor White }
-    }
+    # # Schrijf ook naar de console afhankelijk van het logniveau
+    # switch ($Level.ToUpper()) {
+    #     "ERROR" { Write-Host $logEntry -ForegroundColor Red }
+    #     "WARNING" { Write-Host $logEntry -ForegroundColor Yellow }
+    #     "SUCCESS" { Write-Host $logEntry -ForegroundColor Green }
+    #     default { Write-Host $logEntry -ForegroundColor White }
+    # }
 }
 
 #endregion Configuratie functies
