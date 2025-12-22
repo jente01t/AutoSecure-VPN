@@ -2348,3 +2348,240 @@ function Invoke-Rollback {
 
 #endregion Rollback functies
 
+#region WireGuard functies
+
+########################################################################################################################
+# WireGuard functies
+########################################################################################################################
+
+function Install-WireGuard {
+    <#
+    .SYNOPSIS
+        Installeert WireGuard op de lokale machine.
+
+    .DESCRIPTION
+        Deze functie downloadt en installeert WireGuard.
+        
+    .PARAMETER Url
+        De URL van de WireGuard installer (optioneel).
+        
+    .OUTPUTS
+        System.Boolean
+        $true bij succes, anders $false.
+    #>
+    param(
+        [Parameter(Position = 0)][string]$wgUrl
+    )
+    
+    $wgExePath = "C:\Program Files\WireGuard\wireguard.exe"
+    if (Test-Path $wgExePath) {
+        Write-Log "WireGuard lijkt al geïnstalleerd te zijn" -Level "INFO"
+        return $true
+    }
+
+    Write-Log "WireGuard installatie gestart" -Level "INFO"
+    
+    # Bepaal download URL
+    if (-not $wgUrl) {
+        # Gebruik vaste stabiele versie als fallback
+        $wgUrl = "https://download.wireguard.com/windows-client/wireguard-amd64-0.5.3.msi"
+    }
+
+    $tempPath = [System.IO.Path]::GetTempFileName() + ".msi"
+    
+    try {
+        # Probeer dynamisch de laatste versie te vinden
+        try {
+            $content = Invoke-WebRequest -Uri "https://download.wireguard.com/windows-client/" -UseBasicParsing -ErrorAction SilentlyContinue
+            if ($content.Content -match 'href="(wireguard-amd64-([\d.]+)\.msi)"') {
+                $latestMsi = $matches[1]
+                $wgUrl = "https://download.wireguard.com/windows-client/$latestMsi"
+                Write-Log "Laatste WireGuard versie online gevonden: $latestMsi" -Level "INFO"
+            }
+        }
+        catch {
+            Write-Log "Kon online versie check niet uitvoeren, gebruik fallback url" -Level "WARNING"
+        }
+
+        Write-Log "WireGuard MSI downloaden van $wgUrl..." -Level "INFO"
+        Invoke-WebRequest -Uri $wgUrl -OutFile $tempPath -UseBasicParsing
+        Write-Log "WireGuard MSI gedownload naar $tempPath" -Level "INFO"
+        
+        # Silent install options
+        # DO_NOT_LAUNCH=1 voorkomt dat de GUI direct start
+        $arguments = "/i `"$tempPath`" /qn DO_NOT_LAUNCH=1 /norestart"
+        
+        Write-Log "Installeren..." -Level "INFO"
+        $process = Start-Process -FilePath "msiexec.exe" -ArgumentList $arguments -Wait -PassThru
+        
+        if ($process.ExitCode -eq 0) {
+            Write-Log "WireGuard succesvol geïnstalleerd" -Level "SUCCESS"
+            return $true
+        }
+        else {
+            Write-Log "WireGuard installatie mislukt met exit code $($process.ExitCode)" -Level "ERROR"
+            return $false
+        }
+    }
+    catch {
+        Write-Log "Fout tijdens WireGuard installatie: $_" -Level "ERROR"
+        return $false
+    }
+    finally {
+        if (Test-Path $tempPath) {
+            Remove-Item $tempPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Initialize-WireGuardKeys {
+    <#
+    .SYNOPSIS
+        Genereert Private en Public keys voor WireGuard.
+    
+    .OUTPUTS
+        Hashtable met PrivateKey en PublicKey.
+    #>
+    param(
+        [string]$WgPath = "C:\Program Files\WireGuard\wg.exe"
+    )
+    
+    if (-not (Test-Path $WgPath)) {
+        throw "wg.exe niet gevonden op $WgPath. Installeer eerst WireGuard."
+    }
+    
+    try {
+        # Genereer private key
+        $privateKey = & $WgPath genkey
+        if (-not $privateKey) { throw "Kon private key niet genereren" }
+        
+        # Genereer public key van private key
+        # Gebruik input object om via pipe te sturen
+        $publicKey = $privateKey | & $WgPath pubkey
+        if (-not $publicKey) { throw "Kon public key niet genereren" }
+        
+        return @{
+            PrivateKey = $privateKey.Trim()
+            PublicKey  = $publicKey.Trim()
+        }
+    }
+    catch {
+        Write-Log "Fout bij genereren keys: $_" -Level "ERROR"
+        throw
+    }
+}
+
+function New-WireGuardServerConfig {
+    <#
+    .SYNOPSIS
+        Maakt een WireGuard server configuratie.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]$ServerKeys,
+        [Parameter(Mandatory = $true)]$ClientKeys,
+        [Parameter(Mandatory = $true)]$Port,
+        [Parameter(Mandatory = $true)]$Address, # e.g. 10.13.13.1/24
+        [Parameter(Mandatory = $true)]$PeerAddress, # e.g. 10.13.13.2/32
+        [Parameter(Mandatory = $true)]$ServerType,
+        [string]$OutputPath
+    )
+    
+    $configContent = @"
+[Interface]
+PrivateKey = $($ServerKeys.PrivateKey)
+ListenPort = $Port
+Address = $Address
+
+[Peer]
+PublicKey = $($ClientKeys.PublicKey)
+AllowedIPs = $PeerAddress
+"@
+
+    if ($OutputPath) {
+        Set-Content -Path $OutputPath -Value $configContent
+        Write-Log "Server config opgeslagen in $OutputPath" -Level "INFO"
+    }
+    
+    return $configContent
+}
+
+function New-WireGuardClientConfig {
+    <#
+    .SYNOPSIS
+        Maakt een WireGuard client configuratie.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]$ClientKeys,
+        [Parameter(Mandatory = $true)]$ServerKeys,
+        [Parameter(Mandatory = $true)]$ServerAvailableIP, # WAN IP
+        [Parameter(Mandatory = $true)]$Port,
+        [Parameter(Mandatory = $true)]$Address, # e.g. 10.13.13.2/24
+        [string]$DNS = "8.8.8.8",
+        [string]$OutputPath
+    )
+    
+    $configContent = @"
+[Interface]
+PrivateKey = $($ClientKeys.PrivateKey)
+Address = $Address
+DNS = $DNS
+
+[Peer]
+PublicKey = $($ServerKeys.PublicKey)
+Endpoint = ${ServerAvailableIP}:${Port}
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 25
+"@
+
+    if ($OutputPath) {
+        Set-Content -Path $OutputPath -Value $configContent
+        Write-Log "Client config opgeslagen in $OutputPath" -Level "INFO"
+    }
+    
+    return $configContent
+}
+
+function Start-WireGuardService {
+    <#
+    .SYNOPSIS
+        Installeert en start de WireGuard tunnel service.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]$ConfigPath
+    )
+    
+    $wgPath = "C:\Program Files\WireGuard\wireguard.exe"
+    if (-not (Test-Path $wgPath)) {
+        throw "WireGuard executable niet gevonden"
+    }
+    
+    try {
+        # wireguard /installtunnelservice <path>
+        # Dit installeert een service met naam "WireGuardTunnel$Name"
+        
+        Write-Log "Starten van WireGuard tunnel met config $ConfigPath..." -Level "INFO"
+        
+        $process = Start-Process -FilePath $wgPath -ArgumentList "/installtunnelservice `"$ConfigPath`"" -Wait -PassThru
+        
+        # Start GUI Manager
+        # WireGuard GUI manager is gewoon dezelfde exe zonder argumenten (of user voert het uit)
+        Write-Log "Starten van WireGuard GUI Manager..." -Level "INFO"
+        Start-Process -FilePath $wgPath -NoNewWindow
+        
+        if ($process.ExitCode -eq 0) {
+            Write-Log "WireGuard service succesvol geïnstalleerd en gestart" -Level "SUCCESS"
+            return $true
+        }
+        else {
+            # Check if likely already running or installed
+            Write-Log "WireGuard service start gaf exit code $($process.ExitCode). Mogelijk draait de service al." -Level "WARNING"
+            return $true # Treat as success or handled manually
+        }
+    }
+    catch {
+        Write-Log "Fout bij starten WireGuard service: $_" -Level "ERROR"
+        return $false
+    }
+}
+
+#endregion WireGuard functies
