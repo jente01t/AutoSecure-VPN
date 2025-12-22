@@ -2585,3 +2585,239 @@ function Start-WireGuardService {
 }
 
 #endregion WireGuard functies
+
+#region Remote WireGuard functies
+
+function Install-RemoteWireGuardServer {
+    <#
+    .SYNOPSIS
+        Installeert WireGuard Server op een remote machine.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]$ComputerName,
+        [Parameter(Mandatory = $true)]$Credential,
+        [Parameter(Mandatory = $true)]$ServerConfigContent, # De inhoud van wg_server.conf
+        [Parameter(Mandatory = $true)]$RemoteConfigPath, # Waar op te slaan (directory of full path?)
+        [int]$Port = 51820
+    )
+    
+    Write-Log "Starten remote WireGuard server installatie op $ComputerName..." -Level "INFO"
+    
+    $session = New-PSSession -ComputerName $ComputerName -Credential $Credential
+    
+    try {
+        # 1. Module kopiëren
+        $remoteTemp = "C:\Temp"
+        Invoke-Command -Session $session -ScriptBlock { if (-not (Test-Path "C:\Temp")) { New-Item -ItemType Directory -Path "C:\Temp" -Force } }
+        
+        $localModule = Join-Path $PSScriptRoot "AutoSecureVPN.psm1" 
+        # Fallback als PSScriptRoot niet is ingesteld (bijv. tijdens test)
+        if (-not $localModule -or -not (Test-Path $localModule)) {
+            $localModule = (Get-Module AutoSecureVPN).Path
+        }
+
+        $remoteModule = Join-Path $remoteTemp "AutoSecureVPN.psm1"
+        Copy-Item -Path $localModule -Destination $remoteModule -ToSession $session -Force
+        
+        # 2. Uitvoeren op remote
+        Invoke-Command -Session $session -ScriptBlock {
+            param($modulePath, $configContent, $configDir, $port)
+            
+            # Module laden
+            $moduleContent = Get-Content -Path $modulePath -Raw
+            Invoke-Expression $moduleContent
+            
+            # Disable file logging remote
+            function global:Write-Log { param($Message, $Level) Write-Verbose "[$Level] $Message" }
+            
+            # Installeren
+            if (-not (Install-WireGuard)) { throw "Remote WireGuard installatie mislukt" }
+            
+            # Firewall
+            if (-not (Set-Firewall -Port $port -Protocol "UDP")) { throw "Remote Firewall configuratie mislukt" }
+            
+            # Config opslaan
+            if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
+            $serverConfigPath = Join-Path $configDir "wg_server.conf"
+            Set-Content -Path $serverConfigPath -Value $configContent
+            
+            # Service starten
+            if (-not (Start-WireGuardService -ConfigPath $serverConfigPath)) { throw "Remote Service start mislukt" }
+            
+        } -ArgumentList $remoteModule, $ServerConfigContent, $RemoteConfigPath
+        
+        Write-Log "Remote WireGuard Server configuratie voltooid voor $ComputerName" -Level "SUCCESS"
+        return $true
+    }
+    catch {
+        Write-Log "Fout tijdens remote WireGuard server installatie: $_" -Level "ERROR"
+        return $false
+    }
+    finally {
+        if ($session) { Remove-PSSession $session }
+    }
+}
+
+function Install-RemoteWireGuardClient {
+    <#
+    .SYNOPSIS
+        Installeert WireGuard Client op een remote machine.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]$ComputerName,
+        [Parameter(Mandatory = $true)]$Credential,
+        [Parameter(Mandatory = $true)]$ClientConfigContent
+    )
+    
+    Write-Log "Starten remote WireGuard client installatie op $ComputerName..." -Level "INFO"
+    
+    $session = New-PSSession -ComputerName $ComputerName -Credential $Credential
+    
+    try {
+        # 1. Module kopiëren
+        $remoteTemp = "C:\Temp"
+        Invoke-Command -Session $session -ScriptBlock { if (-not (Test-Path "C:\Temp")) { New-Item -ItemType Directory -Path "C:\Temp" -Force } }
+        
+        $localModule = Join-Path $PSScriptRoot "AutoSecureVPN.psm1"
+        if (-not $localModule -or -not (Test-Path $localModule)) {
+            $localModule = (Get-Module AutoSecureVPN).Path
+        }
+
+        $remoteModule = Join-Path $remoteTemp "AutoSecureVPN.psm1"
+        Copy-Item -Path $localModule -Destination $remoteModule -ToSession $session -Force
+        
+        # 2. Uitvoeren op remote
+        Invoke-Command -Session $session -ScriptBlock {
+            param($modulePath, $configContent)
+            
+            # Module laden
+            $moduleContent = Get-Content -Path $modulePath -Raw
+            Invoke-Expression $moduleContent
+            
+            function global:Write-Log { param($Message, $Level) Write-Verbose "[$Level] $Message" }
+            
+            # Installeren
+            if (-not (Install-WireGuard)) { throw "Remote WireGuard installatie mislukt" }
+            
+            # Config opslaan
+            $configDir = "C:\WireGuardConfigs"
+            if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
+            $clientConfigPath = Join-Path $configDir "wg-client.conf"
+            Set-Content -Path $clientConfigPath -Value $configContent
+            
+            # Service starten
+            if (-not (Start-WireGuardService -ConfigPath $clientConfigPath)) { throw "Remote Service start mislukt" }
+            
+        } -ArgumentList $remoteModule, $ClientConfigContent
+        
+        Write-Log "Remote WireGuard Client configuratie voltooid voor $ComputerName" -Level "SUCCESS"
+        return $true
+    }
+    catch {
+        Write-Log "Fout tijdens remote WireGuard client installatie: $_" -Level "ERROR"
+        return $false
+    }
+    finally {
+        if ($session) { Remove-PSSession $session }
+    }
+}
+
+function Invoke-BatchRemoteWireGuardClientInstall {
+    <#
+    .SYNOPSIS
+        Installeert WireGuard op meerdere clients en genereert unieke configs.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]$Clients,
+        [Parameter(Mandatory = $true)]$ServerKeys,
+        [Parameter(Mandatory = $true)]$ServerEndpoint, # IP:Port
+        [Parameter(Mandatory = $true)]$ModulePath,
+        [Parameter(Mandatory = $true)]$Settings, # Pass configs
+        [int]$ThrottleLimit = 5
+    )
+    
+    # Basis IP ophalen uit settings of default
+    $baseSubnet = if ($Settings.ContainsKey('wireGuardBaseSubnet')) { $Settings.wireGuardBaseSubnet } else { "10.13.13" }
+    
+    $i = 0
+    $results = $Clients | ForEach-Object -Parallel {
+        $client = $_
+        # Increment IP index (naive approach, works for small batches)
+        # Note: $using:i doesn't work for incrementing in parallel.
+        # We need to pre-calculate IPs or pass them.
+        
+        # Oplossing: we doen setup sequentially voor key generation en pre-calc, dan parallel install.
+        # Maar we moeten keys genereren. Kan lokaal.
+        
+        # Dit blok is parallel, dus logic moet zelfstandig zijn.
+        # ECHTER, Install-WireGuard vereist geen keys, CreateConf wel.
+        # We verplaatsen de logica naar buiten of we doen alles parallel en geven unieke IP mee in input object.
+    }
+    
+    # Pre-process clients: Generate Keys & Configs Locally
+    Write-Log "Voorbereiden WireGuard configuraties voor batch..." -Level "INFO"
+    
+    $preparedClients = @()
+    foreach ($client in $Clients) {
+        $i++
+        $clientIpSuffix = 10 + $i # Start from .11
+        if ($clientIpSuffix -gt 254) { throw "Te veel clients voor subnet" }
+        $clientIp = "$baseSubnet.$clientIpSuffix"
+        
+        Write-Log "Genereren keys voor $($client.Name)..." -Level "INFO"
+        $keys = Initialize-WireGuardKeys -WgPath $Settings.wireGuardInstallPath # Assuming key present or fallback
+        
+        # Generate Client Config Content
+        $configContent = @"
+[Interface]
+PrivateKey = $($keys.PrivateKey)
+Address = $clientIp/24
+DNS = 8.8.8.8
+
+[Peer]
+PublicKey = $($ServerKeys.PublicKey)
+Endpoint = $ServerEndpoint
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 25
+"@
+        
+        $preparedClients += [PSCustomObject]@{
+            Name          = $client.Name
+            IP            = $client.IP # Remote Access IP
+            Username      = $client.Username
+            Password      = $client.Password
+            ConfigContent = $configContent
+            VPNIP         = $clientIp
+            PublicKey     = $keys.PublicKey # Needed to update server?
+        }
+    }
+    
+    # NOTE: Server config must be updated to include these peers!
+    # Dit script update momenteel niet de server config.
+    # We loggen de Public Keys zodat de admin ze kan toevoegen.
+    
+    $serverUpdates = ""
+    foreach ($pc in $preparedClients) {
+        $serverUpdates += "`n[Peer] # User: $($pc.Name)`nPublicKey = $($pc.PublicKey)`nAllowedIPs = $($pc.VPNIP)/32`n"
+    }
+    
+    $serverUpdateFile = "wg_server_additions.txt"
+    Set-Content -Path $serverUpdateFile -Value $serverUpdates
+    Write-Log "BELANGRIJK: Voeg de peers toe aan je server config! Opgeslagen in $serverUpdateFile" -Level "WARNING"
+    
+    # Run Parallel Install
+    $localModulePath = $ModulePath
+    
+    $parallelResults = $preparedClients | ForEach-Object -Parallel {
+        $pc = $_
+        
+        $securePassword = ConvertTo-SecureString $pc.Password -AsPlainText -Force
+        $cred = New-Object System.Management.Automation.PSCredential ($pc.Username, $securePassword)
+        
+        # Load Module
+        Import-Module $using:localModulePath -Force
+        
+        if (Install-RemoteWireGuardClient -ComputerName $pc.IP -Credential $cred -ClientConfigContent $pc.ConfigContent) {
+            "SUCCESS: $($pc.Name) ($($pc.IP))"
+        }
+        else {
