@@ -942,6 +942,100 @@ function Invoke-RemoteServerSetup {
     }
 }
 
+#region Remote WireGuard Functions (Script Level)
+
+
+function Invoke-RemoteWireGuardServerSetup {
+    Write-Log "=== Remote WireGuard Server Setup Gestart ===" -Level "INFO"
+    try {
+        # Admin check
+        if (-not (Test-IsAdmin)) { throw "Moet als Administrator runnen" }
+        
+        # Remote Info - Use settings with fallback check
+        Write-Host "Remote Computer IP/Hostname..." -ForegroundColor Cyan
+        if ($Script:Settings.ContainsKey('serverIP') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.serverIP) -and $Script:Settings.serverIP -ne 'jouw.server.ip.hier') {
+            $computerName = $Script:Settings.serverIP
+        }
+        
+        if (-not $computerName) {
+            # Maybe prompt if missing (though user asked to use variable) - sticking to user request to NOT prompt if should be in variable, 
+            # but usually it's better to fail or prompt if variable is missing/default.
+            # Mirroring OpenVPN buffer: it throws error if invalid
+            throw "Instelling 'serverIP' is leeg of ongeldig in Variable.psd1."
+        }
+        Write-Host "  ✓ Remote computer: $computerName" -ForegroundColor Green
+        
+        $cred = Get-Credential -Message "Admin Credentials voor $computerName"
+        # Configure Local
+        Write-Host "Genereren keys..."
+        $serverKeys = Initialize-WireGuardKeys
+        $clientKeys = Initialize-WireGuardKeys
+        
+        $wgPort = if ($Script:Settings.wireGuardPort) { $Script:Settings.wireGuardPort } else { 51820 }
+        $baseSubnet = if ($Script:Settings.wireGuardBaseSubnet) { $Script:Settings.wireGuardBaseSubnet } else { "10.13.13" }
+        $port = $wgPort
+        
+        if ($Script:Settings.ContainsKey('serverWanIP') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.serverWanIP) -and $Script:Settings.serverWanIP -ne 'jouw.server.wan.ip.hier') {
+            $wanIP = $Script:Settings.serverWanIP
+        }
+
+        if (-not $wanIP) {
+            throw "Instelling 'serverWanIP' is leeg of ongeldig in Variable.psd1."
+        }
+        
+        # Create Configs
+        $serverConfPath = Join-Path $env:TEMP "wg_server_remote.conf"
+        $serverConfContent = New-WireGuardServerConfig -ServerKeys $serverKeys -ClientKeys $clientKeys -Port $port -Address "$baseSubnet.1/24" -PeerAddress "$baseSubnet.2/32" -ServerType "Windows" -OutputPath $serverConfPath
+        
+        $clientConfPath = Join-Path $Script:OutputPath "wg-client-for-remote.conf"
+        New-WireGuardClientConfig -ClientKeys $clientKeys -ServerKeys $serverKeys -ServerAvailableIP $wanIP -Port $port -Address "$baseSubnet.2/24" -OutputPath $clientConfPath
+        
+        # Install Remote
+        if (Install-RemoteWireGuardServer -ComputerName $computerName -Credential $cred -ServerConfigContent $serverConfContent -RemoteConfigPath "C:\WireGuard" -Port $port) {
+            Show-Menu -Mode Success -SuccessTitle "Remote WireGuard Server Setup Voltooid" -ExtraInfo "Client Config lokaal opgeslagen: $clientConfPath"
+        }
+    }
+    catch {
+        Write-Log "Fout: $_" -Level "ERROR"
+        Show-Menu -Mode Error -SuccessTitle "Remote Setup Mislukt" -ExtraMessage $_
+    }
+}
+
+function Invoke-RemoteWireGuardClientSetup {
+    Write-Log "=== Remote WireGuard Client Setup Gestart ===" -Level "INFO"
+    try {
+        if (-not (Test-IsAdmin)) { throw "Moet als Administrator runnen" }
+        
+        # Remote Info
+        Write-Host "Remote Computer IP/Hostname..." -ForegroundColor Cyan
+        if ($Script:Settings.ContainsKey('remoteClientIP') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.remoteClientIP) -and $Script:Settings.remoteClientIP -ne 'jouw.client.ip.hier') {
+            $computerName = $Script:Settings.remoteClientIP
+        }
+        
+        if (-not $computerName) {
+            throw "Instelling 'remoteClientIP' is leeg of ongeldig in Variable.psd1."
+        }
+        Write-Host "  ✓ Remote computer: $computerName" -ForegroundColor Green
+        
+        $cred = Get-Credential -Message "Admin Credentials voor $computerName"
+        
+        $confPath = Read-Host "Pad naar .conf bestand"
+        if (-not (Test-Path $confPath)) { throw "Bestand niet gevonden" }
+        
+        $content = Get-Content $confPath -Raw
+        
+        if (Install-RemoteWireGuardClient -ComputerName $computerName -Credential $cred -ClientConfigContent $content) {
+            Show-Menu -Mode Success -SuccessTitle "Remote WireGuard Client Setup Voltooid"
+        }
+    }
+    catch {
+        Write-Log "Fout: $_" -Level "ERROR"
+        Show-Menu -Mode Error -SuccessTitle "Remote Setup Mislukt" -ExtraMessage $_
+    }
+}
+
+#endregion Remote WireGuard Functions
+
 #endregion Server Setup functies
 
 
