@@ -1022,6 +1022,44 @@ function Invoke-WireGuardServerSetup {
     }
 }
 
+function Invoke-WireGuardClientSetup {
+    <#
+    .SYNOPSIS
+        Voert WireGuard client setup uit.
+    #>
+    Write-Log "=== WireGuard Client Setup Gestart ===" -Level "INFO"
+    
+    try {
+        # Stap 1: Admin check
+        Write-Host "`n[1/3] Controleren administrator rechten..." -ForegroundColor Cyan
+        if (-not (Test-IsAdmin)) { throw "Script moet als Administrator worden uitgevoerd!" }
+        
+        # Stap 2: Installeren
+        Write-Host "`n[2/3] WireGuard installeren..." -ForegroundColor Cyan
+        if (-not (Install-WireGuard)) { throw "WireGuard installatie mislukt" }
+        Write-Host "  ✓ WireGuard geïnstalleerd" -ForegroundColor Green
+        
+        # Stap 3: Config importeren / Service starten
+        Write-Host "`n[3/3] Config importeren..." -ForegroundColor Cyan
+        $configPath = Read-Host "  Sleep het .conf bestand hierheen of typ het pad"
+        $configPath = $configPath.Trim('"') # Remove quotes
+        
+        if (-not (Test-Path $configPath)) { throw "Bestand niet gevonden: $configPath" }
+        
+        if (-not (Start-WireGuardService -ConfigPath $configPath)) { throw "Starten tunnel mislukt" }
+        
+        Write-Host "  ✓ Tunnel gestart" -ForegroundColor Green
+        
+        Show-Menu -Mode Success -SuccessTitle "WireGuard Client Setup Voltooid!" -LogFile $script:LogFile
+        
+    }
+    catch {
+        Write-Log "Fout tijdens WireGuard Client Setup: $_" -Level "ERROR"
+        Show-Menu -Mode Error -SuccessTitle "WireGuard Client Setup Gefaald!" -LogFile $script:LogFile -ExtraMessage $_
+    }
+}
+
+#endregion WireGuard Setup functies
 # Start het script
 Start-VPNSetup
 
