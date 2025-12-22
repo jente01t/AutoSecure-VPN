@@ -535,64 +535,86 @@ function Invoke-BatchRemoteClientSetup {
     
     Write-Log "=== Batch Remote Client Setup Gestart ===" -Level "INFO"
     
+    # Keuze protocol
+    $protocol = Select-VPNProtocol
+    
     try {
         # Stap 1: CSV bestand vragen
-        Write-Progress -Activity "Batch Remote Client Setup" -Status "Stap 1 van 4: CSV bestand selecteren" -PercentComplete 0
         Write-Host "`n[1/4] CSV bestand selecteren..." -ForegroundColor Cyan
         $csvPath = Read-Host "  Voer het pad naar het CSV bestand in (bijv. C:\clients.csv)"
-        if (-not (Test-Path $csvPath)) {
-            throw "CSV bestand niet gevonden: $csvPath"
-        }
-        Write-Host "  ✓ CSV bestand gevonden: $csvPath" -ForegroundColor Green
-        Write-Verbose "CSV bestand pad: $csvPath"
-        Write-Log "CSV bestand gevonden: $csvPath" -Level "INFO"
+        if (-not (Test-Path $csvPath)) { throw "CSV bestand niet gevonden: $csvPath" }
+        Write-Host "  ✓ CSV bestand gevonden" -ForegroundColor Green
         
-        # Stap 2: Client ZIP bestand
-        Write-Progress -Activity "Batch Remote Client Setup" -Status "Stap 2 van 4: Client ZIP bestand selecteren" -PercentComplete 25
-        Write-Host "`n[2/4] Client ZIP bestand selecteren..." -ForegroundColor Cyan
-        # Bepaal standaard client naam (verschillende settings keys mogelijk)
-        $clientDefaultName = if ($Script:Settings.ContainsKey('clientName') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.clientName)) { $Script:Settings.clientName } else { 'client' }
-        $defaultZipPath = Join-Path $Script:OutputPath "vpn-client-$clientDefaultName.zip"
-        if (Test-Path $defaultZipPath) {
-            $zipPath = $defaultZipPath
-            Write-Host "  ✓ Standaard client ZIP bestand gevonden: $zipPath" -ForegroundColor Green
-            Write-Verbose "Standaard client ZIP bestand gebruikt: $zipPath"
-            Write-Log "Standaard client ZIP bestand gevonden: $zipPath" -Level "INFO"
-        } else {
-            Write-Host "  Standaard client ZIP bestand niet gevonden op $defaultZipPath" -ForegroundColor Yellow
-            $zipPath = Read-Host "  Pad naar client ZIP bestand (gegenereerd door server setup)"
-            Write-Verbose "Handmatig ZIP pad ingevoerd: $zipPath"
-        }
-        if (-not (Test-Path $zipPath)) {
-            throw "ZIP bestand niet gevonden: $zipPath"
-        }
-        Write-Host "  ✓ ZIP bestand gevonden: $zipPath" -ForegroundColor Green
-        Write-Log "ZIP bestand gevonden: $zipPath" -Level "INFO"
-        
-        # Stap 3: CSV inlezen
-        Write-Progress -Activity "Batch Remote Client Setup" -Status "Stap 3 van 4: CSV bestand inlezen" -PercentComplete 50
-        Write-Host "`n[3/4] CSV bestand inlezen..." -ForegroundColor Cyan
         $clients = Import-Csv -Path $csvPath
-        Write-Host "  ✓ $($clients.Count) clients gevonden" -ForegroundColor Green
-        Write-Verbose "Clients: $($clients | ConvertTo-Json)"
+        if ($clients.Count -eq 0) { throw "Geen clients gevonden in CSV" }
         Write-Log "$($clients.Count) clients gevonden" -Level "INFO"
         
-        # Stap 4: Parallel uitvoeren
-        Write-Progress -Activity "Batch Remote Client Setup" -Status "Stap 4 van 4: Remote setups uitvoeren" -PercentComplete 75
-        Write-Host "`n[4/4] Remote client setups uitvoeren..." -ForegroundColor Cyan
-        
-        $totalClients = $clients.Count
-        # Adaptieve ThrottleLimit gebaseerd op systeemresources
-        $cpuCores = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
-        $throttleLimit = [math]::Max(1, $cpuCores - 1)  # Gebruik max aantal cores minus 1, minimaal 1
+        # Stap 2: Protocol specifieke input
+        if ($protocol -eq "OpenVPN") {
+            # ... OpenVPN Existing Logic ...
+            Write-Host "`n[2/4] Client ZIP bestand selecteren..." -ForegroundColor Cyan
+            $clientDefaultName = if ($Script:Settings.ContainsKey('clientName')) { $Script:Settings.clientName } else { 'client' }
+            $defaultZipPath = Join-Path $Script:OutputPath "vpn-client-$clientDefaultName.zip"
+             
+            if (Test-Path $defaultZipPath) {
+                Write-Host "  Standaard gevonden: $defaultZipPath"
+                if ((Read-Host "  Gebruiken? (J/N)") -match "^[Jj]") { $zipPath = $defaultZipPath }
+            }
+             
+            if (-not $zipPath) { $zipPath = Read-Host "  Pad naar client ZIP bestand" }
+            if (-not (Test-Path $zipPath)) { throw "ZIP bestand niet gevonden" }
+             
+            # Execute Batch OpenVPN
+            Write-Host "`n[3/4] Starten Batch OpenVPN Setup..." -ForegroundColor Cyan
+            $cpuCores = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
+            $throttleLimit = [math]::Max(1, $cpuCores - 1)
+             
+            $results = Invoke-BatchRemoteClientInstall -Clients $clients -ZipPath $zipPath -ModulePath $ModulePath -Settings $Script:Settings -BasePath $Script:BasePath -ThrottleLimit $throttleLimit
+             
+        }
+        elseif ($protocol -eq "WireGuard") {
+            # WireGuard Logic
+            Write-Host "`n[2/4] WireGuard Server gegevens..." -ForegroundColor Cyan
+            
+            # Probeer gegevens uit een bestaande client config te halen (lokaal)
+            $wgClientConfigMatch = Get-ChildItem -Path $Script:OutputPath -Filter "wg-client*.conf" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            
+            $serverEndpoint = $null
+            $serverPubKey = $null
+            
+            if ($wgClientConfigMatch) {
+                Write-Host "  Found local config: $($wgClientConfigMatch.Name)" -ForegroundColor Gray
+                $content = Get-Content $wgClientConfigMatch.FullName -Raw
+                
+                # Regex to extract Endpoint and PublicKey from [Peer] section
+                if ($content -match 'Endpoint\s*=\s*(.*)') { $serverEndpoint = $matches[1].Trim() }
+                if ($content -match 'PublicKey\s*=\s*(.*)') { $serverPubKey = $matches[1].Trim() }
+            }
+            
+            if (-not $serverEndpoint -or -not $serverPubKey) {
+                Write-Host "  Kon server gegevens niet automatisch vinden." -ForegroundColor Yellow
+                if (-not $serverEndpoint) { $serverEndpoint = Read-Host "  Server Endpoint (Publiek IP:Poort, bijv. 1.2.3.4:51820)" }
+                if (-not $serverPubKey) { $serverPubKey = Read-Host "  Server Public Key" }
+            }
+            else {
+                Write-Host "  ✓ Server gegevens geladen uit $($wgClientConfigMatch.Name)" -ForegroundColor Green
+                Write-Host "    Endpoint: $serverEndpoint" -ForegroundColor Gray
+                Write-Host "    Public Key: $serverPubKey" -ForegroundColor Gray
+            }
+             
+            if (-not $serverEndpoint -or -not $serverPubKey) { throw "Server gegevens verplicht" }
+             
+            $serverKeys = @{ PublicKey = $serverPubKey }
+             
+            # Execute Batch WireGuard
+            Write-Host "`n[3/4] Starten Batch WireGuard Setup..." -ForegroundColor Cyan
+             
+            # Module path fix
+            $modPath = Join-Path $PSScriptRoot "../module/AutoSecureVPN.psm1"
+            
+            $results = Invoke-BatchRemoteWireGuardClientInstall -Clients $clients -ServerKeys $serverKeys -ServerEndpoint $serverEndpoint -ModulePath $modPath -Settings $Script:Settings
+        }
 
-        Write-Host "  Systeem heeft $cpuCores CPU cores, ThrottleLimit ingesteld op $throttleLimit" -ForegroundColor Cyan
-
-        # Call module function that performs the parallel remote installs
-        $results = Invoke-BatchRemoteClientInstall -Clients $clients -ZipPath $zipPath -ModulePath $ModulePath -Settings $Script:Settings -BasePath $Script:BasePath -ThrottleLimit $throttleLimit
-
-        Write-Progress -Activity "Batch Remote Client Setup" -Completed
-        
         # Resultaten tonen
         Write-Host "`nResultaten:" -ForegroundColor Yellow
         $successCount = 0
