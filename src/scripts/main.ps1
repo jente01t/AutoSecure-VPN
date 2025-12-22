@@ -947,6 +947,81 @@ function Invoke-RemoteServerSetup {
 
 
 
+
+#region WireGuard Setup functies
+
+########################################################################################################################
+# WireGuard Setup functies
+########################################################################################################################
+
+function Invoke-WireGuardServerSetup {
+    <#
+    .SYNOPSIS
+        Voert volledige WireGuard server setup uit.
+    #>
+    Write-Log "=== WireGuard Server Setup Gestart ===" -Level "INFO"
+    
+    try {
+        # Stap 1: Admin check
+        Write-Host "`n[1/6] Controleren administrator rechten..." -ForegroundColor Cyan
+        if (-not (Test-IsAdmin)) { throw "Script moet als Administrator worden uitgevoerd!" }
+        Write-Host "  ✓ Administrator rechten bevestigd" -ForegroundColor Green
+        
+        # Stap 2: Installeren
+        Write-Host "`n[2/6] WireGuard installeren..." -ForegroundColor Cyan
+        if (-not (Install-WireGuard)) { throw "WireGuard installatie mislukt" }
+        Write-Host "  ✓ WireGuard geïnstalleerd" -ForegroundColor Green
+        
+        # Stap 3: Firewall
+        $wgPort = if ($Script:Settings.wireGuardPort) { $Script:Settings.wireGuardPort } else { 51820 }
+        $baseSubnet = if ($Script:Settings.wireGuardBaseSubnet) { $Script:Settings.wireGuardBaseSubnet } else { "10.13.13" }
+
+        Write-Host "`n[3/6] Firewall configureren (UDP $wgPort)..." -ForegroundColor Cyan
+        if (-not (Set-Firewall -Port $wgPort -Protocol "UDP")) { throw "Firewall configuratie mislukt" }
+        Write-Host "  ✓ Firewall geconfigureerd" -ForegroundColor Green
+        
+        # Stap 4: Parameters en Keys
+        Write-Host "`n[4/6] Configuratie en Keys genereren..." -ForegroundColor Cyan
+        $serverWanIP = $Script:Settings.serverWanIP
+        if (-not $serverWanIP -or $serverWanIP -eq "jouw.server.wan.ip.hier") {
+            $serverWanIP = Read-Host "  Geef publieke IP of DNS van deze server op"
+        }
+        
+        $serverKeys = Initialize-WireGuardKeys
+        $clientKeys = Initialize-WireGuardKeys
+        Write-Host "  ✓ Keys gegenereerd" -ForegroundColor Green
+        
+        # Stap 5: Configuraties maken
+        Write-Host "`n[5/6] Configuraties aanmaken..." -ForegroundColor Cyan
+        
+        # Server config
+        $wgConfigDir = "C:\Program Files\WireGuard\Data\Configurations" 
+        if (-not (Test-Path $Script:ConfigPath)) { New-Item -ItemType Directory -Path $Script:ConfigPath -Force | Out-Null }
+        $serverConfigPath = Join-Path $Script:ConfigPath "wg_server.conf"
+        
+        New-WireGuardServerConfig -ServerKeys $serverKeys -ClientKeys $clientKeys -Port $wgPort -Address "$baseSubnet.1/24" -PeerAddress "$baseSubnet.2/32" -ServerType "Windows" -OutputPath $serverConfigPath | Out-Null
+        
+        # Client config
+        if (-not (Test-Path $Script:OutputPath)) { New-Item -ItemType Directory -Path $Script:OutputPath -Force | Out-Null }
+        $clientConfigPath = Join-Path $Script:OutputPath "wg-client.conf"
+        New-WireGuardClientConfig -ClientKeys $clientKeys -ServerKeys $serverKeys -ServerAvailableIP $serverWanIP -Port $wgPort -Address "$baseSubnet.2/24" -OutputPath $clientConfigPath | Out-Null
+        
+        Write-Host "  ✓ Configuraties aangemaakt" -ForegroundColor Green
+
+        # Stap 6: Service starten
+        Write-Host "`n[6/6] WireGuard Service starten..." -ForegroundColor Cyan
+        if (-not (Start-WireGuardService -ConfigPath $serverConfigPath)) { throw "Starten service mislukt" }
+        Write-Host "  ✓ Service gestart" -ForegroundColor Green
+        
+        Show-Menu -Mode Success -SuccessTitle "WireGuard Server Setup Voltooid!" -LogFile $script:LogFile -ExtraInfo "Client config is opgeslagen als: $clientConfigPath" -ExtraMessage "Kopieer dit bestand naar de client en importeer het in WireGuard."
+        
+    }
+    catch {
+        Write-Log "Fout tijdens WireGuard Setup: $($_.Exception.Message)" -Level "ERROR"
+        Show-Menu -Mode Error -SuccessTitle "WireGuard Setup Gefaald!" -LogFile $script:LogFile -ExtraMessage $_
+    }
+}
+
 # Start het script
 Start-VPNSetup
 
