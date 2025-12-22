@@ -134,12 +134,26 @@ function Select-ServerMode {
         1 {
             Write-Host "`n[*] Lokale Server Setup geselecteerd..." -ForegroundColor Cyan
             Write-Log "Lokale Server Setup geselecteerd" -Level "INFO"
-            Invoke-ServerSetup
+            
+            $protocol = Select-VPNProtocol
+            if ($protocol -eq "OpenVPN") {
+                Invoke-OpenVPNServerSetup
+            }
+            elseif ($protocol -eq "WireGuard") {
+                Invoke-WireGuardServerSetup
+            }
         }
         2 {
             Write-Host "`n[*] Remote Server Setup geselecteerd..." -ForegroundColor Cyan
             Write-Log "Remote Server Setup geselecteerd" -Level "INFO"
-            Invoke-RemoteServerSetup
+            
+            $protocol = Select-VPNProtocol
+            if ($protocol -eq "OpenVPN") {
+                Invoke-RemoteOpenVPNServerSetup
+            }
+            elseif ($protocol -eq "WireGuard") {
+                Invoke-RemoteWireGuardServerSetup
+            }
         }
         3 {
             Write-Host "`n[*] Terug naar hoofdmenu..." -ForegroundColor Yellow
@@ -172,12 +186,26 @@ function Select-ClientMode {
         1 {
             Write-Host "`n[*] Lokale Client Setup geselecteerd..." -ForegroundColor Cyan
             Write-Log "Lokale Client Setup geselecteerd" -Level "INFO"
-            Invoke-ClientSetup
+            
+            $protocol = Select-VPNProtocol
+            if ($protocol -eq "OpenVPN") {
+                Invoke-OpenVPNClientSetup
+            }
+            elseif ($protocol -eq "WireGuard") {
+                Invoke-WireGuardClientSetup
+            }
         }
         2 {
             Write-Host "`n[*] Remote Client Setup geselecteerd..." -ForegroundColor Cyan
             Write-Log "Remote Client Setup geselecteerd" -Level "INFO"
-            Invoke-RemoteClientSetup
+             
+            $protocol = Select-VPNProtocol
+            if ($protocol -eq "OpenVPN") {
+                Invoke-RemoteOpenVPNClientSetup
+            }
+            elseif ($protocol -eq "WireGuard") {
+                Invoke-RemoteWireGuardClientSetup
+            }
         }
         3 {
             Write-Host "`n[*] Batch Remote Client Setup geselecteerd..." -ForegroundColor Cyan
@@ -194,6 +222,20 @@ function Select-ClientMode {
             Start-Sleep -Seconds 2
             Select-ClientMode
         }
+    }
+}
+
+
+function Select-VPNProtocol {
+    <#
+    .SYNOPSIS
+        Vraagt de gebruiker om een VPN protocol te kiezen.
+    #>
+    $choice = Show-Menu -Mode Menu -Title "Kies VPN Protocol" -Options @("OpenVPN", "WireGuard (Experimental)") -HeaderColor Magenta -OptionColor White -Prompt "Kies protocol (1-2)"
+    
+    switch ($choice) {
+        1 { return "OpenVPN" }
+        2 { return "WireGuard" }
     }
 }
 
