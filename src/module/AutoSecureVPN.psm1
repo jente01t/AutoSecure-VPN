@@ -71,21 +71,21 @@ function Show-Menu {
         Deze functie gebruikt Write-Host voor console output en Read-Host voor input.
     #>
     param(
-        [Parameter(Mandatory=$true, Position=0)][ValidateSet('Menu','Success','Error')][string]$Mode,
-        [Parameter(Mandatory=$false, Position=1)][string]$Title,
-        [Parameter(Mandatory=$false, Position=2)][string[]]$Options,
-        [Parameter(Mandatory=$false, Position=3)][string]$SuccessTitle,
-        [Parameter(Mandatory=$false, Position=4)][string]$LogFile,
-        [Parameter(Mandatory=$false, Position=5)][string]$ExtraMessage,
-        [Parameter(Mandatory=$false, Position=6)][string]$ComputerName,
-        [Parameter(Mandatory=$false, Position=7)][string]$ExtraInfo,
-        [Parameter(Position=8)][ConsoleColor]$HeaderColor = 'Cyan',
-        [Parameter(Position=9)][ConsoleColor]$OptionColor = 'White',
-        [Parameter(Position=10)][ConsoleColor]$FooterColor = 'Cyan',
-        [Parameter(Position=11)][string]$SeparatorChar = '=',
-        [Parameter(Position=12)][switch]$NoPrompt,
-        [Parameter(Position=13)][string]$Prompt = 'Keuze: '
-        ,[Parameter(Position=14)][string]$ErrorMessage
+        [Parameter(Mandatory = $true, Position = 0)][ValidateSet('Menu', 'Success', 'Error')][string]$Mode,
+        [Parameter(Mandatory = $false, Position = 1)][string]$Title,
+        [Parameter(Mandatory = $false, Position = 2)][string[]]$Options,
+        [Parameter(Mandatory = $false, Position = 3)][string]$SuccessTitle,
+        [Parameter(Mandatory = $false, Position = 4)][string]$LogFile,
+        [Parameter(Mandatory = $false, Position = 5)][string]$ExtraMessage,
+        [Parameter(Mandatory = $false, Position = 6)][string]$ComputerName,
+        [Parameter(Mandatory = $false, Position = 7)][string]$ExtraInfo,
+        [Parameter(Position = 8)][ConsoleColor]$HeaderColor = 'Cyan',
+        [Parameter(Position = 9)][ConsoleColor]$OptionColor = 'White',
+        [Parameter(Position = 10)][ConsoleColor]$FooterColor = 'Cyan',
+        [Parameter(Position = 11)][string]$SeparatorChar = '=',
+        [Parameter(Position = 12)][switch]$NoPrompt,
+        [Parameter(Position = 13)][string]$Prompt = 'Keuze: '
+        , [Parameter(Position = 14)][string]$ErrorMessage
     )
 
     # Afhankelijk van de Mode, toon een menu, succesbericht of foutbericht
@@ -168,7 +168,8 @@ function Show-Menu {
                 $msg = $err.Exception.Message
                 if ($err.ScriptStackTrace) { $msg += "`n$($err.ScriptStackTrace)" }
                 $displayError = $msg
-            } catch { $displayError = $null }
+            }
+            catch { $displayError = $null }
         }
 
         # Toon de foutdetails indien beschikbaar
@@ -231,8 +232,8 @@ function Wait-Input {
     .NOTES
         Deze functie gebruikt Read-Host om te wachten op input.
     #>
-	param([Parameter(Position=0)][string]$Message = 'Druk Enter om door te gaan...')
-	Read-Host -Prompt $Message | Out-Null
+    param([Parameter(Position = 0)][string]$Message = 'Druk Enter om door te gaan...')
+    Read-Host -Prompt $Message | Out-Null
 }
 
 #endregion Menu en UI functies
@@ -270,7 +271,8 @@ if ($PSScriptRoot -and -not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
 # Set BasePath only if PSScriptRoot is available
 if ($PSScriptRoot -and -not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
     $Script:BasePath = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-} else {
+}
+else {
     # Fallback for remote execution via Invoke-Expression
     $Script:BasePath = "C:\Temp"
 }
@@ -301,8 +303,8 @@ function Set-ModuleSettings {
         Deze functie wijzigt script-scoped variabelen.
     #>
     param(
-        [Parameter(Mandatory=$true, Position=0)][hashtable]$Settings,
-        [Parameter(Mandatory=$true, Position=1)][string]$BasePath
+        [Parameter(Mandatory = $true, Position = 0)][hashtable]$Settings,
+        [Parameter(Mandatory = $true, Position = 1)][string]$BasePath
     )
     $Script:Settings = $Settings
     $Script:BasePath = $BasePath
@@ -363,9 +365,9 @@ function Write-Log {
         Deze functie gebruikt Add-Content voor bestand output en Write-Verbose voor console.
     #>
     param(
-        [Parameter(Mandatory=$true, Position=0)][string]$Message,
-        [Parameter(Position=1)][string]$Level = "INFO",
-        [Parameter(Position=2)][string]$LogFile = $null
+        [Parameter(Mandatory = $true, Position = 0)][string]$Message,
+        [Parameter(Position = 1)][string]$Level = "INFO",
+        [Parameter(Position = 2)][string]$LogFile = $null
     )
     
     # Stel standaard logpad in indien niet opgegeven
@@ -430,7 +432,7 @@ function Install-OpenVPN {
     Referentie: Gebaseerd op OpenVPN MSI installatieproces (OpenVPN Community Downloads: https://swupdate.openvpn.org/community/releases/), Invoke-WebRequest voor download (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-webrequest), en Start-Process voor MSI installatie (https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/start-process).
     #>
     param(
-        [Parameter(Position=0)][string]$openVpnUrl #validaties urls 
+        [Parameter(Position = 0)][string]$openVpnUrl #validaties urls 
     )
     
     if (-not $openVpnUrl) {
@@ -438,7 +440,8 @@ function Install-OpenVPN {
             try {
                 $latest = Invoke-RestMethod -Uri 'https://api.github.com/repos/OpenVPN/openvpn/releases/latest'
                 $latest.tag_name -replace '^v', ''
-            } catch {
+            }
+            catch {
                 Write-Log "2.6.15 gebuikt als fallback bij ophalen van laatste OpenVPN versie: $_" -Level "WARNING"
                 '2.6.15'  #fllback
             }
@@ -470,7 +473,8 @@ function Install-OpenVPN {
         if ($process.ExitCode -eq 0) {
             Write-Log "OpenVPN succesvol geïnstalleerd" -Level "SUCCESS"
             return $true
-        } else {
+        }
+        else {
             Write-Log "OpenVPN installatie mislukt met exit code $($process.ExitCode)" -Level "ERROR"
             return $false
         }
@@ -519,8 +523,8 @@ function Set-Firewall {
     Referentie: Gebaseerd op New-NetFirewallRule cmdlet (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/netsecurity/new-netfirewallrule), en Get-NetFirewallRule voor controle (https://docs.microsoft.com/en-us/powershell/module/netsecurity/get-netfirewallrule).
     #>
     param(
-        [Parameter(Position=0)][int]$Port,
-        [Parameter(Position=1)][string]$Protocol
+        [Parameter(Position = 0)][int]$Port,
+        [Parameter(Position = 1)][string]$Protocol
     )
     
     # Set defaults if not provided
@@ -554,12 +558,12 @@ function Set-Firewall {
         }
         
         New-NetFirewallRule -Name $ruleName `
-                           -DisplayName "OpenVPN $Protocol $Port" `
-                           -Direction Inbound `
-                           -Protocol $Protocol `
-                           -LocalPort $Port `
-                           -Action Allow `
-                           -Profile Any
+            -DisplayName "OpenVPN $Protocol $Port" `
+            -Direction Inbound `
+            -Protocol $Protocol `
+            -LocalPort $Port `
+            -Action Allow `
+            -Profile Any
         
         Write-Log "Firewall regel toegevoegd: $ruleName" -Level "SUCCESS"
         return $true
@@ -615,12 +619,12 @@ function Get-ServerConfiguration {
     Referentie: IP adres validatie gebaseerd op regex van Stack Overflow (https://stackoverflow.com/questions/5284147/validating-ipv4-addresses-with-regexp)
     #>
     param(
-        [Parameter(Position=0)][ValidatePattern('^[a-zA-Z0-9_-]{1,63}$')][string]$ServerName = $Script:Settings.serverName,
-        [Parameter(Position=1)][string]$serverWanIP = $Script:Settings.serverWanIP,
-        [Parameter(Position=2)][string]$LANSubnet = $Script:Settings.lanSubnet,
-        [Parameter(Position=3)][string]$LANMask = $Script:Settings.lanMask,
-        [Parameter(Position=4)][switch]$NoPass = $Script:Settings.noPass,
-        [Parameter(Position=5)][ValidateLength(8,128)][string]$Password
+        [Parameter(Position = 0)][ValidatePattern('^[a-zA-Z0-9_-]{1,63}$')][string]$ServerName = $Script:Settings.serverName,
+        [Parameter(Position = 1)][string]$serverWanIP = $Script:Settings.serverWanIP,
+        [Parameter(Position = 2)][string]$LANSubnet = $Script:Settings.lanSubnet,
+        [Parameter(Position = 3)][string]$LANMask = $Script:Settings.lanMask,
+        [Parameter(Position = 4)][switch]$NoPass = $Script:Settings.noPass,
+        [Parameter(Position = 5)][ValidateLength(8, 128)][string]$Password
     )
     
     $config = @{}
@@ -638,7 +642,8 @@ function Get-ServerConfiguration {
         throw "Server Wan IP niet ingesteld in Variable.psd1. Stel serverWanIP in op een geldige WAN IP of DDNS."
     }
     # Valideer ServerIP: moet IP adres of hostname zijn
-    if ($inputServerIP -notmatch '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$' -and $inputServerIP -notmatch '^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$') { # https://stackoverflow.com/questions/5284147/validating-ipv4-addresses-with-regexp 
+    if ($inputServerIP -notmatch '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$' -and $inputServerIP -notmatch '^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$') {
+        # https://stackoverflow.com/questions/5284147/validating-ipv4-addresses-with-regexp 
         throw "serverWanIP '$inputServerIP' is geen geldig IP adres of hostname."
     }
     $config.ServerIP = $inputServerIP
@@ -671,18 +676,21 @@ function Get-ServerConfiguration {
     if (-not $config.NoPass) {
         if ($Password) {
             $config.Password = $Password
-        } else {
+        }
+        else {
             while ($true) {
                 $pwd = Read-Host "Voer wachtwoord in voor certificaten (minimaal 8 karakters)"
                 if ($pwd.Length -ge 8) {
                     $config.Password = $pwd
                     break
-                } else {
+                }
+                else {
                     Write-Log "Wachtwoord moet minimaal 8 karakters lang zijn." -Level "ERROR"
                 }
             }
         }
-    } else {
+    }
+    else {
         # Explicitly set Password to null when noPass is true
         $config.Password = $null
     }
@@ -722,7 +730,7 @@ function Initialize-EasyRSA {
     Referentie: Gebaseerd op EasyRSA installatieproces (EasyRSA GitHub: https://github.com/OpenVPN/easy-rsa), Invoke-WebRequest voor download (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-webrequest), en System.IO.Compression.ZipFile voor extractie (Microsoft .NET Framework Documentatie: https://docs.microsoft.com/en-us/dotnet/api/system.io.compression.zipfile).
     #>
     param(
-        [Parameter(Position=0)][string]$EasyRSAPath = $Script:Settings.easyRSAPath
+        [Parameter(Position = 0)][string]$EasyRSAPath = $Script:Settings.easyRSAPath
     )
     
     if (Test-Path $EasyRSAPath) {
@@ -736,7 +744,8 @@ function Initialize-EasyRSA {
             try {
                 $latest = Invoke-RestMethod -Uri 'https://api.github.com/repos/OpenVPN/easy-rsa/releases/latest'
                 $latest.tag_name -replace '^v', ''
-            } catch {
+            }
+            catch {
                 Write-Log "3.2.4 gebuikt als fallback bij ophalen van laatste EasyRSA versie: $_" -Level "WARNING"
                 '3.2.4'  # fallback
             }
@@ -801,9 +810,9 @@ function Initialize-Certificates {
     Referentie: Gebaseerd op EasyRSA commands voor certificaatgeneratie (EasyRSA Documentatie: https://github.com/OpenVPN/easy-rsa), zoals init-pki, build-ca, gen-req, sign-req, gen-dh, gen-crl. 
     #>
     param (
-        [Parameter(Position=0)][ValidatePattern('^[a-zA-Z0-9_-]{1,63}$')][string]$ServerName = $Script:Settings.servername,
-        [Parameter(Position=1)][string]$Password = $null,
-        [Parameter(Position=2)][string]$EasyRSAPath = (Join-Path $Script:BasePath $Script:Settings.certPath)
+        [Parameter(Position = 0)][ValidatePattern('^[a-zA-Z0-9_-]{1,63}$')][string]$ServerName = $Script:Settings.servername,
+        [Parameter(Position = 1)][string]$Password = $null,
+        [Parameter(Position = 2)][string]$EasyRSAPath = (Join-Path $Script:BasePath $Script:Settings.certPath)
     )
     
     # Validate password if provided
@@ -820,7 +829,7 @@ function Initialize-Certificates {
         $easyrsa = Join-Path $EasyRSAPath "easyrsa"
 
         # Prepare Unix-style paths for bash (do not use them for Set-Content)
-        $drive = $EasyRSAPath.Substring(0,1).ToLower()
+        $drive = $EasyRSAPath.Substring(0, 1).ToLower()
         $unixEasyRSAPath = '/' + $drive + $EasyRSAPath.Substring(2) -replace '\\', '/'
         $env:EASYRSA = $unixEasyRSAPath
 
@@ -842,7 +851,8 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
 
         if (Test-Path $varsFileWin) {
             Write-Log "vars file succesvol geschreven naar $varsFileWin" -Level "INFO"
-        } else {
+        }
+        else {
             Write-Log "vars file kon niet worden geschreven naar $varsFileWin" -Level "ERROR"
         }
 
@@ -856,7 +866,8 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
 
         if (Test-Path "vars") {
             Write-Log "vars file succesvol geschreven naar $(Join-Path $EasyRSAPath 'vars')" -Level "INFO"
-        } else {
+        }
+        else {
             Write-Log "vars file kon niet worden geschreven" -Level "ERROR"
         }
 
@@ -909,7 +920,8 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
         # EASYRSA_BATCH=1 handles confirmation prompts, no need for echo 'yes' |
         if ($Password) {
             $buildCaCmd = "$bashPathSetup ./easyrsa build-ca"
-        } else {
+        }
+        else {
             $buildCaCmd = "$bashPathSetup ./easyrsa build-ca nopass"
         }
         Write-Verbose "Command: $sh -c `"$buildCaCmd`""
@@ -927,7 +939,8 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
         Write-Verbose "Starting gen-req for $ServerName..."
         if ($Password) {
             $genReqCmd = "$bashPathSetup ./easyrsa gen-req $ServerName"
-        } else {
+        }
+        else {
             $genReqCmd = "$bashPathSetup ./easyrsa gen-req $ServerName nopass"
         }
         Write-Verbose "Command: $sh -c `"$genReqCmd`""
@@ -1045,9 +1058,9 @@ function New-ServerConfig {
     Referentie: Gebaseerd op OpenVPN server configuratie syntax (OpenVPN Reference Manual: https://openvpn.net/community-resources/reference-manual-for-openvpn-2-6/), inclusief opties zoals port, proto, dev, ca, cert, key, dh, server, push, etc. Gebruikt Set-Content voor bestand schrijven (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/set-content).
     #>
     param(
-        [Parameter(Mandatory=$true, Position=0)][hashtable]$Config,
-        [Parameter(Position=1)][string]$EasyRSAPath,
-        [Parameter(Position=2)][string]$ConfigPath
+        [Parameter(Mandatory = $true, Position = 0)][hashtable]$Config,
+        [Parameter(Position = 1)][string]$EasyRSAPath,
+        [Parameter(Position = 2)][string]$ConfigPath
     )
     
     # Set defaults from settings if not provided
@@ -1070,10 +1083,10 @@ function New-ServerConfig {
     
     $pkiPath = Join-Path $EasyRSAPath "pki"
 
-    $caPath   = Join-Path $pkiPath 'ca.crt'
+    $caPath = Join-Path $pkiPath 'ca.crt'
     $certPath = Join-Path $pkiPath (Join-Path 'issued' "$($Config.ServerName).crt")
-    $keyPath  = Join-Path $pkiPath (Join-Path 'private' "$($Config.ServerName).key")
-    $dhPath   = Join-Path $pkiPath 'dh.pem'
+    $keyPath = Join-Path $pkiPath (Join-Path 'private' "$($Config.ServerName).key")
+    $dhPath = Join-Path $pkiPath 'dh.pem'
 
     # Escape backslashes for OpenVPN config
     $caPath = $caPath -replace '\\', '\\'
@@ -1158,10 +1171,10 @@ function Install-RemoteServer {
     Referentie: Gebaseerd op PowerShell Remoting met New-PSSession, Invoke-Command, en Copy-Item (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/new-pssession, https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/invoke-command, https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/copy-item).
     #>
     param (
-        [Parameter(Mandatory=$true, Position=0)][ValidatePattern('^[a-zA-Z0-9.-]+$')][string]$ComputerName,
-        [Parameter(Mandatory=$true, Position=1)][PSCredential]$Credential,
-        [Parameter(Mandatory=$true, Position=2)][hashtable]$ServerConfig,
-        [Parameter(Mandatory=$true, Position=3)][string]$LocalEasyRSAPath
+        [Parameter(Mandatory = $true, Position = 0)][ValidatePattern('^[a-zA-Z0-9.-]+$')][string]$ComputerName,
+        [Parameter(Mandatory = $true, Position = 1)][PSCredential]$Credential,
+        [Parameter(Mandatory = $true, Position = 2)][hashtable]$ServerConfig,
+        [Parameter(Mandatory = $true, Position = 3)][string]$LocalEasyRSAPath
     )
 
     Write-Log "Remote server configuratie gestart voor $ComputerName" -Level "INFO"
@@ -1183,9 +1196,11 @@ function Install-RemoteServer {
         if (-not $moduleBase -or [string]::IsNullOrWhiteSpace($moduleBase)) {
             if ($PSScriptRoot -and -not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
                 $moduleBase = $PSScriptRoot
-            } elseif ($Script:BasePath -and -not [string]::IsNullOrWhiteSpace($Script:BasePath)) {
+            }
+            elseif ($Script:BasePath -and -not [string]::IsNullOrWhiteSpace($Script:BasePath)) {
                 $moduleBase = Join-Path $Script:BasePath 'src\module'
-            } else {
+            }
+            else {
                 $moduleBase = (Get-Location).Path
             }
         }
@@ -1195,7 +1210,8 @@ function Install-RemoteServer {
         if (-not $LocalEasyRSAPath -or [string]::IsNullOrWhiteSpace($LocalEasyRSAPath)) {
             if ($Script:Settings -and $Script:Settings.easyRSAPath) {
                 $LocalEasyRSAPath = $Script:Settings.easyRSAPath
-            } else {
+            }
+            else {
                 throw "LocalEasyRSAPath is leeg en er is geen fallback ingesteld in settings. Geef een geldig pad op."
             }
         }
@@ -1245,7 +1261,8 @@ function Install-RemoteServer {
             try {
                 Add-Type -AssemblyName System.IO.Compression.FileSystem
                 [System.IO.Compression.ZipFile]::ExtractToDirectory($remoteEasyRSAZip, $remoteEasyRSA)
-            } catch {
+            }
+            catch {
                 throw "Failed to extract EasyRSA ZIP: $_"
             }
             Remove-Item $remoteEasyRSAZip -Force -ErrorAction SilentlyContinue
@@ -1272,7 +1289,8 @@ function Install-RemoteServer {
                 $moduleContent = Get-Content -Path $modulePath -Raw
                 # Execute the module content in the current scope
                 Invoke-Expression $moduleContent
-            } catch {
+            }
+            catch {
                 throw "Failed to load module: $_"
             }
             
@@ -1360,7 +1378,8 @@ function Install-RemoteServer {
                 } -ArgumentList $Script:Settings, $remoteEasyRSA, $remoteModule
                 Remove-PSSession $rollbackSession
             }
-        } catch {
+        }
+        catch {
             Write-Log "Kon remote rollback niet uitvoeren: $_" -Level "WARNING"
         }
         
@@ -1409,7 +1428,8 @@ function Start-VPNService {
         if ($service.Status -ne "Running") {
             Start-Service -Name "OpenVPNService"
             Write-Log "OpenVPN service gestart" -Level "SUCCESS"
-        } else {
+        }
+        else {
             Write-Log "OpenVPN service was al actief" -Level "INFO"
         }
         
@@ -1457,9 +1477,9 @@ function New-ClientPackage {
     Referentie: Gebaseerd op EasyRSA client certificaat generatie (EasyRSA Documentatie: https://github.com/OpenVPN/easy-rsa), OpenVPN client config syntax (OpenVPN Reference Manual: https://openvpn.net/community-resources/reference-manual-for-openvpn-2-6/), en Compress-Archive voor ZIP creatie (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.archive/compress-archive).
     #>
     param(
-        [Parameter(Mandatory=$true, Position=0)][hashtable]$Config,
-        [Parameter(Position=1)][string]$EasyRSAPath = $Script:Settings.easyRSAPath,
-        [Parameter(Position=2)][string]$OutputPath = $Script:OutputPath
+        [Parameter(Mandatory = $true, Position = 0)][hashtable]$Config,
+        [Parameter(Position = 1)][string]$EasyRSAPath = $Script:Settings.easyRSAPath,
+        [Parameter(Position = 2)][string]$OutputPath = $Script:OutputPath
     )
     
     $pkiPath = Join-Path $EasyRSAPath "pki"
@@ -1485,7 +1505,7 @@ function New-ClientPackage {
         $easyrsa = Join-Path $EasyRSAPath "easyrsa"
         
         # Prepare Unix-style paths for bash
-        $drive = $EasyRSAPath.Substring(0,1).ToLower()
+        $drive = $EasyRSAPath.Substring(0, 1).ToLower()
         # Convert Windows path to Unix-style for bash (C:\... -> C:/...)
         $unixEasyRSAPath = $EasyRSAPath -replace '\\', '/'
         
@@ -1619,12 +1639,14 @@ function Import-ClientConfiguration {
     if (Test-Path $defaultZipPath) {
         $zipFile = $defaultZipPath
         Write-Log "Standaard client ZIP bestand gevonden: $zipFile" -Level "INFO"
-    } else {
+    }
+    else {
         while ($true) {
             $zipFile = Read-Host "Pad naar client ZIP bestand"
             if ($zipFile -match '\.zip$' -and (Test-Path $zipFile)) {
                 break
-            } else {
+            }
+            else {
                 Write-Log "Ongeldig pad of geen ZIP bestand. Probeer opnieuw." -Level "ERROR"
             }
         }
@@ -1658,7 +1680,8 @@ function Import-ClientConfiguration {
             
             Write-Log "Client configuratie geïmporteerd: $($ovpnFile.FullName)" -Level "SUCCESS"
             return $ovpnFile.FullName
-        } else {
+        }
+        else {
             Write-Log "Geen OVPN bestand gevonden in ZIP" -Level "ERROR"
             return $null
         }
@@ -1697,10 +1720,10 @@ function Install-RemoteClient {
     Referentie: Gebaseerd op PowerShell Remoting met New-PSSession, Invoke-Command, Copy-Item (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/new-pssession, https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/invoke-command, https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/copy-item), en System.IO.Compression.ZipFile voor extractie (Microsoft .NET Framework Documentatie: https://docs.microsoft.com/en-us/dotnet/api/system.io.compression.zipfile).
     #>
     param(
-        [Parameter(Mandatory=$true, Position=0)][ValidatePattern('^[a-zA-Z0-9.-]+$')][string]$ComputerName,
-        [Parameter(Mandatory=$true, Position=1)][PSCredential]$Credential,
-        [Parameter(Mandatory=$true, Position=2)][ValidatePattern('\.zip$')][string]$ZipPath,
-        [Parameter(Position=3)][string]$RemoteConfigPath = "C:\Program Files\OpenVPN\config"
+        [Parameter(Mandatory = $true, Position = 0)][ValidatePattern('^[a-zA-Z0-9.-]+$')][string]$ComputerName,
+        [Parameter(Mandatory = $true, Position = 1)][PSCredential]$Credential,
+        [Parameter(Mandatory = $true, Position = 2)][ValidatePattern('\.zip$')][string]$ZipPath,
+        [Parameter(Position = 3)][string]$RemoteConfigPath = "C:\Program Files\OpenVPN\config"
     )
     
     Write-Log "Remote client configuratie gestart voor $ComputerName" -Level "INFO"
@@ -1721,9 +1744,11 @@ function Install-RemoteClient {
         if (-not $moduleBase -or [string]::IsNullOrWhiteSpace($moduleBase)) {
             if ($PSScriptRoot -and -not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
                 $moduleBase = $PSScriptRoot
-            } elseif ($Script:BasePath -and -not [string]::IsNullOrWhiteSpace($Script:BasePath)) {
+            }
+            elseif ($Script:BasePath -and -not [string]::IsNullOrWhiteSpace($Script:BasePath)) {
                 $moduleBase = Join-Path $Script:BasePath 'src\module'
-            } else {
+            }
+            else {
                 $moduleBase = (Get-Location).Path
             }
         }
@@ -1754,7 +1779,8 @@ function Install-RemoteClient {
                 $moduleContent = Get-Content -Path $modulePath -Raw
                 # Execute the module content in the current scope
                 Invoke-Expression $moduleContent
-            } catch {
+            }
+            catch {
                 throw "Failed to load module: $_"
             }
             
@@ -1785,7 +1811,8 @@ function Install-RemoteClient {
                 # Expand client package
                 if (-not (Test-Path $configPath)) {
                     New-Item -ItemType Directory -Path $configPath -Force | Out-Null
-                } else {
+                }
+                else {
                     # Remove existing config files to avoid conflicts
                     Get-ChildItem $configPath | Remove-Item -Force
                 }
@@ -1834,7 +1861,8 @@ function Install-RemoteClient {
                     try {
                         $moduleContent = Get-Content -Path $modulePath -Raw
                         Invoke-Expression $moduleContent
-                    } catch {
+                    }
+                    catch {
                         throw "Failed to load module: $_"
                     }
                     # Disable file logging for remote operations
@@ -1848,7 +1876,8 @@ function Install-RemoteClient {
                 } -ArgumentList $Script:Settings, $remoteModule
                 Remove-PSSession $rollbackSession
             }
-        } catch {
+        }
+        catch {
             Write-Log "Kon remote rollback niet uitvoeren: $_" -Level "WARNING"
         }
         
@@ -1892,11 +1921,11 @@ function Invoke-BatchRemoteClientInstall {
     #>
     
     param(
-        [Parameter(Mandatory=$true, Position=0)] [object[]]$Clients,
-        [Parameter(Mandatory=$true, Position=1)] [string]$ZipPath,
-        [Parameter(Mandatory=$true, Position=2)] [string]$ModulePath,
-        [Parameter(Mandatory=$true, Position=3)] [hashtable]$Settings,
-        [Parameter(Mandatory=$true, Position=4)] [string]$BasePath,
+        [Parameter(Mandatory = $true, Position = 0)] [object[]]$Clients,
+        [Parameter(Mandatory = $true, Position = 1)] [string]$ZipPath,
+        [Parameter(Mandatory = $true, Position = 2)] [string]$ModulePath,
+        [Parameter(Mandatory = $true, Position = 3)] [hashtable]$Settings,
+        [Parameter(Mandatory = $true, Position = 4)] [string]$BasePath,
         [int]$ThrottleLimit = 0
     )
 
@@ -1910,7 +1939,8 @@ function Invoke-BatchRemoteClientInstall {
     if (-not $ThrottleLimit -or $ThrottleLimit -lt 1) {
         try {
             $cpuCores = (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).NumberOfLogicalProcessors
-        } catch {
+        }
+        catch {
             $cpuCores = 2
         }
         $ThrottleLimit = [math]::Max(1, $cpuCores - 1)
@@ -1941,7 +1971,8 @@ function Invoke-BatchRemoteClientInstall {
                 $ovpnPath = Join-Path $configPath "client.ovpn"
                 [void](Start-VPNConnection -ComputerName $ip -Credential $cred -ConfigFile $ovpnPath)
                 "SUCCESS: $name ($ip)" 
-            } else { 
+            }
+            else { 
                 "ERROR: $name ($ip) - Installation failed" 
             }
         }
@@ -1950,7 +1981,7 @@ function Invoke-BatchRemoteClientInstall {
         }
     } -ThrottleLimit $ThrottleLimit
 
-    return ,$results
+    return , $results
 }
 
 
@@ -1989,7 +2020,8 @@ function Test-TAPAdapter {
         if ($tapAdapters) {
             Write-Log "TAP adapter gevonden: $($tapAdapters[0].Name)" -Level "SUCCESS"
             return $true
-        } else {
+        }
+        else {
             Write-Log "Geen TAP adapter gevonden" -Level "WARNING"
             return $false
         }
@@ -2022,9 +2054,9 @@ function Start-VPNConnection {
     Referentie: Gebaseerd op Start-Process voor OpenVPN executable (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/start-process), en Get-Process/Stop-Process voor bestaande processen stoppen (https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/get-process, https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/stop-process).
     #>
     param(
-        [Parameter(Mandatory=$true, Position=0)][ValidatePattern('\.ovpn$')][string]$ConfigFile,
-        [Parameter(Mandatory=$false)][string]$ComputerName,
-        [Parameter(Mandatory=$false)][PSCredential]$Credential
+        [Parameter(Mandatory = $true, Position = 0)][ValidatePattern('\.ovpn$')][string]$ConfigFile,
+        [Parameter(Mandatory = $false)][string]$ComputerName,
+        [Parameter(Mandatory = $false)][PSCredential]$Credential
     )
     
     Write-Log "VPN verbinding starten met config: $ConfigFile $(if ($ComputerName) { "op $ComputerName" })" -Level "INFO"
@@ -2046,7 +2078,7 @@ function Start-VPNConnection {
             # Om dit te omzeilen moet je via een omweg uitbreken naar de interactieve sessie van de ingelogde gebruiker.
 
             #  We maken via PowerShell een taak aan op de remote PC die zegt: "Start OpenVPN GUI zodra ik dit commando geef, maar doe het zichtbaar op het bureaublad van de ingelogde gebruiker."
-             $scriptBlock = {
+            $scriptBlock = {
                 param($openVPNGuiPath, $profileName, $remoteConfigDir)
 
                 # 1. Stop oude processen
@@ -2084,7 +2116,8 @@ function Start-VPNConnection {
             Invoke-Command -Session $session -ScriptBlock $scriptBlock -ArgumentList $Script:Settings.openVPNGuiPath, $profileName, $remoteConfigDir
 
             Remove-PSSession -Session $session
-        } else {
+        }
+        else {
             # Local execution
             $openVPNGuiPath = $Script:Settings.openVPNGuiPath
             if (-not $openVPNGuiPath) {
@@ -2110,7 +2143,7 @@ function Start-VPNConnection {
             
             # Also copy any referenced certs/keys if in the same dir
             $sourceDir = Split-Path $ConfigFile
-            $certs = Get-ChildItem -Path $sourceDir -Include "*.crt","*.key" -File
+            $certs = Get-ChildItem -Path $sourceDir -Include "*.crt", "*.key" -File
             foreach ($cert in $certs) {
                 Copy-Item -Path $cert.FullName -Destination $configDir -Force
             }
@@ -2211,7 +2244,7 @@ function Invoke-Rollback {
         Deze functie probeert fouten te negeren en logt waarschuwingen bij mislukkingen.
     #>
     param(
-        [Parameter(Mandatory=$true, Position=0)]
+        [Parameter(Mandatory = $true, Position = 0)]
         [ValidateSet("Server", "Client")]
         [string]$SetupType
     )
@@ -2229,7 +2262,8 @@ function Invoke-Rollback {
                         Stop-Service -Name "OpenVPNService" -Force
                         Write-Log "OpenVPN service gestopt" -Level "INFO"
                     }
-                } catch {
+                }
+                catch {
                     Write-Log "Kon OpenVPN service niet stoppen: $_" -Level "WARNING"
                 }
 
@@ -2242,7 +2276,8 @@ function Invoke-Rollback {
                         Remove-NetFirewallRule -Name $ruleName
                         Write-Log "Firewall regel '$ruleName' verwijderd" -Level "INFO"
                     }
-                } catch {
+                }
+                catch {
                     Write-Log "Kon firewall regel niet verwijderen: $_" -Level "WARNING"
                 }
 
@@ -2254,7 +2289,8 @@ function Invoke-Rollback {
                         Remove-Item -Path $serverConfigPath -Force
                         Write-Log "Server configuratie bestand verwijderd: $serverConfigPath" -Level "INFO"
                     }
-                } catch {
+                }
+                catch {
                     Write-Log "Kon server configuratie bestand niet verwijderen: $_" -Level "WARNING"
                 }
 
@@ -2266,7 +2302,8 @@ function Invoke-Rollback {
                         Remove-Item -Path $pkiPath -Recurse -Force
                         Write-Log "PKI directory verwijderd: $pkiPath" -Level "INFO"
                     }
-                } catch {
+                }
+                catch {
                     Write-Log "Kon PKI directory niet verwijderen: $_" -Level "WARNING"
                 }
 
@@ -2279,7 +2316,8 @@ function Invoke-Rollback {
                         Remove-Item -Path $zipPath -Force
                         Write-Log "Client package ZIP verwijderd: $zipPath" -Level "INFO"
                     }
-                } catch {
+                }
+                catch {
                     Write-Log "Kon client package ZIP niet verwijderen: $_" -Level "WARNING"
                 }
 
@@ -2294,7 +2332,8 @@ function Invoke-Rollback {
                             Write-Log "EasyRSA directory verwijderd: $easyRSAPath" -Level "INFO"
                         }
                     }
-                } catch {
+                }
+                catch {
                     Write-Log "Kon EasyRSA directory niet verwijderen: $_" -Level "WARNING"
                 }
             }
@@ -2308,7 +2347,8 @@ function Invoke-Rollback {
                         $openvpnProcesses | Stop-Process -Force
                         Write-Log "OpenVPN processen gestopt" -Level "INFO"
                     }
-                } catch {
+                }
+                catch {
                     Write-Log "Kon OpenVPN processen niet stoppen: $_" -Level "WARNING"
                 }
 
@@ -2333,7 +2373,8 @@ function Invoke-Rollback {
                             Write-Log "Key bestand verwijderd: $($file.FullName)" -Level "INFO"
                         }
                     }
-                } catch {
+                }
+                catch {
                     Write-Log "Kon configuratie bestanden niet verwijderen: $_" -Level "WARNING"
                 }
             }
@@ -2821,3 +2862,12 @@ PersistentKeepalive = 25
             "SUCCESS: $($pc.Name) ($($pc.IP))"
         }
         else {
+            "ERROR: $($pc.Name) ($($pc.IP))"
+        }
+        
+    } -ThrottleLimit $ThrottleLimit
+    
+    return $parallelResults
+}
+
+#endregion Remote WireGuard functies

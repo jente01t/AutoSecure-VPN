@@ -18,13 +18,13 @@ param()
 
 # Import module required werken !!!
 try {
-	$ModulePath = Join-Path $PSScriptRoot "../module/AutoSecureVPN.psm1"
-	Import-Module $ModulePath -Force
+    $ModulePath = Join-Path $PSScriptRoot "../module/AutoSecureVPN.psm1"
+    Import-Module $ModulePath -Force
 }
 catch {
-	Write-Host "FOUT: Kan module AutoSecureVPN niet laden. $_" -ForegroundColor Red
-	Read-Host "`nDruk op Enter om af te sluiten"
-	exit 1
+    Write-Host "FOUT: Kan module AutoSecureVPN niet laden. $_" -ForegroundColor Red
+    Read-Host "`nDruk op Enter om af te sluiten"
+    exit 1
 }
 
 # Stel base path in
@@ -249,7 +249,9 @@ function Select-VPNProtocol {
 # Client Setup functies
 ########################################################################################################################
 
-function Invoke-ClientSetup {
+
+
+function Invoke-OpenVPNClientSetup {
     <#
     .SYNOPSIS
         Voert volledige VPN-client setup uit.
@@ -343,7 +345,8 @@ function Invoke-ClientSetup {
                 # Rollback uitvoeren voordat opnieuw proberen
                 Write-Host "`n[*] Rollback uitvoeren om wijzigingen ongedaan te maken..." -ForegroundColor Yellow
                 Invoke-Rollback -SetupType "Client"
-                Invoke-ClientSetup
+                Invoke-Rollback -SetupType "Client"
+                Invoke-OpenVPNClientSetup
             }
             2 {
                 # Rollback uitvoeren voordat terug naar hoofdmenu
@@ -361,7 +364,7 @@ function Invoke-ClientSetup {
     }
 }
 
-function Invoke-RemoteClientSetup {
+function Invoke-RemoteOpenVPNClientSetup {
     <#
     .SYNOPSIS
         Voert remote VPN-client setup uit.
@@ -396,7 +399,8 @@ function Invoke-RemoteClientSetup {
                 $computerName = $Script:Settings.remoteClientIP
                 Write-Verbose "Remote client afkomstig uit settings: $computerName"
             }
-        } catch {
+        }
+        catch {
             Write-Verbose "Fout bij ophalen remoteClientIP uit settings: $_"
         }
 
@@ -413,7 +417,8 @@ function Invoke-RemoteClientSetup {
         Write-Host "`n[3/5] WinRM configuratie controleren..." -ForegroundColor Cyan
         try {
             $trustedHosts = (Get-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client -Name TrustedHosts -ErrorAction Stop).TrustedHosts
-        } catch {
+        }
+        catch {
             $trustedHosts = ""
         }
         if ($trustedHosts -notlike "*$computerName*" -and $trustedHosts -ne "*") {
@@ -424,11 +429,13 @@ function Invoke-RemoteClientSetup {
             Write-Host "  ✓ $computerName toegevoegd aan TrustedHosts en WinRM herstart" -ForegroundColor Green
             Write-Verbose "TrustedHosts bijgewerkt en WinRM herstart"
             Write-Log "$computerName toegevoegd aan TrustedHosts en WinRM herstart" -Level "INFO"
-        } elseif ($trustedHosts -eq "*") {
+        }
+        elseif ($trustedHosts -eq "*") {
             Write-Host "  ✓ TrustedHosts staat op wildcard (*), geen toevoeging nodig" -ForegroundColor Green
             Write-Verbose "TrustedHosts staat op wildcard"
             Write-Log "TrustedHosts staat op wildcard (*)" -Level "INFO"
-        } else {
+        }
+        else {
             Write-Host "  ✓ $computerName staat al in TrustedHosts" -ForegroundColor Green
             Write-Verbose "$computerName staat al in TrustedHosts"
             Write-Log "$computerName staat al in TrustedHosts" -Level "INFO"
@@ -473,7 +480,8 @@ function Invoke-RemoteClientSetup {
             Write-Host "  ✓ Standaard client ZIP bestand gevonden: $zipPath" -ForegroundColor Green
             Write-Verbose "Standaard client ZIP bestand gebruikt: $zipPath"
             Write-Log "Standaard client ZIP bestand gevonden: $zipPath" -Level "INFO"
-        } else {
+        }
+        else {
             Write-Host "  Standaard client ZIP bestand niet gevonden op $defaultZipPath" -ForegroundColor Yellow
             $zipPath = Read-Host "  Pad naar client ZIP bestand (gegenereerd door server setup)"
             Write-Verbose "Handmatig ZIP pad ingevoerd: $zipPath"
@@ -497,8 +505,8 @@ function Invoke-RemoteClientSetup {
         # Remote OpenVPN service starten via GUI
         Write-Progress -Activity "Remote Client Setup" -Status "OpenVPN service op remote machine starten" -PercentComplete 71
         Write-Host "`n[*] OpenVPN service op remote machine starten..." -ForegroundColor Cyan
-            $remoteOvpn = Join-Path $Script:Settings.remoteConfigPath "client.ovpn"
-            if (-not (Start-VPNConnection -ConfigFile $remoteOvpn -ComputerName $computerName -Credential $cred)) {
+        $remoteOvpn = Join-Path $Script:Settings.remoteConfigPath "client.ovpn"
+        if (-not (Start-VPNConnection -ConfigFile $remoteOvpn -ComputerName $computerName -Credential $cred)) {
             throw "Remote OpenVPN service starten mislukt"
         }
         Write-Host " ✓ Remote OpenVPN starten voltooid" -ForegroundColor Green
@@ -514,7 +522,7 @@ function Invoke-RemoteClientSetup {
         Write-Log "Fout tijdens Remote Client Setup: $($_.Exception.Message)" -Level "ERROR"
         $choice = Show-Menu -Mode Error -SuccessTitle "Remote Client Setup Gefaald!" -LogFile $script:LogFile -ExtraMessage "Controleer het logbestand voor details." -Options @("Opnieuw proberen", "Terug naar hoofdmenu", "Afsluiten")
         switch ($choice) {
-            1 { Invoke-RemoteClientSetup }
+            1 { Invoke-RemoteOpenVPNClientSetup }
             2 { Start-VPNSetup }
             3 { exit }
         }
@@ -525,12 +533,6 @@ function Invoke-BatchRemoteClientSetup {
     <#
     .SYNOPSIS
         Voert batch remote VPN-client setup uit voor meerdere computers.
-
-    .DESCRIPTION
-        Deze functie leest een CSV-bestand met computer details en voert remote client setup uit voor elke computer parallel.
-
-    .EXAMPLE
-        Invoke-BatchRemoteClientSetup
     #>
     
     Write-Log "=== Batch Remote Client Setup Gestart ===" -Level "INFO"
@@ -628,25 +630,19 @@ function Invoke-BatchRemoteClientSetup {
             }
         }
         
-        Write-Progress -Activity "Batch Remote Client Setup" -Completed
-        Write-Log "Batch Remote Client Setup voltooid met $successCount van $totalClients succesvolle setups" -Level "INFO"
+        Write-Log "Batch Remote Setup voltooid ($successCount/$($clients.Count) succesvol)" -Level "INFO"
         
-        if ($successCount -eq $totalClients) {
-            Show-Menu -Mode Success -SuccessTitle "Batch Remote Client Setup Succesvol!" -LogFile $script:LogFile
+        if ($successCount -eq $clients.Count) {
+            Show-Menu -Mode Success -SuccessTitle "Batch Setup Succesvol!" -LogFile $script:LogFile
         }
         else {
-            Show-Menu -Mode Error -SuccessTitle "Batch Remote Client Setup Gefaald!" -LogFile $script:LogFile -ExtraMessage "$successCount van $totalClients setups succesvol." -ComputerName "$successCount/$totalClients succesvol"
+            Show-Menu -Mode Error -SuccessTitle "Batch Setup Deels Mislukt" -LogFile $script:LogFile
         }
+
     }
     catch {
-        Write-Progress -Activity "Batch Remote Client Setup" -Completed
-        Write-Log "Fout tijdens Batch Remote Client Setup: $($_.Exception.Message)" -Level "ERROR"
-        $choice = Show-Menu -Mode Error -SuccessTitle "Batch Remote Client Setup Gefaald!" -LogFile $script:LogFile -ExtraMessage "Controleer het logbestand voor details." -Options @("Opnieuw proberen", "Terug naar hoofdmenu", "Afsluiten")
-        switch ($choice) {
-            1 { Invoke-BatchRemoteClientSetup }
-            2 { Start-VPNSetup }
-            3 { exit }
-        }
+        Write-Log "Fout tijdens Batch Setup: $_" -Level "ERROR"
+        Show-Menu -Mode Error -SuccessTitle "Batch Setup Gefaald!" -ExtraMessage $_
     }
 }
 
@@ -658,7 +654,7 @@ function Invoke-BatchRemoteClientSetup {
 # Server Setup functies
 ########################################################################################################################
 
-function Invoke-ServerSetup {
+function Invoke-OpenVPNServerSetup {
     <#
     .SYNOPSIS
         Voert volledige VPN-server setup uit.
@@ -767,7 +763,7 @@ function Invoke-ServerSetup {
                 # Rollback uitvoeren voordat opnieuw proberen
                 Write-Host "`n[*] Rollback uitvoeren om wijzigingen ongedaan te maken..." -ForegroundColor Yellow
                 Invoke-Rollback -SetupType "Server"
-                Invoke-ServerSetup
+                Invoke-OpenVPNServerSetup
             }
             2 {
                 # Rollback uitvoeren voordat terug naar hoofdmenu
@@ -785,7 +781,7 @@ function Invoke-ServerSetup {
     }
 }
 
-function Invoke-RemoteServerSetup {
+function Invoke-RemoteOpenVPNServerSetup {
     <#
     .SYNOPSIS
         Voert remote VPN-server setup uit.
@@ -818,7 +814,8 @@ function Invoke-RemoteServerSetup {
             Write-Host "  ✓ OpenVPN lokaal geïnstalleerd" -ForegroundColor Green
             Write-Verbose "OpenVPN lokaal geïnstalleerd voor certificaat generatie"
             Write-Log "OpenVPN lokaal geïnstalleerd" -Level "INFO"
-        } else {
+        }
+        else {
             Write-Verbose "OpenVPN al lokaal geïnstalleerd"
         }
         
@@ -849,7 +846,8 @@ function Invoke-RemoteServerSetup {
         Write-Host "`n[3/7] WinRM configuratie controleren..." -ForegroundColor Cyan
         try {
             $trustedHosts = (Get-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client -Name TrustedHosts -ErrorAction Stop).TrustedHosts
-        } catch {
+        }
+        catch {
             $trustedHosts = ""
         }
         if ($trustedHosts -notlike "*$computerName*" -and $trustedHosts -ne "*") {
@@ -859,11 +857,13 @@ function Invoke-RemoteServerSetup {
             Restart-Service winrm -Force
             Write-Host "  ✓ $computerName toegevoegd aan TrustedHosts en WinRM herstart" -ForegroundColor Green
             Write-Verbose "TrustedHosts bijgewerkt en WinRM herstart"
-        } elseif ($trustedHosts -eq "*") {
+        }
+        elseif ($trustedHosts -eq "*") {
             Write-Host "  ✓ TrustedHosts staat op wildcard (*), geen toevoeging nodig" -ForegroundColor Green
             Write-Verbose "TrustedHosts staat op wildcard"
             Write-Log "TrustedHosts staat op wildcard (*)" -Level "INFO"
-        } else {
+        }
+        else {
             Write-Host "  ✓ $computerName staat al in TrustedHosts" -ForegroundColor Green
             Write-Verbose "$computerName staat al in TrustedHosts"
             Write-Log "$computerName staat al in TrustedHosts" -Level "INFO"
@@ -875,7 +875,8 @@ function Invoke-RemoteServerSetup {
             Write-Host "  ✓ PSRemoting actief op $computerName" -ForegroundColor Green
             Write-Verbose "PSRemoting succesvol getest op $computerName"
             Write-Log "PSRemoting actief op $computerName" -Level "INFO"
-        } catch {
+        }
+        catch {
             Write-Host "  ! PSRemoting niet actief op $computerName. Inschakelen..." -ForegroundColor Yellow
             Write-Host "    Voer het volgende uit op de remote machine als Administrator:" -ForegroundColor Yellow
             Write-Host "    Enable-PSRemoting -Force" -ForegroundColor White
@@ -929,8 +930,8 @@ function Invoke-RemoteServerSetup {
         # Remote OpenVPN service starten via GUI
         Write-Progress -Activity "Remote Server Setup" -Status "OpenVPN service op remote machine starten" -PercentComplete 71
         Write-Host "`n[*] OpenVPN service op remote machine starten..." -ForegroundColor Cyan
-            $remoteOvpn = Join-Path $Script:Settings.remoteConfigPath "server.ovpn"
-            if (-not (Start-VPNConnection -ConfigFile $remoteOvpn -ComputerName $computerName -Credential $cred)) {
+        $remoteOvpn = Join-Path $Script:Settings.remoteConfigPath "server.ovpn"
+        if (-not (Start-VPNConnection -ConfigFile $remoteOvpn -ComputerName $computerName -Credential $cred)) {
             throw "Remote OpenVPN service starten mislukt"
         }
         Write-Host " ✓ Remote OpenVPN starten voltooid" -ForegroundColor Green
@@ -957,7 +958,7 @@ function Invoke-RemoteServerSetup {
         Write-Log "Fout tijdens Remote Server Setup: $($_.Exception.Message)" -Level "ERROR"
         $choice = Show-Menu -Mode Error -SuccessTitle "Remote Server Setup Gefaald!" -LogFile $script:LogFile -ExtraMessage "Controleer het logbestand voor details." -Options @("Opnieuw proberen", "Terug naar hoofdmenu", "Afsluiten")
         switch ($choice) {
-            1 { Invoke-RemoteServerSetup }
+            1 { Invoke-RemoteOpenVPNServerSetup }
             2 { Start-VPNSetup }
             3 { exit }
         }
@@ -1176,6 +1177,7 @@ function Invoke-WireGuardClientSetup {
 }
 
 #endregion WireGuard Setup functies
+
 # Start het script
 Start-VPNSetup
 
