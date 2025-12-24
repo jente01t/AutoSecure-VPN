@@ -1108,9 +1108,19 @@ function Invoke-WireGuardServerSetup {
         $wgPort = if ($Script:Settings.wireGuardPort) { $Script:Settings.wireGuardPort } else { 51820 }
         $baseSubnet = if ($Script:Settings.wireGuardBaseSubnet) { $Script:Settings.wireGuardBaseSubnet } else { "10.13.13" }
 
-        Write-Host "`n[3/6] Firewall configureren (UDP $wgPort)..." -ForegroundColor Cyan
+        Write-Host "`n[3/7] Firewall configureren (UDP $wgPort)..." -ForegroundColor Cyan
         if (-not (Set-Firewall -Port $wgPort -Protocol "UDP")) { throw "Firewall configuratie mislukt" }
         Write-Host "  ✓ Firewall geconfigureerd" -ForegroundColor Green
+        
+        # Stap 3.5: NAT en IP Forwarding configureren voor internet toegang
+        Write-Host "`n[3.5/7] NAT en IP Forwarding configureren..." -ForegroundColor Cyan
+        if (-not (Enable-WireGuardNAT -VPNSubnet "$baseSubnet.0/24")) { 
+            Write-Host "  ! NAT configuratie warning - mogelijk handmatige configuratie nodig" -ForegroundColor Yellow
+            Write-Log "NAT configuratie warning - handmatige setup mogelijk nodig" -Level "WARNING"
+        }
+        else {
+            Write-Host "  ✓ NAT en IP Forwarding geconfigureerd" -ForegroundColor Green
+        }
         
         # Stap 4: Parameters en Keys
         Write-Host "`n[4/6] Configuratie en Keys genereren..." -ForegroundColor Cyan
@@ -1142,7 +1152,8 @@ function Invoke-WireGuardServerSetup {
         $qrPath = Join-Path $Script:OutputPath "wg-client-qr.png"
         if (New-WireGuardQRCode -ConfigContent $clientConfigContent -OutputPath $qrPath) {
             Write-Host "  ✓ QR-code aangemaakt: $qrPath" -ForegroundColor Green
-        } else {
+        }
+        else {
             Write-Host "  ! QR-code maken mislukt" -ForegroundColor Yellow
         }
         

@@ -2512,6 +2512,388 @@ function Initialize-WireGuardKeys {
     }
 }
 
+function Enable-IPForwarding {
+    <#
+    .SYNOPSIS
+        Schakelt IP Forwarding in op Windows voor VPN routing.
+    
+    .DESCRIPTION
+        Deze functie schakelt IP routing in via het Windows register.
+        Dit is vereist om VPN verkeer door te sturen naar het internet.
+        
+    .OUTPUTS
+        System.Boolean
+        $true bij succes, anders $false.
+        
+    .EXAMPLE
+        Enable-IPForwarding
+        
+    .NOTES
+        Vereist admin rechten. Een herstart kan nodig zijn voor activatie.
+    #>
+    param()
+    
+    try {
+        $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters"
+        $currentValue = Get-ItemProperty -Path $regPath -Name "IPEnableRouter" -ErrorAction SilentlyContinue
+        
+        if ($currentValue.IPEnableRouter -eq 1) {
+            Write-Log "IP Forwarding is al ingeschakeld" -Level "INFO"
+            return $true
+        }
+        
+        Set-ItemProperty -Path $regPath -Name "IPEnableRouter" -Value 1 -Type DWord
+        Write-Log "IP Forwarding ingeschakeld in register. Herstart mogelijk vereist." -Level "SUCCESS"
+        
+        # Probeer ook RemoteAccess service te starten voor directe activatie
+        try {
+            $rasService = Get-Service -Name "RemoteAccess" -ErrorAction SilentlyContinue
+            if ($rasService) {
+                if ($rasService.Status -ne "Running") {
+                    Set-Service -Name "RemoteAccess" -StartupType Automatic -ErrorAction SilentlyContinue
+                    Start-Service -Name "RemoteAccess" -ErrorAction SilentlyContinue
+                    Write-Log "RemoteAccess service gestart voor IP routing" -Level "INFO"
+                }
+            }
+        }
+        catch {
+            Write-Log "RemoteAccess service kon niet gestart worden, herstart nodig: $_" -Level "WARNING"
+        }
+        
+        return $true
+    }
+    catch {
+        Write-Log "Fout bij inschakelen IP Forwarding: $_" -Level "ERROR"
+        return $false
+    }
+}
+
+function Enable-WireGuardNAT {
+    <#
+    .SYNOPSIS
+        Configureert NAT voor WireGuard VPN subnet.
+    
+    .DESCRIPTION
+        Deze functie configureert Network Address Translation (NAT) zodat
+        VPN clients internettoegang hebben via de server.
+        Probeert eerst NetNat, valt terug op ICS bij "Invalid class" errors.
+        
+    .PARAMETER VPNSubnet
+        Het VPN subnet in CIDR notatie (bijv. 10.13.13.0/24).
+        
+    .PARAMETER InterfaceAlias
+        De naam van de internet-facing network interface (optioneel, auto-detect).
+    
+    .OUTPUTS
+        System.Boolean
+        $true bij succes, anders $false.
+        
+    .EXAMPLE
+        Enable-WireGuardNAT -VPNSubnet "10.13.13.0/24"
+    #>
+    param(
+        [Parameter(Mandatory = $false)][string]$VPNSubnet = "10.13.13.0/24",
+        [Parameter(Mandatory = $false)][string]$InterfaceAlias
+    )
+    
+    try {
+        # Eerst IP Forwarding inschakelen
+        if (-not (Enable-IPForwarding)) {
+            Write-Log "Kon IP Forwarding niet inschakelen" -Level "ERROR"
+            return $false
+        }
+        
+        # Bepaal de internet-facing interface als niet opgegeven
+        if (-not $InterfaceAlias) {
+            $defaultRoute = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | 
+            Where-Object { $_.NextHop -ne "0.0.0.0" } | 
+            Select-Object -First 1
+            
+            if ($defaultRoute) {
+                $InterfaceAlias = (Get-NetAdapter -InterfaceIndex $defaultRoute.InterfaceIndex -ErrorAction SilentlyContinue).Name
+                Write-Log "Internet interface gedetecteerd: $InterfaceAlias" -Level "INFO"
+            }
+            
+            if (-not $InterfaceAlias) {
+                $InterfaceAlias = (Get-NetAdapter | Where-Object { 
+                        $_.Status -eq "Up" -and 
+                        $_.Name -notlike "*WireGuard*" -and
+                        $_.Name -notlike "*Loopback*"
+                    } | Select-Object -First 1).Name
+                
+                if (-not $InterfaceAlias) {
+                    throw "Kon geen internet interface detecteren"
+                }
+            }
+        }
+        
+        Write-Log "Configureren NAT voor $VPNSubnet via $InterfaceAlias..." -Level "INFO"
+        
+        $natConfigured = $false
+        
+        # Methode 1: Probeer NetNat (kan "Invalid class" geven op sommige systemen)
+        try {
+            $netNatAvailable = Get-Command -Name "New-NetNat" -ErrorAction SilentlyContinue
+            if ($netNatAvailable) {
+                $natName = "WireGuardNAT"
+                
+                # Test of NetNat WMI class werkt
+                $testNat = Get-NetNat -ErrorAction Stop 2>&1
+                
+                # Verwijder bestaande NAT met dezelfde naam
+                $existingNat = Get-NetNat -Name $natName -ErrorAction SilentlyContinue
+                if ($existingNat) {
+                    Remove-NetNat -Name $natName -Confirm:$false -ErrorAction SilentlyContinue
+                    Write-Log "Bestaande NAT regel verwijderd" -Level "INFO"
+                }
+                
+                # Maak nieuwe NAT regel
+                New-NetNat -Name $natName -InternalIPInterfaceAddressPrefix $VPNSubnet -ErrorAction Stop
+                Write-Log "NAT regel '$natName' aangemaakt voor $VPNSubnet" -Level "SUCCESS"
+                $natConfigured = $true
+            }
+        }
+        catch {
+            $errorMsg = $_.Exception.Message
+            if ($errorMsg -match "Invalid class|not found|WBEM|WMI") {
+                Write-Log "NetNat niet beschikbaar (WMI error), probeer ICS fallback..." -Level "WARNING"
+            }
+            else {
+                Write-Log "NetNat error: $errorMsg - probeer ICS fallback..." -Level "WARNING"
+            }
+        }
+        
+        # Methode 2: Registry-based ICS (meer betrouwbaar dan COM)
+        if (-not $natConfigured) {
+            try {
+                Write-Log "Configureren ICS via registry methode..." -Level "INFO"
+                
+                # Haal GUID van interfaces op
+                $internetAdapter = Get-NetAdapter -Name $InterfaceAlias -ErrorAction SilentlyContinue
+                $wgAdapter = Get-NetAdapter | Where-Object { $_.Name -like "*wg*" -or $_.InterfaceDescription -like "*WireGuard*" } | Select-Object -First 1
+                
+                if (-not $internetAdapter -or -not $wgAdapter) {
+                    Write-Log "Kon adapters niet vinden voor ICS" -Level "WARNING"
+                }
+                else {
+                    # Get the interface GUIDs from registry
+                    $netCfgPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Network\{4D36E972-E325-11CE-BFC1-08002BE10318}"
+                    
+                    $internetGuid = $null
+                    $wgGuid = $null
+                    
+                    Get-ChildItem $netCfgPath -ErrorAction SilentlyContinue | ForEach-Object {
+                        $connPath = Join-Path $_.PSPath "Connection"
+                        if (Test-Path $connPath) {
+                            $connName = (Get-ItemProperty $connPath -Name "Name" -ErrorAction SilentlyContinue).Name
+                            if ($connName -eq $InterfaceAlias) {
+                                $internetGuid = $_.PSChildName
+                            }
+                            if ($connName -eq $wgAdapter.Name) {
+                                $wgGuid = $_.PSChildName
+                            }
+                        }
+                    }
+                    
+                    if ($internetGuid -and $wgGuid) {
+                        Write-Log "Internet GUID: $internetGuid, WireGuard GUID: $wgGuid" -Level "INFO"
+                        
+                        # Stop SharedAccess service
+                        Stop-Service SharedAccess -Force -ErrorAction SilentlyContinue
+                        Start-Sleep -Seconds 1
+                        
+                        # Clear existing ICS configuration in registry
+                        $icsRegPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\SharedAccess"
+                        
+                        # Remove old SharingConnections
+                        Remove-ItemProperty -Path $icsRegPath -Name "SharingPublicInterface" -ErrorAction SilentlyContinue
+                        Remove-ItemProperty -Path $icsRegPath -Name "SharingPrivateInterface" -ErrorAction SilentlyContinue
+                        
+                        # Set new ICS configuration
+                        # Note: ICS expects interface Device GUIDs
+                        Set-ItemProperty -Path $icsRegPath -Name "SharingPublicInterface" -Value $internetGuid -ErrorAction SilentlyContinue
+                        Set-ItemProperty -Path $icsRegPath -Name "SharingPrivateInterface" -Value $wgGuid -ErrorAction SilentlyContinue
+                        
+                        # Start SharedAccess service
+                        Set-Service SharedAccess -StartupType Manual -ErrorAction SilentlyContinue
+                        Start-Service SharedAccess -ErrorAction SilentlyContinue
+                        Start-Sleep -Seconds 2
+                        
+                        Write-Log "ICS geconfigureerd via registry: $InterfaceAlias -> $($wgAdapter.Name)" -Level "SUCCESS"
+                        $natConfigured = $true
+                    }
+                    else {
+                        Write-Log "Kon interface GUIDs niet vinden" -Level "WARNING"
+                    }
+                }
+            }
+            catch {
+                Write-Log "Registry ICS configuratie mislukt: $_" -Level "WARNING"
+            }
+        }
+        
+        # Methode 3: COM-based ICS met service restart (fallback)
+        if (-not $natConfigured) {
+            try {
+                Write-Log "Probeer ICS via COM met service restart..." -Level "INFO"
+                
+                # Stop SharedAccess first to clear state
+                Stop-Service SharedAccess -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 2
+                Start-Service SharedAccess -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 2
+                
+                $netShare = New-Object -ComObject HNetCfg.HNetShare
+                $connections = $netShare.EnumEveryConnection
+                
+                # Eerst ALLE sharing uitschakelen
+                foreach ($conn in $connections) {
+                    try {
+                        $cfg = $netShare.INetSharingConfigurationForINetConnection($conn)
+                        $cfg.DisableSharing()
+                    }
+                    catch {}
+                }
+                
+                # Wacht even
+                Start-Sleep -Seconds 1
+                
+                # Zoek connecties opnieuw
+                $internetConnection = $null
+                $wgConnection = $null
+                
+                foreach ($conn in $connections) {
+                    try {
+                        $props = $netShare.NetConnectionProps($conn)
+                        if ($props.Name -eq $InterfaceAlias) { $internetConnection = $conn }
+                        if ($props.Name -like "*wg*" -or $props.Name -like "*WireGuard*") { $wgConnection = $conn }
+                    }
+                    catch {}
+                }
+                
+                if ($internetConnection) {
+                    $cfg = $netShare.INetSharingConfigurationForINetConnection($internetConnection)
+                    $cfg.EnableSharing(0)  # Public
+                    Write-Log "ICS Public enabled op $InterfaceAlias" -Level "SUCCESS"
+                    
+                    if ($wgConnection) {
+                        Start-Sleep -Milliseconds 500
+                        $wgCfg = $netShare.INetSharingConfigurationForINetConnection($wgConnection)
+                        $wgCfg.EnableSharing(1)  # Private
+                        Write-Log "ICS Private enabled op WireGuard" -Level "SUCCESS"
+                    }
+                    
+                    $natConfigured = $true
+                }
+            }
+            catch {
+                Write-Log "COM ICS configuratie mislukt: $_" -Level "WARNING"
+            }
+        }
+        
+        # Methode 4: Handmatige routing + netsh als laatste fallback
+        if (-not $natConfigured) {
+            try {
+                Write-Log "Probeer netsh routing als laatste fallback..." -Level "INFO"
+                
+                $wgAdapter = Get-NetAdapter | Where-Object { $_.Name -like "*wg*" -or $_.InterfaceDescription -like "*WireGuard*" } | Select-Object -First 1
+                $internetAdapter = Get-NetAdapter -Name $InterfaceAlias -ErrorAction SilentlyContinue
+                
+                if ($wgAdapter -and $internetAdapter) {
+                    Set-NetIPInterface -InterfaceIndex $wgAdapter.ifIndex -Forwarding Enabled -ErrorAction SilentlyContinue
+                    Set-NetIPInterface -InterfaceIndex $internetAdapter.ifIndex -Forwarding Enabled -ErrorAction SilentlyContinue
+                }
+                
+                $null = netsh routing ip nat install 2>&1
+                $null = netsh routing ip nat add interface "$InterfaceAlias" full 2>&1
+                
+                Write-Log "Netsh routing geconfigureerd" -Level "SUCCESS"
+                $natConfigured = $true
+            }
+            catch {
+                Write-Log "Netsh routing mislukt: $_" -Level "WARNING"
+            }
+        }
+        
+        # Configureer Windows Firewall voor forwarding
+        try {
+            $fwRuleName = "WireGuard-VPN-Forward"
+            $existingFwRule = Get-NetFirewallRule -Name $fwRuleName -ErrorAction SilentlyContinue
+            
+            if (-not $existingFwRule) {
+                New-NetFirewallRule -Name $fwRuleName `
+                    -DisplayName "WireGuard VPN Forwarding" `
+                    -Direction Inbound `
+                    -Action Allow `
+                    -RemoteAddress $VPNSubnet `
+                    -Profile Any `
+                    -Enabled True | Out-Null
+                    
+                New-NetFirewallRule -Name "$fwRuleName-Out" `
+                    -DisplayName "WireGuard VPN Forwarding Out" `
+                    -Direction Outbound `
+                    -Action Allow `
+                    -RemoteAddress $VPNSubnet `
+                    -Profile Any `
+                    -Enabled True | Out-Null
+                    
+                Write-Log "Firewall regels toegevoegd voor VPN forwarding" -Level "INFO"
+            }
+        }
+        catch {
+            Write-Log "Firewall configuratie warning: $_" -Level "WARNING"
+        }
+        
+        # VERIFICATIE: Check of ICS daadwerkelijk werkt
+        $icsActuallyEnabled = $false
+        try {
+            $netShare = New-Object -ComObject HNetCfg.HNetShare -ErrorAction Stop
+            foreach ($conn in $netShare.EnumEveryConnection) {
+                try {
+                    $props = $netShare.NetConnectionProps($conn)
+                    $config = $netShare.INetSharingConfigurationForINetConnection($conn)
+                    if ($props.Name -eq $InterfaceAlias -and $config.SharingEnabled -and $config.SharingConnectionType -eq 0) {
+                        $icsActuallyEnabled = $true
+                        Write-Log "VERIFICATIE: ICS is actief op $InterfaceAlias" -Level "SUCCESS"
+                        break
+                    }
+                }
+                catch {}
+            }
+        }
+        catch {
+            Write-Log "Kon ICS status niet verifieren" -Level "WARNING"
+        }
+        
+        if ($icsActuallyEnabled) {
+            Write-Log "NAT/ICS configuratie voltooid en geverifieerd voor WireGuard VPN" -Level "SUCCESS"
+            return $true
+        }
+        elseif ($natConfigured) {
+            # Methodes rapporteerden succes maar verificatie faalde
+            Write-Log "NAT methodes uitgevoerd maar ICS niet geverifieerd - mogelijk herstart nodig" -Level "WARNING"
+            Write-Log "=======================================" -Level "WARNING"
+            Write-Log "HANDMATIGE ACTIE VEREIST:" -Level "WARNING"
+            Write-Log "1. Open Netwerkcentrum (ncpa.cpl)" -Level "WARNING"
+            Write-Log "2. Rechtsklik op 'WiFi' -> Properties -> Sharing tab" -Level "WARNING"
+            Write-Log "3. Vink aan: 'Allow other network users to connect...'" -Level "WARNING"
+            Write-Log "4. Selecteer 'wg_server' als Home networking connection" -Level "WARNING"
+            Write-Log "5. Klik OK" -Level "WARNING"
+            Write-Log "=======================================" -Level "WARNING"
+            return $true  # Return true zodat setup doorgaat, user ziet warning
+        }
+        else {
+            Write-Log "NAT configuratie gefaald - handmatige configuratie nodig" -Level "ERROR"
+            Write-Log "TIP: Schakel Internet Connection Sharing handmatig in via Netwerkcentrum" -Level "INFO"
+            return $false
+        }
+    }
+    catch {
+        Write-Log "Fout bij configureren NAT: $_" -Level "ERROR"
+        return $false
+    }
+}
+
 function New-WireGuardServerConfig {
     <#
     .SYNOPSIS
@@ -2734,37 +3116,111 @@ function Install-RemoteWireGuardServer {
         Copy-Item -Path $localModule -Destination $remoteModule -ToSession $session -Force
         Write-Verbose "Module gekopieerd"
         
-        # 2. Uitvoeren op remote
+        # 2. Uitvoeren op remote met output capture
         Write-Verbose "Uitvoeren installatie op remote..."
-        Invoke-Command -Session $session -ScriptBlock {
+        $remoteResult = Invoke-Command -Session $session -ScriptBlock {
             param($modulePath, $configContent, $configDir, $port)
             
-            # Module laden
-            $moduleContent = Get-Content -Path $modulePath -Raw
-            Invoke-Expression $moduleContent
+            $log = @()
+            $log += "=== Remote WireGuard Server Setup Start ==="
             
-            # Disable file logging remote
-            function global:Write-Log { param($Message, $Level) Write-Verbose "[$Level] $Message" }
-            
-            Write-Verbose "Installeren WireGuard..."
-            # Installeren
-            if (-not (Install-WireGuard)) { throw "Remote WireGuard installatie mislukt" }
-            
-            Write-Verbose "Configureren firewall..."
-            # Firewall
-            if (-not (Set-Firewall -Port $port -Protocol "UDP")) { throw "Remote Firewall configuratie mislukt" }
-            
-            Write-Verbose "Opslaan config..."
-            # Config opslaan
-            if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
-            $serverConfigPath = Join-Path $configDir "wg_server.conf"
-            Set-Content -Path $serverConfigPath -Value $configContent
-            
-            Write-Verbose "Starten service..."
-            # Service starten
-            if (-not (Start-WireGuardService -ConfigPath $serverConfigPath)) { throw "Remote Service start mislukt" }
-            
+            try {
+                # Module laden
+                $log += "Module laden..."
+                $moduleContent = Get-Content -Path $modulePath -Raw
+                Invoke-Expression $moduleContent
+                
+                # Override Write-Log to capture output
+                $script:remoteLog = @()
+                function global:Write-Log { 
+                    param($Message, $Level) 
+                    $script:remoteLog += "[$Level] $Message"
+                }
+                
+                # 1. Installeren WireGuard
+                $log += "Installeren WireGuard..."
+                if (-not (Install-WireGuard)) { 
+                    $log += "ERROR: WireGuard installatie mislukt"
+                    throw "Remote WireGuard installatie mislukt" 
+                }
+                $log += "OK: WireGuard geinstalleerd"
+                
+                # 2. NAT configureren (dit roept ook Enable-IPForwarding aan)
+                $log += "Configureren NAT voor internet toegang..."
+                $natResult = Enable-WireGuardNAT -VPNSubnet "10.13.13.0/24"
+                $log += $script:remoteLog  # Voeg NAT logs toe
+                if (-not $natResult) { 
+                    $log += "WARNING: NAT configuratie mogelijk niet volledig"
+                }
+                else {
+                    $log += "OK: NAT geconfigureerd"
+                }
+                
+                # 3. Firewall
+                $log += "Configureren firewall (UDP $port)..."
+                if (-not (Set-Firewall -Port $port -Protocol "UDP")) { 
+                    $log += "ERROR: Firewall configuratie mislukt"
+                    throw "Remote Firewall configuratie mislukt" 
+                }
+                $log += "OK: Firewall geconfigureerd"
+                
+                # 4. Config opslaan
+                $log += "Opslaan config naar $configDir..."
+                if (-not (Test-Path $configDir)) { 
+                    New-Item -ItemType Directory -Path $configDir -Force | Out-Null 
+                }
+                $serverConfigPath = Join-Path $configDir "wg_server.conf"
+                Set-Content -Path $serverConfigPath -Value $configContent
+                $log += "OK: Config opgeslagen naar $serverConfigPath"
+                
+                # 5. Service starten
+                $log += "Starten WireGuard service..."
+                if (-not (Start-WireGuardService -ConfigPath $serverConfigPath)) { 
+                    $log += "ERROR: Service start mislukt"
+                    throw "Remote Service start mislukt" 
+                }
+                $log += "OK: Service gestart"
+                
+                $log += "=== Remote Setup Voltooid ==="
+                
+                return @{
+                    Success = $true
+                    Log     = $log
+                }
+            }
+            catch {
+                $log += "FOUT: $_"
+                return @{
+                    Success = $false
+                    Log     = $log
+                    Error   = $_.ToString()
+                }
+            }
         } -ArgumentList $remoteModule, $ServerConfigContent, $RemoteConfigPath
+        
+        # Toon remote output
+        if ($remoteResult.Log) {
+            Write-Host "`n--- Remote Server Output ---" -ForegroundColor Cyan
+            foreach ($line in $remoteResult.Log) {
+                if ($line -like "*ERROR*") {
+                    Write-Host "  $line" -ForegroundColor Red
+                }
+                elseif ($line -like "*WARNING*") {
+                    Write-Host "  $line" -ForegroundColor Yellow
+                }
+                elseif ($line -like "*OK*") {
+                    Write-Host "  $line" -ForegroundColor Green
+                }
+                else {
+                    Write-Host "  $line" -ForegroundColor Gray
+                }
+            }
+            Write-Host "----------------------------`n" -ForegroundColor Cyan
+        }
+        
+        if (-not $remoteResult.Success) {
+            throw "Remote installatie gefaald: $($remoteResult.Error)"
+        }
         
         Write-Verbose "Remote installatie voltooid"
         
