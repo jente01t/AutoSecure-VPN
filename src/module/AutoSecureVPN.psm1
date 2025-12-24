@@ -2582,6 +2582,73 @@ PersistentKeepalive = 25
     return $configContent
 }
 
+function New-WireGuardQRCode {
+    <#
+    .SYNOPSIS
+        Maakt een QR-code voor de WireGuard client configuratie.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]$ConfigContent,
+        [Parameter(Mandatory = $true)]$OutputPath
+    )
+    
+    # Controleer of QrCodes module is geïnstalleerd
+    if (-not (Get-Module -Name QrCodes -ListAvailable)) {
+        try {
+            Write-Log "QrCodes module installeren..." -Level "INFO"
+            Install-Module -Name QrCodes -Force -Scope CurrentUser -ErrorAction Stop
+        }
+        catch {
+            Write-Log "Kon QrCodes module niet installeren: $_" -Level "WARNING"
+            return $false
+        }
+    }
+    
+    try {
+        Import-Module QrCodes -ErrorAction Stop
+        Out-BarcodeImage -Content $ConfigContent -Path $OutputPath
+        Write-Log "QR-code opgeslagen in $OutputPath" -Level "INFO"
+        return $true
+    }
+    catch {
+        Write-Log "Fout bij maken QR-code: $_" -Level "ERROR"
+        return $false
+    }
+}
+
+function Stop-WireGuardService {
+    <#
+    .SYNOPSIS
+        Stopt alle draaiende WireGuard tunnel services.
+    #>
+    param()
+    
+    $wgPath = "C:\Program Files\WireGuard\wireguard.exe"
+    if (-not (Test-Path $wgPath)) {
+        Write-Log "WireGuard executable niet gevonden, kan niet stoppen" -Level "WARNING"
+        return $false
+    }
+    
+    try {
+        # Stop alle WireGuard tunnel services
+        $services = Get-Service | Where-Object { $_.Name -like "WireGuardTunnel*" -and $_.Status -eq "Running" }
+        foreach ($service in $services) {
+            Write-Log "Stoppen van WireGuard service: $($service.Name)" -Level "INFO"
+            Stop-Service -Name $service.Name -Force
+            # Verwijder de service - haal tunnel naam uit service naam
+            $tunnelName = $service.Name -replace '^WireGuardTunnel\$', ''
+            Start-Process -FilePath $wgPath -ArgumentList "/uninstalltunnelservice $tunnelName" -Wait -PassThru | Out-Null
+        }
+        
+        Write-Log "Alle WireGuard services gestopt" -Level "INFO"
+        return $true
+    }
+    catch {
+        Write-Log "Fout bij stoppen WireGuard services: $_" -Level "ERROR"
+        return $false
+    }
+}
+
 function Start-WireGuardService {
     <#
     .SYNOPSIS
@@ -2597,6 +2664,9 @@ function Start-WireGuardService {
     }
     
     try {
+        # Stop eerst bestaande WireGuard services om conflicten te voorkomen
+        Stop-WireGuardService | Out-Null
+        
         # wireguard /installtunnelservice <path>
         # Dit installeert een service met naam "WireGuardTunnel$Name"
         
@@ -2643,11 +2713,14 @@ function Install-RemoteWireGuardServer {
     )
     
     Write-Log "Starten remote WireGuard server installatie op $ComputerName..." -Level "INFO"
+    Write-Verbose "Verbinden met remote machine $ComputerName..."
     
     $session = New-PSSession -ComputerName $ComputerName -Credential $Credential
+    Write-Verbose "PSSession opgezet"
     
     try {
         # 1. Module kopiëren
+        Write-Verbose "Module kopiëren naar remote..."
         $remoteTemp = "C:\Temp"
         Invoke-Command -Session $session -ScriptBlock { if (-not (Test-Path "C:\Temp")) { New-Item -ItemType Directory -Path "C:\Temp" -Force } }
         
@@ -2659,8 +2732,10 @@ function Install-RemoteWireGuardServer {
 
         $remoteModule = Join-Path $remoteTemp "AutoSecureVPN.psm1"
         Copy-Item -Path $localModule -Destination $remoteModule -ToSession $session -Force
+        Write-Verbose "Module gekopieerd"
         
         # 2. Uitvoeren op remote
+        Write-Verbose "Uitvoeren installatie op remote..."
         Invoke-Command -Session $session -ScriptBlock {
             param($modulePath, $configContent, $configDir, $port)
             
@@ -2671,31 +2746,42 @@ function Install-RemoteWireGuardServer {
             # Disable file logging remote
             function global:Write-Log { param($Message, $Level) Write-Verbose "[$Level] $Message" }
             
+            Write-Verbose "Installeren WireGuard..."
             # Installeren
             if (-not (Install-WireGuard)) { throw "Remote WireGuard installatie mislukt" }
             
+            Write-Verbose "Configureren firewall..."
             # Firewall
             if (-not (Set-Firewall -Port $port -Protocol "UDP")) { throw "Remote Firewall configuratie mislukt" }
             
+            Write-Verbose "Opslaan config..."
             # Config opslaan
             if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
             $serverConfigPath = Join-Path $configDir "wg_server.conf"
             Set-Content -Path $serverConfigPath -Value $configContent
             
+            Write-Verbose "Starten service..."
             # Service starten
             if (-not (Start-WireGuardService -ConfigPath $serverConfigPath)) { throw "Remote Service start mislukt" }
             
         } -ArgumentList $remoteModule, $ServerConfigContent, $RemoteConfigPath
+        
+        Write-Verbose "Remote installatie voltooid"
         
         Write-Log "Remote WireGuard Server configuratie voltooid voor $ComputerName" -Level "SUCCESS"
         return $true
     }
     catch {
         Write-Log "Fout tijdens remote WireGuard server installatie: $_" -Level "ERROR"
+        Write-Verbose "Fout tijdens remote installatie: $_"
         return $false
     }
     finally {
-        if ($session) { Remove-PSSession $session }
+        if ($session) { 
+            Write-Verbose "PSSession sluiten..."
+            Remove-PSSession $session 
+            Write-Verbose "PSSession gesloten"
+        }
     }
 }
 
@@ -2711,11 +2797,14 @@ function Install-RemoteWireGuardClient {
     )
     
     Write-Log "Starten remote WireGuard client installatie op $ComputerName..." -Level "INFO"
+    Write-Verbose "Verbinden met remote machine $ComputerName..."
     
     $session = New-PSSession -ComputerName $ComputerName -Credential $Credential
+    Write-Verbose "PSSession opgezet"
     
     try {
         # 1. Module kopiëren
+        Write-Verbose "Module kopiëren naar remote..."
         $remoteTemp = "C:\Temp"
         Invoke-Command -Session $session -ScriptBlock { if (-not (Test-Path "C:\Temp")) { New-Item -ItemType Directory -Path "C:\Temp" -Force } }
         
@@ -2726,8 +2815,10 @@ function Install-RemoteWireGuardClient {
 
         $remoteModule = Join-Path $remoteTemp "AutoSecureVPN.psm1"
         Copy-Item -Path $localModule -Destination $remoteModule -ToSession $session -Force
+        Write-Verbose "Module gekopieerd"
         
         # 2. Uitvoeren op remote
+        Write-Verbose "Uitvoeren installatie op remote..."
         Invoke-Command -Session $session -ScriptBlock {
             param($modulePath, $configContent)
             
@@ -2737,29 +2828,38 @@ function Install-RemoteWireGuardClient {
             
             function global:Write-Log { param($Message, $Level) Write-Verbose "[$Level] $Message" }
             
+            Write-Verbose "Installeren WireGuard..."
             # Installeren
             if (-not (Install-WireGuard)) { throw "Remote WireGuard installatie mislukt" }
             
+            Write-Verbose "Opslaan config..."
             # Config opslaan
             $configDir = "C:\WireGuardConfigs"
             if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
             $clientConfigPath = Join-Path $configDir "wg-client.conf"
             Set-Content -Path $clientConfigPath -Value $configContent
             
+            Write-Verbose "Starten service..."
             # Service starten
             if (-not (Start-WireGuardService -ConfigPath $clientConfigPath)) { throw "Remote Service start mislukt" }
             
         } -ArgumentList $remoteModule, $ClientConfigContent
+        Write-Verbose "Remote installatie voltooid"
         
         Write-Log "Remote WireGuard Client configuratie voltooid voor $ComputerName" -Level "SUCCESS"
         return $true
     }
     catch {
         Write-Log "Fout tijdens remote WireGuard client installatie: $_" -Level "ERROR"
+        Write-Verbose "Fout tijdens remote installatie: $_"
         return $false
     }
     finally {
-        if ($session) { Remove-PSSession $session }
+        if ($session) { 
+            Write-Verbose "PSSession sluiten..."
+            Remove-PSSession $session 
+            Write-Verbose "PSSession gesloten"
+        }
     }
 }
 
@@ -2797,6 +2897,7 @@ function Invoke-BatchRemoteWireGuardClientInstall {
     
     # Pre-process clients: Generate Keys & Configs Locally
     Write-Log "Voorbereiden WireGuard configuraties voor batch..." -Level "INFO"
+    Write-Verbose "Voorbereiden configuraties voor $($Clients.Count) clients..."
     
     $preparedClients = @()
     foreach ($client in $Clients) {
@@ -2806,6 +2907,7 @@ function Invoke-BatchRemoteWireGuardClientInstall {
         $clientIp = "$baseSubnet.$clientIpSuffix"
         
         Write-Log "Genereren keys voor $($client.Name)..." -Level "INFO"
+        Write-Verbose "Genereren keys voor $($client.Name)..."
         $keys = Initialize-WireGuardKeys -WgPath $Settings.wireGuardInstallPath # Assuming key present or fallback
         
         # Generate Client Config Content
@@ -2821,7 +2923,7 @@ Endpoint = $ServerEndpoint
 AllowedIPs = 0.0.0.0/0
 PersistentKeepalive = 25
 "@
-        
+
         $preparedClients += [PSCustomObject]@{
             Name          = $client.Name
             IP            = $client.IP # Remote Access IP
@@ -2832,6 +2934,7 @@ PersistentKeepalive = 25
             PublicKey     = $keys.PublicKey # Needed to update server?
         }
     }
+    Write-Verbose "Alle configuraties voorbereid"
     
     # NOTE: Server config must be updated to include these peers!
     # Dit script update momenteel niet de server config.
@@ -2845,8 +2948,10 @@ PersistentKeepalive = 25
     $serverUpdateFile = "wg_server_additions.txt"
     Set-Content -Path $serverUpdateFile -Value $serverUpdates
     Write-Log "BELANGRIJK: Voeg de peers toe aan je server config! Opgeslagen in $serverUpdateFile" -Level "WARNING"
+    Write-Verbose "Server updates opgeslagen in $serverUpdateFile - voeg deze handmatig toe aan je server config!"
     
     # Run Parallel Install
+    Write-Verbose "Starten parallel installatie op $($preparedClients.Count) clients..."
     $localModulePath = $ModulePath
     
     $parallelResults = $preparedClients | ForEach-Object -Parallel {
@@ -2867,6 +2972,7 @@ PersistentKeepalive = 25
         
     } -ThrottleLimit $ThrottleLimit
     
+    Write-Verbose "Parallel installatie voltooid"
     return $parallelResults
 }
 

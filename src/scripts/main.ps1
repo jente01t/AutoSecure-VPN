@@ -975,7 +975,7 @@ function Invoke-RemoteWireGuardServerSetup {
         if (-not (Test-IsAdmin)) { throw "Moet als Administrator runnen" }
         
         # Remote Info - Use settings with fallback check
-        Write-Host "Remote Computer IP/Hostname..." -ForegroundColor Cyan
+        Write-Verbose "Remote computer IP/Hostname opvragen..."
         if ($Script:Settings.ContainsKey('serverIP') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.serverIP) -and $Script:Settings.serverIP -ne 'jouw.server.ip.hier') {
             $computerName = $Script:Settings.serverIP
         }
@@ -986,12 +986,14 @@ function Invoke-RemoteWireGuardServerSetup {
             # Mirroring OpenVPN buffer: it throws error if invalid
             throw "Instelling 'serverIP' is leeg of ongeldig in Variable.psd1."
         }
-        Write-Host "  ✓ Remote computer: $computerName" -ForegroundColor Green
+        Write-Verbose "Remote computer: $computerName"
         
         $cred = Get-Credential -Message "Admin Credentials voor $computerName"
         # Configure Local
-        Write-Host "Genereren keys..."
+        Write-Verbose "Genereren keys..."
+        Write-Verbose "Genereren server keys..."
         $serverKeys = Initialize-WireGuardKeys
+        Write-Verbose "Genereren client keys..."
         $clientKeys = Initialize-WireGuardKeys
         
         $wgPort = if ($Script:Settings.wireGuardPort) { $Script:Settings.wireGuardPort } else { 51820 }
@@ -1007,15 +1009,23 @@ function Invoke-RemoteWireGuardServerSetup {
         }
         
         # Create Configs
+        Write-Verbose "Aanmaken configuraties..."
+        Write-Verbose "Aanmaken server config..."
         $serverConfPath = Join-Path $env:TEMP "wg_server_remote.conf"
         $serverConfContent = New-WireGuardServerConfig -ServerKeys $serverKeys -ClientKeys $clientKeys -Port $port -Address "$baseSubnet.1/24" -PeerAddress "$baseSubnet.2/32" -ServerType "Windows" -OutputPath $serverConfPath
         
-        $clientConfPath = Join-Path $Script:OutputPath "wg-client-for-remote.conf"
-        New-WireGuardClientConfig -ClientKeys $clientKeys -ServerKeys $serverKeys -ServerAvailableIP $wanIP -Port $port -Address "$baseSubnet.2/24" -OutputPath $clientConfPath
+        Write-Verbose "Aanmaken client config..."
+        $clientConfPath = Join-Path $Script:OutputPath "wg-client.conf"
+        $clientConfigContent = New-WireGuardClientConfig -ClientKeys $clientKeys -ServerKeys $serverKeys -ServerAvailableIP $wanIP -Port $port -Address "$baseSubnet.2/24" -OutputPath $clientConfPath
+        
+        # QR-code maken
+        $qrPath = Join-Path $Script:OutputPath "wg-client-qr.png"
+        New-WireGuardQRCode -ConfigContent $clientConfigContent -OutputPath $qrPath
         
         # Install Remote
+        Write-Verbose "Starten remote installatie..."
         if (Install-RemoteWireGuardServer -ComputerName $computerName -Credential $cred -ServerConfigContent $serverConfContent -RemoteConfigPath "C:\WireGuard" -Port $port) {
-            Show-Menu -Mode Success -SuccessTitle "Remote WireGuard Server Setup Voltooid" -ExtraInfo "Client Config lokaal opgeslagen: $clientConfPath"
+            Show-Menu -Mode Success -SuccessTitle "Remote WireGuard Server Setup Voltooid" -ExtraInfo "Client Config lokaal opgeslagen: $clientConfPath`nQR-code: $qrPath"
         }
     }
     catch {
@@ -1030,7 +1040,7 @@ function Invoke-RemoteWireGuardClientSetup {
         if (-not (Test-IsAdmin)) { throw "Moet als Administrator runnen" }
         
         # Remote Info
-        Write-Host "Remote Computer IP/Hostname..." -ForegroundColor Cyan
+        Write-Verbose "Remote computer IP/Hostname opvragen..."
         if ($Script:Settings.ContainsKey('remoteClientIP') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.remoteClientIP) -and $Script:Settings.remoteClientIP -ne 'jouw.client.ip.hier') {
             $computerName = $Script:Settings.remoteClientIP
         }
@@ -1038,15 +1048,20 @@ function Invoke-RemoteWireGuardClientSetup {
         if (-not $computerName) {
             throw "Instelling 'remoteClientIP' is leeg of ongeldig in Variable.psd1."
         }
-        Write-Host "  ✓ Remote computer: $computerName" -ForegroundColor Green
+        Write-Verbose "Remote computer: $computerName"
         
         $cred = Get-Credential -Message "Admin Credentials voor $computerName"
         
+        Write-Verbose "Pad naar .conf bestand opvragen..."
         $confPath = Read-Host "Pad naar .conf bestand"
-        if (-not (Test-Path $confPath)) { throw "Bestand niet gevonden" }
+        Write-Verbose "Pad ingevoerd: $confPath"
+        if (-not (Test-Path $confPath)) { throw "Bestand niet gevonden: $confPath" }
         
+        Write-Verbose "Inhoud van config lezen..."
         $content = Get-Content $confPath -Raw
+        Write-Verbose "Config inhoud gelezen, lengte: $($content.Length)"
         
+        Write-Verbose "Starten remote client installatie..."
         if (Install-RemoteWireGuardClient -ComputerName $computerName -Credential $cred -ClientConfigContent $content) {
             Show-Menu -Mode Success -SuccessTitle "Remote WireGuard Client Setup Voltooid"
         }
@@ -1121,7 +1136,15 @@ function Invoke-WireGuardServerSetup {
         # Client config
         if (-not (Test-Path $Script:OutputPath)) { New-Item -ItemType Directory -Path $Script:OutputPath -Force | Out-Null }
         $clientConfigPath = Join-Path $Script:OutputPath "wg-client.conf"
-        New-WireGuardClientConfig -ClientKeys $clientKeys -ServerKeys $serverKeys -ServerAvailableIP $serverWanIP -Port $wgPort -Address "$baseSubnet.2/24" -OutputPath $clientConfigPath | Out-Null
+        $clientConfigContent = New-WireGuardClientConfig -ClientKeys $clientKeys -ServerKeys $serverKeys -ServerAvailableIP $serverWanIP -Port $wgPort -Address "$baseSubnet.2/24" -OutputPath $clientConfigPath
+        
+        # QR-code maken
+        $qrPath = Join-Path $Script:OutputPath "wg-client-qr.png"
+        if (New-WireGuardQRCode -ConfigContent $clientConfigContent -OutputPath $qrPath) {
+            Write-Host "  ✓ QR-code aangemaakt: $qrPath" -ForegroundColor Green
+        } else {
+            Write-Host "  ! QR-code maken mislukt" -ForegroundColor Yellow
+        }
         
         Write-Host "  ✓ Configuraties aangemaakt" -ForegroundColor Green
 
@@ -1130,7 +1153,7 @@ function Invoke-WireGuardServerSetup {
         if (-not (Start-WireGuardService -ConfigPath $serverConfigPath)) { throw "Starten service mislukt" }
         Write-Host "  ✓ Service gestart" -ForegroundColor Green
         
-        Show-Menu -Mode Success -SuccessTitle "WireGuard Server Setup Voltooid!" -LogFile $script:LogFile -ExtraInfo "Client config is opgeslagen als: $clientConfigPath" -ExtraMessage "Kopieer dit bestand naar de client en importeer het in WireGuard."
+        Show-Menu -Mode Success -SuccessTitle "WireGuard Server Setup Voltooid!" -LogFile $script:LogFile -ExtraInfo "Client config: $clientConfigPath`nQR-code: $qrPath" -ExtraMessage "Kopieer het .conf bestand naar de client en importeer het in WireGuard, of scan de QR-code op mobiele apparaten."
         
     }
     catch {
