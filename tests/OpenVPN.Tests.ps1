@@ -1,3 +1,27 @@
+<#
+    WAAROM ZOVEEL MOCKS IN DEZE TESTS?
+
+    OpenVPN functies zijn moeilijk te testen omdat ze:
+    - Windows services starten/stoppen
+    - Netwerk adapters en firewall configureren
+    - Externe executables uitvoeren (wg.exe)
+    - Register instellingen manipuleren
+
+    In CI/CD (GitHub Actions) werken deze niet omdat:
+    - Geen echte netwerk adapters beschikbaar
+    - Services kunnen niet draaien
+    - wg.exe bestaat niet in de container
+
+    Daarom mocken we alles voor:
+    - CI compatibiliteit
+    - Systeem veiligheid (geen echte veranderingen)
+    - Snelle, reproduceerbare tests
+
+    Trade-off: testen niet alle echte logica, maar wel CI/CD werkend houden.
+#>
+
+
+
 #Requires -Modules Pester
 
 # Import the module
