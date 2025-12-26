@@ -2425,7 +2425,7 @@ function Install-WireGuard {
         [Parameter(Position = 0)][string]$wgUrl
     )
     
-    $wgExePath = $Script:Settings.wireGuardInstalledPath
+    $wgExePath = if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardInstalledPath') -and $Script:Settings.wireGuardInstalledPath) { $Script:Settings.wireGuardInstalledPath } else { "C:\Program Files\WireGuard\wireguard.exe" }
     if (Test-Path $wgExePath) {
         Write-Log "WireGuard lijkt al geïnstalleerd te zijn" -Level "INFO"
         return $true
@@ -2495,15 +2495,25 @@ function Initialize-WireGuardKeys {
         Hashtable met PrivateKey en PublicKey.
     #>
     param(
-        [string]$WgPath
+        [string]$WgPath,
+        [hashtable]$Settings = $null
     )
     
     if (-not $WgPath) {
-        $WgPath = $Script:Settings.wireGuardKeysExePath
+        if ($Settings -and $Settings.ContainsKey('wireGuardKeysExePath') -and $Settings.wireGuardKeysExePath) {
+            $WgPath = $Settings.wireGuardKeysExePath
+        }
+        elseif ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardKeysExePath') -and $Script:Settings.wireGuardKeysExePath) {
+            $WgPath = $Script:Settings.wireGuardKeysExePath
+        }
+        else {
+            $WgPath = "C:\Program Files\WireGuard\wg.exe"
+            Write-Log "Geen wg.exe pad opgegeven, gebruik standaard fallback: $WgPath" -Level "WARNING"
+        }
     }
     
     if (-not (Test-Path $WgPath)) {
-        throw "wg.exe niet gevonden op $WgPath. Installeer eerst WireGuard."
+        throw "wg.exe niet gevonden op $WgPath. Controleer wireGuardKeysExePath in je settings of installeer WireGuard eerst."
     }
     
     try {
@@ -3064,7 +3074,7 @@ function Stop-WireGuardService {
     #>
     param()
     
-    $wgPath = $Script:Settings.wireGuardInstalledPath
+    $wgPath = if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardInstalledPath') -and $Script:Settings.wireGuardInstalledPath) { $Script:Settings.wireGuardInstalledPath } else { "C:\Program Files\WireGuard\wireguard.exe" }
     if (-not (Test-Path $wgPath)) {
         Write-Log "WireGuard executable niet gevonden, kan niet stoppen" -Level "WARNING"
         return $false
@@ -3099,7 +3109,7 @@ function Start-WireGuardService {
         [Parameter(Mandatory = $true)]$ConfigPath
     )
     
-    $wgPath = $Script:Settings.wireGuardInstalledPath
+    $wgPath = if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardInstalledPath') -and $Script:Settings.wireGuardInstalledPath) { $Script:Settings.wireGuardInstalledPath } else { "C:\Program Files\WireGuard\wireguard.exe" }
     if (-not (Test-Path $wgPath)) {
         throw "WireGuard executable niet gevonden"
     }
@@ -3424,7 +3434,7 @@ function Invoke-BatchRemoteWireGuardClientInstall {
     )
     
     # Basis IP ophalen uit settings of default
-    $baseSubnet = if ($Settings.ContainsKey('wireGuardBaseSubnet') -and -not [string]::IsNullOrEmpty($Settings.wireGuardBaseSubnet)) { $Settings.wireGuardBaseSubnet } else { $Script:Settings.wireGuardBaseSubnet }
+    $baseSubnet = if ($Settings.ContainsKey('wireGuardBaseSubnet') -and -not [string]::IsNullOrEmpty($Settings.wireGuardBaseSubnet)) { $Settings.wireGuardBaseSubnet } else { "10.13.13" }
     
     $i = 0
     $results = $Clients | ForEach-Object -Parallel {
@@ -3454,7 +3464,7 @@ function Invoke-BatchRemoteWireGuardClientInstall {
         
         Write-Log "Genereren keys voor $($client.Name)..." -Level "INFO"
         Write-Verbose "Genereren keys voor $($client.Name)..."
-        $keys = Initialize-WireGuardKeys -WgPath $Settings.wireGuardKeysExePath # Assuming key present or fallback
+        $keys = Initialize-WireGuardKeys -WgPath $Settings.wireGuardKeysExePath -Settings $Settings
         
         # Generate Client Config Content
         $configContent = @"
@@ -3491,9 +3501,26 @@ PersistentKeepalive = $($Script:Settings.wireGuardDefaultPersistentKeepalive)
         $serverUpdates += "`n[Peer] # User: $($pc.Name)`nPublicKey = $($pc.PublicKey)`nAllowedIPs = $($pc.VPNIP)/32`n"
     }
     
-    $serverUpdateFile = "wg_server_additions.txt"
+    $serverUpdateFile = Join-Path $Script:Settings.outputPath "wg_server_additions.txt"
     Set-Content -Path $serverUpdateFile -Value $serverUpdates
     Write-Log "BELANGRIJK: Voeg de peers toe aan je server config! Opgeslagen in $serverUpdateFile" -Level "WARNING"
+   
+    # Instructies voor de admin zichtbaar maken in de console
+    Write-Host ""
+    Write-Host "=== HANDLEIDING: Peers toevoegen aan WireGuard server ===" -ForegroundColor Yellow
+    Write-Host "1) Open het serverconfig bestand op de WireGuard server (bijv. C:\WireGuard\wg_server.conf)" -ForegroundColor Cyan
+    Write-Host "2) Kopieer de inhoud van '$serverUpdateFile' en plak deze aan het einde van wg_server.conf" -ForegroundColor Cyan
+    Write-Host "`n--- Te kopiëren inhoud ---" -ForegroundColor Magenta
+    try {
+        $contentToShow = Get-Content -Path $serverUpdateFile -Raw -ErrorAction Stop
+        Write-Host $contentToShow -ForegroundColor Green
+    }
+    catch {
+        Write-Host "Kan $serverUpdateFile niet lezen: $_" -ForegroundColor Red
+    }
+    Write-Host "`n3) Na toevoegen: herstart WireGuard service" -ForegroundColor Cyan
+    Write-Host "4) Controleer of clients kunnen verbinden" -ForegroundColor Cyan
+    Write-Host "==========================================" -ForegroundColor Yellow 
     Write-Verbose "Server updates opgeslagen in $serverUpdateFile - voeg deze handmatig toe aan je server config!"
     
     # Run Parallel Install
