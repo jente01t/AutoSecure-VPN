@@ -41,6 +41,7 @@ InModuleScope AutoSecureVPN {
             lanSubnet = "192.168.0.0"
             lanMask = "255.255.255.0"
             noPass = $true
+            clientName = "client1"
         }
     }
 
@@ -92,6 +93,7 @@ InModuleScope AutoSecureVPN {
             Mock Compress-Archive { } -ModuleName AutoSecureVPN
             Mock Write-Log { } -ModuleName AutoSecureVPN
             Mock Test-Path { return $true } -ModuleName AutoSecureVPN
+            Mock Remove-Item { } -ModuleName AutoSecureVPN
             
             $config = @{ clientName = "client1" }
             $result = New-ClientPackage -Config $config -OutputPath "C:\output"
@@ -107,6 +109,9 @@ InModuleScope AutoSecureVPN {
             Mock Copy-Item { } -ModuleName AutoSecureVPN
             Mock Write-Log { } -ModuleName AutoSecureVPN
             Mock Expand-Archive { } -ModuleName AutoSecureVPN
+            Mock Get-ChildItem { return [PSCustomObject]@{ FullName = "C:\config\client.ovpn" } } -ModuleName AutoSecureVPN
+            Mock Get-Content { return "client config" } -ModuleName AutoSecureVPN
+            Mock Set-Content { } -ModuleName AutoSecureVPN
             
             $result = Import-ClientConfiguration
             $result | Should -Not -BeNullOrEmpty
@@ -137,16 +142,16 @@ InModuleScope AutoSecureVPN {
         It "Generates server config" {
             Mock Set-Content { } -ModuleName AutoSecureVPN
             Mock Write-Log { } -ModuleName AutoSecureVPN
+            Mock Test-Path { return $true } -ModuleName AutoSecureVPN
+            Mock New-Item { } -ModuleName AutoSecureVPN
             
             $config = @{
+                serverName = "server"
+                serverIP = "192.168.0.132"
                 port = 443
                 protocol = "TCP"
                 vpnSubnet = "10.8.0.0"
                 vpnMask = "255.255.255.0"
-                serverIP = "192.168.1.1"
-                serverWanIP = "1.2.3.4"
-                lanSubnet = "192.168.1.0"
-                lanMask = "255.255.255.0"
                 dns1 = "8.8.8.8"
                 dns2 = "8.8.4.4"
             }
