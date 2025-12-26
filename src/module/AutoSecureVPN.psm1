@@ -1174,7 +1174,8 @@ function Install-RemoteServer {
         [Parameter(Mandatory = $true, Position = 0)][ValidatePattern('^[a-zA-Z0-9.-]+$')][string]$ComputerName,
         [Parameter(Mandatory = $true, Position = 1)][PSCredential]$Credential,
         [Parameter(Mandatory = $true, Position = 2)][hashtable]$ServerConfig,
-        [Parameter(Mandatory = $true, Position = 3)][string]$LocalEasyRSAPath
+        [Parameter(Mandatory = $true, Position = 3)][string]$LocalEasyRSAPath,
+        [Parameter(Mandatory = $false)][string]$RemoteConfigPath
     )
 
     Write-Log "Remote server configuratie gestart voor $ComputerName" -Level "INFO"
@@ -1244,10 +1245,16 @@ function Install-RemoteServer {
         Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
         
         Invoke-Command -Session $session -ScriptBlock {
-            param($moduleSettings, $modulePath, $config, $remoteEasyRSAZip, $remoteEasyRSA)
+            param($moduleSettings, $modulePath, $config, $remoteEasyRSAZip, $remoteEasyRSA, $remoteConfigPath)
             
             # Stop on errors from the start
             $ErrorActionPreference = 'Stop'
+            
+            # Disable file logging for remote operations - define early
+            function global:Write-Log {
+                param($Message, $Level = "INFO")
+                Write-Verbose "[$Level] $Message"
+            }
             
             # Extract EasyRSA ZIP using .NET (more reliable than Expand-Archive)
             Write-Verbose "Extracting EasyRSA..."
@@ -1276,7 +1283,7 @@ function Install-RemoteServer {
             if (-not $moduleSettings.port -or $moduleSettings.port -eq 0) { $moduleSettings.port = 443 }
             if (-not $moduleSettings.protocol) { $moduleSettings.protocol = 'TCP' }
             if (-not $moduleSettings.easyRSAPath) { $moduleSettings.easyRSAPath = 'C:\Program Files\OpenVPN\easy-rsa' }
-            if (-not $moduleSettings.configPath) { $moduleSettings.configPath = 'C:\Program Files\OpenVPN\config' }
+            if (-not $moduleSettings.configPath -or $remoteConfigPath) { $moduleSettings.configPath = if ($remoteConfigPath) { $remoteConfigPath } else { 'C:\Program Files\OpenVPN\config' } }
             if (-not $moduleSettings.installedPath) { $moduleSettings.installedPath = 'C:\Program Files\OpenVPN\bin\openvpn.exe' }
             
             Write-Log "Remote settings configured: Port=$($moduleSettings.port), Protocol=$($moduleSettings.protocol)" -Level "INFO"
@@ -1298,12 +1305,6 @@ function Install-RemoteServer {
             $Script:Settings = $moduleSettings
             $Script:BasePath = "C:\Temp"
             
-            # Disable file logging for remote operations
-            function global:Write-Log {
-                param($Message, $Level = "INFO")
-                Write-Verbose "[$Level] $Message"
-            }
-            
             try {
                 Write-Verbose "Starting remote server setup..."
                 
@@ -1319,6 +1320,12 @@ function Install-RemoteServer {
                 Write-Verbose "Configuring firewall..."
                 if (-not (Set-Firewall -Port $Script:Settings.port -Protocol $Script:Settings.protocol)) {
                     throw "Firewall configuration failed"
+                }
+                
+                Write-Verbose "Configuring NAT for internet access..."
+                # NAT configureren voor internet toegang (10.8.0.0/24 = OpenVPN default subnet)
+                if (-not (Enable-VPNNAT -VPNSubnet "10.8.0.0/24")) { 
+                    Write-Verbose "NAT configuration warning - manual configuration may be needed"
                 }
                 
                 Write-Verbose "Copying EasyRSA with certificates..."
@@ -1354,7 +1361,7 @@ function Install-RemoteServer {
             
             Remove-Item $modulePath -Force
             Remove-Item $remoteEasyRSA -Recurse -Force
-        } -ArgumentList $Script:Settings, $remoteModule, $ServerConfig, $remoteEasyRSAZip, $remoteEasyRSA -ErrorAction Stop
+        } -ArgumentList $Script:Settings, $remoteModule, $ServerConfig, $remoteEasyRSAZip, $remoteEasyRSA, $RemoteConfigPath -ErrorAction Stop
         
         Remove-PSSession $session
         
@@ -1481,6 +1488,10 @@ function New-ClientPackage {
         [Parameter(Position = 1)][string]$EasyRSAPath = $Script:Settings.easyRSAPath,
         [Parameter(Position = 2)][string]$OutputPath = $Script:OutputPath
     )
+    
+    if (-not $OutputPath -or [string]::IsNullOrWhiteSpace($OutputPath)) {
+        $OutputPath = Join-Path $Script:BasePath "output"
+    }
     
     $pkiPath = Join-Path $EasyRSAPath "pki"
     
@@ -2414,7 +2425,7 @@ function Install-WireGuard {
         [Parameter(Position = 0)][string]$wgUrl
     )
     
-    $wgExePath = "C:\Program Files\WireGuard\wireguard.exe"
+    $wgExePath = $Script:Settings.wireGuardInstalledPath
     if (Test-Path $wgExePath) {
         Write-Log "WireGuard lijkt al geïnstalleerd te zijn" -Level "INFO"
         return $true
@@ -2425,7 +2436,7 @@ function Install-WireGuard {
     # Bepaal download URL
     if (-not $wgUrl) {
         # Gebruik vaste stabiele versie als fallback
-        $wgUrl = "https://download.wireguard.com/windows-client/wireguard-amd64-0.5.3.msi"
+        $wgUrl = $Script:Settings.wireGuardInstallerUrlFallback
     }
 
     $tempPath = [System.IO.Path]::GetTempFileName() + ".msi"
@@ -2433,10 +2444,10 @@ function Install-WireGuard {
     try {
         # Probeer dynamisch de laatste versie te vinden
         try {
-            $content = Invoke-WebRequest -Uri "https://download.wireguard.com/windows-client/" -UseBasicParsing -ErrorAction SilentlyContinue
-            if ($content.Content -match 'href="(wireguard-amd64-([\d.]+)\.msi)"') {
+            $content = Invoke-WebRequest -Uri $Script:Settings.wireGuardVersionCheckUrl -UseBasicParsing -ErrorAction SilentlyContinue
+            if ($content.Content -match $Script:Settings.wireGuardVersionRegex) {
                 $latestMsi = $matches[1]
-                $wgUrl = "https://download.wireguard.com/windows-client/$latestMsi"
+                $wgUrl = "$($Script:Settings.wireGuardVersionCheckUrl)$latestMsi"
                 Write-Log "Laatste WireGuard versie online gevonden: $latestMsi" -Level "INFO"
             }
         }
@@ -2450,7 +2461,7 @@ function Install-WireGuard {
         
         # Silent install options
         # DO_NOT_LAUNCH=1 voorkomt dat de GUI direct start
-        $arguments = "/i `"$tempPath`" /qn DO_NOT_LAUNCH=1 /norestart"
+        $arguments = $Script:Settings.wireGuardInstallerArguments -f $tempPath
         
         Write-Log "Installeren..." -Level "INFO"
         $process = Start-Process -FilePath "msiexec.exe" -ArgumentList $arguments -Wait -PassThru
@@ -2484,8 +2495,12 @@ function Initialize-WireGuardKeys {
         Hashtable met PrivateKey en PublicKey.
     #>
     param(
-        [string]$WgPath = "C:\Program Files\WireGuard\wg.exe"
+        [string]$WgPath
     )
+    
+    if (-not $WgPath) {
+        $WgPath = $Script:Settings.wireGuardKeysExePath
+    }
     
     if (-not (Test-Path $WgPath)) {
         throw "wg.exe niet gevonden op $WgPath. Installeer eerst WireGuard."
@@ -2568,14 +2583,15 @@ function Enable-IPForwarding {
     }
 }
 
-function Enable-WireGuardNAT {
+function Enable-VPNNAT {
     <#
     .SYNOPSIS
-        Configureert NAT voor WireGuard VPN subnet.
+        Configureert NAT voor VPN subnet (WireGuard of OpenVPN).
     
     .DESCRIPTION
         Deze functie configureert Network Address Translation (NAT) zodat
         VPN clients internettoegang hebben via de server.
+        Werkt voor zowel WireGuard als OpenVPN.
         Probeert eerst NetNat, valt terug op ICS bij "Invalid class" errors.
         
     .PARAMETER VPNSubnet
@@ -2589,18 +2605,46 @@ function Enable-WireGuardNAT {
         $true bij succes, anders $false.
         
     .EXAMPLE
-        Enable-WireGuardNAT -VPNSubnet "10.13.13.0/24"
+        Enable-VPNNAT -VPNSubnet "10.13.13.0/24"
     #>
     param(
-        [Parameter(Mandatory = $false)][string]$VPNSubnet = "10.13.13.0/24",
+        [Parameter(Mandatory = $false)][string]$VPNSubnet,
         [Parameter(Mandatory = $false)][string]$InterfaceAlias
     )
+    
+    # Compacte en veilige fallback:
+    # - Gebruik expliciet doorgegeven $VPNSubnet als deze niet leeg is
+    # - Anders gebruik instelling $Script:Settings.wireGuardBaseSubnet als die bestaat en niet leeg is
+    # - Als beide ontbreken: expliciete fout zodat admin de setting kan corrigeren
+    if ([string]::IsNullOrWhiteSpace($VPNSubnet)) {
+        $base = $null
+        if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardBaseSubnet')) {
+            $base = $Script:Settings.wireGuardBaseSubnet
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($base)) {
+            $VPNSubnet = "${base}.0/24"
+        }
+        else {
+            throw "VPNSubnet niet opgegeven en 'wireGuardBaseSubnet' ontbreekt of is leeg in Settings. Voeg een waarde toe aan de config of geef -VPNSubnet op."
+        }
+    }
     
     try {
         # Eerst IP Forwarding inschakelen
         if (-not (Enable-IPForwarding)) {
             Write-Log "Kon IP Forwarding niet inschakelen" -Level "ERROR"
             return $false
+        }
+        
+        # ICS Persistence fix - voorkom dat Windows ICS automatisch uitschakelt
+        try {
+            $icsRegPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\SharedAccess"
+            Set-ItemProperty -Path $icsRegPath -Name "EnableRebootPersistConnection" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+            Write-Log "ICS persistence ingeschakeld (voorkomt auto-reset)" -Level "INFO"
+        }
+        catch {
+            Write-Log "Kon ICS persistence registry niet instellen: $_" -Level "WARNING"
         }
         
         # Bepaal de internet-facing interface als niet opgegeven
@@ -2939,9 +2983,24 @@ function New-WireGuardClientConfig {
         [Parameter(Mandatory = $true)]$ServerAvailableIP, # WAN IP
         [Parameter(Mandatory = $true)]$Port,
         [Parameter(Mandatory = $true)]$Address, # e.g. 10.13.13.2/24
-        [string]$DNS = "8.8.8.8",
+        [string]$DNS,
         [string]$OutputPath
     )
+    
+    if ([string]::IsNullOrWhiteSpace($DNS)) {
+        $dnsFromSettings = $null
+        if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardDefaultDns')) {
+            $dnsFromSettings = $Script:Settings.wireGuardDefaultDns
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($dnsFromSettings)) {
+            $DNS = $dnsFromSettings
+        }
+        else {
+            Write-Log "Geen DNS opgegeven voor WireGuard client; gebruik fallback 8.8.8.8" -Level "WARNING"
+            $DNS = '8.8.8.8'
+        }
+    }
     
     $configContent = @"
 [Interface]
@@ -2953,7 +3012,7 @@ DNS = $DNS
 PublicKey = $($ServerKeys.PublicKey)
 Endpoint = ${ServerAvailableIP}:${Port}
 AllowedIPs = 0.0.0.0/0
-PersistentKeepalive = 25
+PersistentKeepalive = $($Script:Settings.wireGuardDefaultPersistentKeepalive)
 "@
 
     if ($OutputPath) {
@@ -3005,7 +3064,7 @@ function Stop-WireGuardService {
     #>
     param()
     
-    $wgPath = "C:\Program Files\WireGuard\wireguard.exe"
+    $wgPath = $Script:Settings.wireGuardInstalledPath
     if (-not (Test-Path $wgPath)) {
         Write-Log "WireGuard executable niet gevonden, kan niet stoppen" -Level "WARNING"
         return $false
@@ -3040,7 +3099,7 @@ function Start-WireGuardService {
         [Parameter(Mandatory = $true)]$ConfigPath
     )
     
-    $wgPath = "C:\Program Files\WireGuard\wireguard.exe"
+    $wgPath = $Script:Settings.wireGuardInstalledPath
     if (-not (Test-Path $wgPath)) {
         throw "WireGuard executable niet gevonden"
     }
@@ -3091,8 +3150,35 @@ function Install-RemoteWireGuardServer {
         [Parameter(Mandatory = $true)]$Credential,
         [Parameter(Mandatory = $true)]$ServerConfigContent, # De inhoud van wg_server.conf
         [Parameter(Mandatory = $true)]$RemoteConfigPath, # Waar op te slaan (directory of full path?)
-        [int]$Port = 51820
+        [int]$Port
     )
+    
+    if (-not $Port) {
+        # Probeer poort uit settings te halen als niet opgegeven
+        if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardPort') -and $Script:Settings.wireGuardPort) {
+            $Port = [int]$Script:Settings.wireGuardPort
+        }
+        else {
+            throw "Port niet opgegeven en 'wireGuardPort' ontbreekt of is leeg in Settings. Geef -Port op of voeg waarde toe aan de config."
+        }
+    }
+
+    # Bepaal VPN subnet vanuit settings (veilig controleren)
+    $vpnSubnet = $null
+    if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardBaseSubnet') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.wireGuardBaseSubnet)) {
+        $vpnSubnet = "${($Script:Settings.wireGuardBaseSubnet)}.0/24"
+    }
+    else {
+        throw "'wireGuardBaseSubnet' ontbreekt of is leeg in Settings. Voeg een waarde toe aan de config."
+    }
+
+    # Remote temp path fallback
+    if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardRemoteTempPath') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.wireGuardRemoteTempPath)) {
+        $remoteTemp = $Script:Settings.wireGuardRemoteTempPath
+    }
+    else {
+        $remoteTemp = 'C:\Temp'
+    }
     
     Write-Log "Starten remote WireGuard server installatie op $ComputerName..." -Level "INFO"
     Write-Verbose "Verbinden met remote machine $ComputerName..."
@@ -3103,8 +3189,7 @@ function Install-RemoteWireGuardServer {
     try {
         # 1. Module kopiëren
         Write-Verbose "Module kopiëren naar remote..."
-        $remoteTemp = "C:\Temp"
-        Invoke-Command -Session $session -ScriptBlock { if (-not (Test-Path "C:\Temp")) { New-Item -ItemType Directory -Path "C:\Temp" -Force } }
+        Invoke-Command -Session $session -ScriptBlock { param($path) if (-not (Test-Path $path)) { New-Item -ItemType Directory -Path $path -Force } } -ArgumentList $remoteTemp
         
         $localModule = Join-Path $PSScriptRoot "AutoSecureVPN.psm1" 
         # Fallback als PSScriptRoot niet is ingesteld (bijv. tijdens test)
@@ -3119,7 +3204,7 @@ function Install-RemoteWireGuardServer {
         # 2. Uitvoeren op remote met output capture
         Write-Verbose "Uitvoeren installatie op remote..."
         $remoteResult = Invoke-Command -Session $session -ScriptBlock {
-            param($modulePath, $configContent, $configDir, $port)
+            param($modulePath, $configContent, $configDir, $port, $vpnSubnet, $settings)
             
             $log = @()
             $log += "=== Remote WireGuard Server Setup Start ==="
@@ -3129,6 +3214,8 @@ function Install-RemoteWireGuardServer {
                 $log += "Module laden..."
                 $moduleContent = Get-Content -Path $modulePath -Raw
                 Invoke-Expression $moduleContent
+                
+                Set-ModuleSettings -Settings $settings -BasePath "C:\Temp"
                 
                 # Override Write-Log to capture output
                 $script:remoteLog = @()
@@ -3147,7 +3234,7 @@ function Install-RemoteWireGuardServer {
                 
                 # 2. NAT configureren (dit roept ook Enable-IPForwarding aan)
                 $log += "Configureren NAT voor internet toegang..."
-                $natResult = Enable-WireGuardNAT -VPNSubnet "10.13.13.0/24"
+                $natResult = Enable-VPNNAT -VPNSubnet $vpnSubnet
                 $log += $script:remoteLog  # Voeg NAT logs toe
                 if (-not $natResult) { 
                     $log += "WARNING: NAT configuratie mogelijk niet volledig"
@@ -3196,7 +3283,7 @@ function Install-RemoteWireGuardServer {
                     Error   = $_.ToString()
                 }
             }
-        } -ArgumentList $remoteModule, $ServerConfigContent, $RemoteConfigPath
+        } -ArgumentList $remoteModule, $ServerConfigContent, $RemoteConfigPath, $Port, $vpnSubnet, $Script:Settings
         
         # Toon remote output
         if ($remoteResult.Log) {
@@ -3252,6 +3339,9 @@ function Install-RemoteWireGuardClient {
         [Parameter(Mandatory = $true)]$ClientConfigContent
     )
     
+    $remoteTemp = if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardRemoteTempPath') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.wireGuardRemoteTempPath)) { $Script:Settings.wireGuardRemoteTempPath } else { 'C:\Temp' }
+    $configDir = if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardRemoteClientConfigDir') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.wireGuardRemoteClientConfigDir)) { $Script:Settings.wireGuardRemoteClientConfigDir } else { 'C:\Program Files\WireGuard\config' }
+    
     Write-Log "Starten remote WireGuard client installatie op $ComputerName..." -Level "INFO"
     Write-Verbose "Verbinden met remote machine $ComputerName..."
     
@@ -3261,8 +3351,7 @@ function Install-RemoteWireGuardClient {
     try {
         # 1. Module kopiëren
         Write-Verbose "Module kopiëren naar remote..."
-        $remoteTemp = "C:\Temp"
-        Invoke-Command -Session $session -ScriptBlock { if (-not (Test-Path "C:\Temp")) { New-Item -ItemType Directory -Path "C:\Temp" -Force } }
+        Invoke-Command -Session $session -ScriptBlock { param($path) if (-not (Test-Path $path)) { New-Item -ItemType Directory -Path $path -Force } } -ArgumentList $remoteTemp
         
         $localModule = Join-Path $PSScriptRoot "AutoSecureVPN.psm1"
         if (-not $localModule -or -not (Test-Path $localModule)) {
@@ -3276,11 +3365,13 @@ function Install-RemoteWireGuardClient {
         # 2. Uitvoeren op remote
         Write-Verbose "Uitvoeren installatie op remote..."
         Invoke-Command -Session $session -ScriptBlock {
-            param($modulePath, $configContent)
+            param($modulePath, $configContent, $configDir, $settings)
             
             # Module laden
             $moduleContent = Get-Content -Path $modulePath -Raw
             Invoke-Expression $moduleContent
+            
+            Set-ModuleSettings -Settings $settings -BasePath "C:\Temp"
             
             function global:Write-Log { param($Message, $Level) Write-Verbose "[$Level] $Message" }
             
@@ -3290,7 +3381,6 @@ function Install-RemoteWireGuardClient {
             
             Write-Verbose "Opslaan config..."
             # Config opslaan
-            $configDir = "C:\WireGuardConfigs"
             if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
             $clientConfigPath = Join-Path $configDir "wg-client.conf"
             Set-Content -Path $clientConfigPath -Value $configContent
@@ -3299,7 +3389,7 @@ function Install-RemoteWireGuardClient {
             # Service starten
             if (-not (Start-WireGuardService -ConfigPath $clientConfigPath)) { throw "Remote Service start mislukt" }
             
-        } -ArgumentList $remoteModule, $ClientConfigContent
+        } -ArgumentList $remoteModule, $ClientConfigContent, $configDir, $Script:Settings
         Write-Verbose "Remote installatie voltooid"
         
         Write-Log "Remote WireGuard Client configuratie voltooid voor $ComputerName" -Level "SUCCESS"
@@ -3334,7 +3424,7 @@ function Invoke-BatchRemoteWireGuardClientInstall {
     )
     
     # Basis IP ophalen uit settings of default
-    $baseSubnet = if ($Settings.ContainsKey('wireGuardBaseSubnet')) { $Settings.wireGuardBaseSubnet } else { "10.13.13" }
+    $baseSubnet = if ($Settings.ContainsKey('wireGuardBaseSubnet') -and -not [string]::IsNullOrEmpty($Settings.wireGuardBaseSubnet)) { $Settings.wireGuardBaseSubnet } else { $Script:Settings.wireGuardBaseSubnet }
     
     $i = 0
     $results = $Clients | ForEach-Object -Parallel {
@@ -3364,20 +3454,20 @@ function Invoke-BatchRemoteWireGuardClientInstall {
         
         Write-Log "Genereren keys voor $($client.Name)..." -Level "INFO"
         Write-Verbose "Genereren keys voor $($client.Name)..."
-        $keys = Initialize-WireGuardKeys -WgPath $Settings.wireGuardInstallPath # Assuming key present or fallback
+        $keys = Initialize-WireGuardKeys -WgPath $Settings.wireGuardKeysExePath # Assuming key present or fallback
         
         # Generate Client Config Content
         $configContent = @"
 [Interface]
 PrivateKey = $($keys.PrivateKey)
 Address = $clientIp/24
-DNS = 8.8.8.8
+DNS = $($Script:Settings.wireGuardDefaultDns)
 
 [Peer]
 PublicKey = $($ServerKeys.PublicKey)
 Endpoint = $ServerEndpoint
 AllowedIPs = 0.0.0.0/0
-PersistentKeepalive = 25
+PersistentKeepalive = $($Script:Settings.wireGuardDefaultPersistentKeepalive)
 "@
 
         $preparedClients += [PSCustomObject]@{

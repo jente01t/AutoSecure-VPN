@@ -699,9 +699,20 @@ function Invoke-OpenVPNServerSetup {
         Write-Verbose "Firewall regels succesvol toegevoegd"
         Write-Log "Firewall regels toegevoegd" -Level "INFO"
         
+        # Stap 3.5: NAT en IP Forwarding configureren voor internet toegang
+        Write-Progress -Activity "Server Setup" -Status "Stap 3.5 van 9: NAT en IP Forwarding configureren" -PercentComplete 31
+        Write-Host "`n[3.5/9] NAT en IP Forwarding configureren..." -ForegroundColor Cyan
+        if (-not (Enable-VPNNAT -VPNSubnet "10.8.0.0/24")) { 
+            Write-Host "  ! NAT configuratie warning - mogelijk handmatige configuratie nodig" -ForegroundColor Yellow
+            Write-Log "NAT configuratie warning - handmatige setup mogelijk nodig" -Level "WARNING"
+        }
+        else {
+            Write-Host "  ✓ NAT en IP Forwarding geconfigureerd" -ForegroundColor Green
+        }
+        
         # Stap 4: Gebruikersinput verzamelen
-        Write-Progress -Activity "Server Setup" -Status "Stap 4 van 8: Server configuratie parameters verzamelen" -PercentComplete 37.5
-        Write-Host "`n[4/8] Server configuratie parameters..." -ForegroundColor Cyan
+        Write-Progress -Activity "Server Setup" -Status "Stap 4 van 9: Server configuratie parameters verzamelen" -PercentComplete 37.5
+        Write-Host "`n[4/9] Server configuratie parameters..." -ForegroundColor Cyan
         $serverConfig = Get-ServerConfiguration
         Write-Verbose "Server configuratie parameters verzameld: $($serverConfig | ConvertTo-Json)"
         Write-Log "Server configuratie parameters verzameld" -Level "INFO"
@@ -742,7 +753,7 @@ function Invoke-OpenVPNServerSetup {
         # Stap 8: Client package maken
         Write-Progress -Activity "Server Setup" -Status "Stap 8 van 8: Client configuratie package maken" -PercentComplete 87.5
         Write-Host "`n[8/8] Client configuratie package maken..." -ForegroundColor Cyan
-        $zipPath = New-ClientPackage -Config $serverConfig -EasyRSAPath $script:EasyRSAPath
+        $zipPath = New-ClientPackage -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -OutputPath $Script:OutputPath
         if (-not $zipPath) {
             throw "Client package aanmaken mislukt"
         }
@@ -803,7 +814,8 @@ function Invoke-RemoteOpenVPNServerSetup {
             throw "Script moet als Administrator worden uitgevoerd!"
         }
         Write-Host "  ✓ Administrator rechten bevestigd" -ForegroundColor Green
-        Write-Verbose "Lokale administrator rechten succesvol gecontroleerd"        Write-Log "Administrator rechten bevestigd" -Level "INFO"        
+        Write-Verbose "Lokale administrator rechten succesvol gecontroleerd"
+        Write-Log "Administrator rechten bevestigd" -Level "INFO"
         # Stap 1.5: Controleer lokale OpenVPN installatie
         Write-Progress -Activity "Remote Server Setup" -Status "Stap 1.5 van 7: Lokale OpenVPN installatie controleren" -PercentComplete 7
         if (-not (Test-Path $Script:Settings.installedPath)) {
@@ -941,7 +953,7 @@ function Invoke-RemoteOpenVPNServerSetup {
         # Stap 7: Client package maken
         Write-Progress -Activity "Remote Server Setup" -Status "Stap 7 van 7: Client configuratie package maken" -PercentComplete 86
         Write-Host "`n[7/7] Client configuratie package maken..." -ForegroundColor Cyan
-        $zipPath = New-ClientPackage -Config $serverConfig -EasyRSAPath $script:EasyRSAPath
+        $zipPath = New-ClientPackage -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -OutputPath $Script:OutputPath
         if (-not $zipPath) {
             throw "Client package aanmaken mislukt"
         }
@@ -1114,7 +1126,7 @@ function Invoke-WireGuardServerSetup {
         
         # Stap 3.5: NAT en IP Forwarding configureren voor internet toegang
         Write-Host "`n[3.5/7] NAT en IP Forwarding configureren..." -ForegroundColor Cyan
-        if (-not (Enable-WireGuardNAT -VPNSubnet "$baseSubnet.0/24")) { 
+        if (-not (Enable-VPNNAT -VPNSubnet "$baseSubnet.0/24")) { 
             Write-Host "  ! NAT configuratie warning - mogelijk handmatige configuratie nodig" -ForegroundColor Yellow
             Write-Log "NAT configuratie warning - handmatige setup mogelijk nodig" -Level "WARNING"
         }
