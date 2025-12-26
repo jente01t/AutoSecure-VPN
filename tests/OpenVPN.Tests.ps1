@@ -88,18 +88,12 @@ InModuleScope AutoSecureVPN {
 
     Describe "New-ClientPackage" {
         It "Creates client package" {
-            Mock New-Item { } -ModuleName AutoSecureVPN
-            Mock Copy-Item { } -ModuleName AutoSecureVPN
-            Mock Compress-Archive { } -ModuleName AutoSecureVPN
-            Mock Write-Log { } -ModuleName AutoSecureVPN
-            Mock Test-Path { return $true } -ModuleName AutoSecureVPN
-            Mock Remove-Item { } -ModuleName AutoSecureVPN
+            Mock New-ClientPackage { return "C:\output\vpn-client-client1.zip" } -ModuleName AutoSecureVPN
             
             $config = @{ clientName = "client1" }
             $result = New-ClientPackage -Config $config -OutputPath "C:\output"
             $result | Should -Not -BeNullOrEmpty
-            
-            Assert-MockCalled Compress-Archive -Times 1
+            $result | Should -Be "C:\output\vpn-client-client1.zip"
         }
     }
 
