@@ -4,37 +4,37 @@
 function Start-VPNSetup {
     <#
     .SYNOPSIS
-        Toont het hoofdmenu voor VPN setup keuze.
+        Displays the main menu for VPN setup selection.
 
     .DESCRIPTION
-        Deze functie toont een menu met opties voor server of client setup keuze.
+        This function shows a menu with options for server or client setup selection.
 
     .EXAMPLE
         Start-VPNSetup
     #>
     
-    Write-Log "=== OpenVPN Automatische Setup Gestart ===" -Level "INFO"
+    Write-Log "=== AutoSecure-VPN Automatic Setup Started ===" -Level "INFO"
     
-    $choice = Show-Menu -Mode Menu -Title "OpenVPN Automatische Setup v1.0" -Options @("Server Setup", "Client Setup", "Afsluiten") -HeaderColor Cyan -OptionColor Green -FooterColor Cyan -Prompt "Voer uw keuze in (1-3)"
+    $choice = Show-Menu -Mode Menu -Title "AutoSecure-VPN Automatic Setup v1.0" -Options @("Server Setup", "Client Setup", "Exit") -HeaderColor Cyan -OptionColor Green -FooterColor Cyan -Prompt "Enter your choice (1-3)"
     
     switch ($choice) {
         1 {
-            Write-Host "`n[*] Server Setup geselecteerd..." -ForegroundColor Cyan
-            Write-Log "Server Setup geselecteerd" -Level "INFO"
+            Write-Host "`n[*] Server Setup selected..." -ForegroundColor Cyan
+            Write-Log "Server Setup selected" -Level "INFO"
             Select-ServerMode
         }
         2 {
-            Write-Host "`n[*] Client Setup geselecteerd..." -ForegroundColor Cyan
-            Write-Log "Client Setup geselecteerd" -Level "INFO"
+            Write-Host "`n[*] Client Setup selected..." -ForegroundColor Cyan
+            Write-Log "Client Setup selected" -Level "INFO"
             Select-ClientMode
         }
         3 {
-            Write-Host "`n[*] Setup wordt afgesloten..." -ForegroundColor Yellow
-            Write-Log "Setup afgesloten door gebruiker" -Level "INFO"
+            Write-Host "`n[*] Exiting setup..." -ForegroundColor Yellow
+            Write-Log "Setup closed by user" -Level "INFO"
             exit 0
         }
         default {
-            Write-Host "`n[!] Ongeldige keuze. Probeer opnieuw." -ForegroundColor Red
+            Write-Host "`n[!] Invalid choice. Please try again." -ForegroundColor Red
             Start-Sleep -Seconds 2
             Start-VPNSetup
         }
@@ -43,21 +43,21 @@ function Start-VPNSetup {
 function Select-ServerMode {
     <#
     .SYNOPSIS
-        Toont submenu voor server setup keuze (lokaal of remote).
+        Displays submenu for server setup choice (local or remote).
 
     .DESCRIPTION
-        Deze functie toont een submenu voor het kiezen tussen lokale of remote server setup.
+        This function shows a submenu for choosing between local or remote server setup.
 
     .EXAMPLE
         Select-ServerMode
     #>
     
-    $choice = Show-Menu -Mode Menu -Title "Server Setup Opties" -Options @("Lokaal (VPN-server installeren en configureren op deze machine)", "Remote (VPN-server installeren en configureren op afstand)", "Terug naar hoofdmenu") -HeaderColor Yellow -OptionColor Green -FooterColor Red -Prompt "Voer uw keuze in (1-3)"
+    $choice = Show-Menu -Mode Menu -Title "Server Setup Options" -Options @("Local (Install and configure VPN server on this machine)", "Remote (Install and configure VPN server remotely)", "Back to main menu") -HeaderColor Yellow -OptionColor Green -FooterColor Red -Prompt "Enter your choice (1-3)"
     
     switch ($choice) {
         1 {
-            Write-Host "`n[*] Lokale Server Setup geselecteerd..." -ForegroundColor Cyan
-            Write-Log "Lokale Server Setup geselecteerd" -Level "INFO"
+            Write-Host "`n[*] Local Server Setup selected..." -ForegroundColor Cyan
+            Write-Log "Local Server Setup selected" -Level "INFO"
             
             $protocol = Select-VPNProtocol
             if ($protocol -eq "OpenVPN") {
@@ -68,8 +68,8 @@ function Select-ServerMode {
             }
         }
         2 {
-            Write-Host "`n[*] Remote Server Setup geselecteerd..." -ForegroundColor Cyan
-            Write-Log "Remote Server Setup geselecteerd" -Level "INFO"
+            Write-Host "`n[*] Remote Server Setup selected..." -ForegroundColor Cyan
+            Write-Log "Remote Server Setup selected" -Level "INFO"
             
             $protocol = Select-VPNProtocol
             if ($protocol -eq "OpenVPN") {
@@ -80,12 +80,12 @@ function Select-ServerMode {
             }
         }
         3 {
-            Write-Host "`n[*] Terug naar hoofdmenu..." -ForegroundColor Yellow
-            Write-Log "Terug naar hoofdmenu" -Level "INFO"
+            Write-Host "`n[*] Back to main menu..." -ForegroundColor Yellow
+            Write-Log "Back to main menu" -Level "INFO"
             Start-VPNSetup
         }
         default {
-            Write-Host "`n[!] Ongeldige keuze. Probeer opnieuw." -ForegroundColor Red
+            Write-Host "`n[!] Invalid choice. Please try again." -ForegroundColor Red
             Start-Sleep -Seconds 2
             Select-ServerMode
         }
@@ -94,21 +94,21 @@ function Select-ServerMode {
 function Select-ClientMode {
     <#
     .SYNOPSIS
-        Toont submenu voor client setup keuze (lokaal of remote).
+        Displays submenu for client setup choice (local or remote).
 
     .DESCRIPTION
-        Deze functie toont een submenu voor het kiezen tussen lokale of remote client setup.
+        This function shows a submenu for choosing between local or remote client setup.
 
     .EXAMPLE
         Select-ClientMode
     #>
     
-    $choice = Show-Menu -Mode Menu -Title "Client Setup Opties" -Options @("Lokaal (VPN-client installeren en verbinden op deze machine)", "Remote (VPN-client installeren en verbinden op afstand)", "Batch Remote (VPN-client installeren op meerdere machines)", "Terug naar hoofdmenu") -HeaderColor Yellow -OptionColor Green -FooterColor Red -Prompt "Voer uw keuze in (1-4)"
+    $choice = Show-Menu -Mode Menu -Title "Client Setup Options" -Options @("Local (Install and connect VPN client on this machine)", "Remote (Install and connect VPN client remotely)", "Batch Remote (Install VPN client on multiple machines)", "Back to main menu") -HeaderColor Yellow -OptionColor Green -FooterColor Red -Prompt "Enter your choice (1-4)"
     
     switch ($choice) {
         1 {
-            Write-Host "`n[*] Lokale Client Setup geselecteerd..." -ForegroundColor Cyan
-            Write-Log "Lokale Client Setup geselecteerd" -Level "INFO"
+            Write-Host "`n[*] Local Client Setup selected..." -ForegroundColor Cyan
+            Write-Log "Local Client Setup selected" -Level "INFO"
             
             $protocol = Select-VPNProtocol
             if ($protocol -eq "OpenVPN") {
@@ -119,8 +119,8 @@ function Select-ClientMode {
             }
         }
         2 {
-            Write-Host "`n[*] Remote Client Setup geselecteerd..." -ForegroundColor Cyan
-            Write-Log "Remote Client Setup geselecteerd" -Level "INFO"
+            Write-Host "`n[*] Remote Client Setup selected..." -ForegroundColor Cyan
+            Write-Log "Remote Client Setup selected" -Level "INFO"
              
             $protocol = Select-VPNProtocol
             if ($protocol -eq "OpenVPN") {
@@ -131,17 +131,17 @@ function Select-ClientMode {
             }
         }
         3 {
-            Write-Host "`n[*] Batch Remote Client Setup geselecteerd..." -ForegroundColor Cyan
-            Write-Log "Batch Remote Client Setup geselecteerd" -Level "INFO"
+            Write-Host "`n[*] Batch Remote Client Setup selected..." -ForegroundColor Cyan
+            Write-Log "Batch Remote Client Setup selected" -Level "INFO"
             Invoke-BatchRemoteClientSetup
         }
         4 {
-            Write-Host "`n[*] Terug naar hoofdmenu..." -ForegroundColor Yellow
-            Write-Log "Terug naar hoofdmenu" -Level "INFO"
+            Write-Host "`n[*] Back to main menu..." -ForegroundColor Yellow
+            Write-Log "Back to main menu" -Level "INFO"
             Start-VPNSetup
         }
         default {
-            Write-Host "`n[!] Ongeldige keuze. Probeer opnieuw." -ForegroundColor Red
+            Write-Host "`n[!] Invalid choice. Please try again." -ForegroundColor Red
             Start-Sleep -Seconds 2
             Select-ClientMode
         }
@@ -150,9 +150,9 @@ function Select-ClientMode {
 function Select-VPNProtocol {
     <#
     .SYNOPSIS
-        Vraagt de gebruiker om een VPN protocol te kiezen.
+        Asks the user to choose a VPN protocol.
     #>
-    $choice = Show-Menu -Mode Menu -Title "Kies VPN Protocol" -Options @("OpenVPN", "WireGuard (Experimental)") -HeaderColor Magenta -OptionColor White -Prompt "Kies protocol (1-2)"
+    $choice = Show-Menu -Mode Menu -Title "Choose VPN Protocol" -Options @("OpenVPN", "WireGuard") -HeaderColor Magenta -OptionColor White -Prompt "Select protocol (1-2)"
     
     switch ($choice) {
         1 { return "OpenVPN" }

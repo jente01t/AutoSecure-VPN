@@ -4,109 +4,108 @@
 function Invoke-OpenVPNClientSetup {
     <#
     .SYNOPSIS
-        Voert volledige VPN-client setup uit.
+        Performs full VPN client setup.
 
     .DESCRIPTION
-        Deze functie voert alle stappen uit voor het opzetten van een OpenVPN client, inclusief installatie, configuratie importeren en verbinding starten.
+        This function performs all steps for setting up an OpenVPN client, including installation, importing configuration, and starting the connection.
 
     .EXAMPLE
         Invoke-ClientSetup
     #>
     
-    Write-Log "=== Client Setup Gestart ===" -Level "INFO"
+    Write-Log "=== Client Setup Started ===" -Level "INFO"
     
     try {
-        # Stap 1: Administrator check
-        Write-Progress -Activity "Client Setup" -Status "Stap 1 van 6: Controleren administrator rechten" -PercentComplete 0
-        Write-Host "`n[1/6] Controleren administrator rechten..." -ForegroundColor Cyan
+        # Step 1: Administrator check
+        Write-Progress -Activity "Client Setup" -Status "Step 1 of 6: Checking administrator privileges" -PercentComplete 0
+        Write-Host "`n[1/6] Checking administrator privileges..." -ForegroundColor Cyan
         if (-not (Test-IsAdmin)) {
-            throw "Script moet als Administrator worden uitgevoerd!"
+            throw "Script must be run as Administrator!"
         }
-        Write-Host "  ✓ Administrator rechten bevestigd" -ForegroundColor Green
-        Write-Verbose "Administrator rechten succesvol gecontroleerd"
-        Write-Log "Administrator rechten bevestigd" -Level "INFO"
+        Write-Host "  ✓ Administrator privileges confirmed" -ForegroundColor Green
+        Write-Verbose "Administrator privileges successfully checked"
+        Write-Log "Administrator privileges confirmed" -Level "INFO"
         
-        # Stap 2: OpenVPN installeren
-        Write-Progress -Activity "Client Setup" -Status "Stap 2 van 6: OpenVPN installeren" -PercentComplete 16.67
-        Write-Host "`n[2/6] OpenVPN installeren..." -ForegroundColor Cyan
+        # Step 2: Install OpenVPN
+        Write-Progress -Activity "Client Setup" -Status "Step 2 of 6: Installing OpenVPN" -PercentComplete 16.67
+        Write-Host "`n[2/6] Installing OpenVPN..." -ForegroundColor Cyan
         if (-not (Install-OpenVPN)) {
-            throw "OpenVPN installatie mislukt"
+            throw "OpenVPN installation failed"
         }
-        Write-Host "  ✓ OpenVPN geïnstalleerd" -ForegroundColor Green
-        Write-Verbose "OpenVPN succesvol geïnstalleerd"
-        Write-Log "OpenVPN geïnstalleerd" -Level "INFO"
+        Write-Host "  ✓ OpenVPN installed" -ForegroundColor Green
+        Write-Verbose "OpenVPN successfully installed"
+        Write-Log "OpenVPN installed" -Level "INFO"
         
-        # Stap 3: Client configuratie importeren
-        Write-Progress -Activity "Client Setup" -Status "Stap 3 van 6: Client configuratie importeren" -PercentComplete 33.33
-        Write-Host "`n[3/6] Client configuratie importeren..." -ForegroundColor Cyan
+        # Step 3: Import client configuration
+        Write-Progress -Activity "Client Setup" -Status "Step 3 of 6: Importing client configuration" -PercentComplete 33.33
+        Write-Host "`n[3/6] Importing client configuration..." -ForegroundColor Cyan
         $configPath = Import-ClientConfiguration
         if (-not $configPath) {
-            throw "Client configuratie importeren mislukt"
+            throw "Client configuration import failed"
         }
-        Write-Host "  ✓ Configuratie geïmporteerd" -ForegroundColor Green
-        Write-Verbose "Client configuratie succesvol geïmporteerd van $configPath"
-        Write-Log "Client configuratie geïmporteerd" -Level "INFO"
+        Write-Host "  ✓ Configuration imported" -ForegroundColor Green
+        Write-Verbose "Client configuration successfully imported from $configPath"
+        Write-Log "Client configuration imported" -Level "INFO"
         
-        # Stap 4: TAP adapter controleren
-        Write-Progress -Activity "Client Setup" -Status "Stap 4 van 6: TAP adapter controleren" -PercentComplete 50
-        Write-Host "`n[4/6] TAP adapter controleren..." -ForegroundColor Cyan
+        # Step 4: Check TAP adapter
+        Write-Progress -Activity "Client Setup" -Status "Step 4 of 6: Checking TAP adapter" -PercentComplete 50
+        Write-Host "`n[4/6] Checking TAP adapter..." -ForegroundColor Cyan
         if (-not (Test-TAPAdapter)) {
-            Write-Host "  ! TAP adapter niet gevonden, OpenVPN moet mogelijk opnieuw worden geïnstalleerd" -ForegroundColor Yellow
-            Write-Log "TAP adapter niet gevonden" -Level "WARNING"
-            Write-Verbose "TAP adapter niet gevonden, mogelijk herinstallatie nodig"
+            Write-Host "  ! TAP adapter not found, OpenVPN may need to be reinstalled" -ForegroundColor Yellow
+            Write-Log "TAP adapter not found" -Level "WARNING"
+            Write-Verbose "TAP adapter not found, reinstallation might be necessary"
         }
         else {
-            Write-Host "  ✓ TAP adapter gevonden" -ForegroundColor Green
-            Write-Verbose "TAP adapter succesvol gevonden"
-            Write-Log "TAP adapter gevonden" -Level "INFO"
+            Write-Host "  ✓ TAP adapter found" -ForegroundColor Green
+            Write-Verbose "TAP adapter successfully found"
+            Write-Log "TAP adapter found" -Level "INFO"
         }
         
-        # Stap 5: VPN verbinding starten
-        Write-Progress -Activity "Client Setup" -Status "Stap 5 van 6: VPN verbinding starten" -PercentComplete 66.67
-        Write-Host "`n[5/6] VPN verbinding starten..." -ForegroundColor Cyan
+        # Step 5: Start VPN connection
+        Write-Progress -Activity "Client Setup" -Status "Step 5 of 6: Starting VPN connection" -PercentComplete 66.67
+        Write-Host "`n[5/6] Starting VPN connection..." -ForegroundColor Cyan
         if (-not (Start-VPNConnection -ConfigFile $configPath)) {
-            throw "VPN verbinding starten mislukt"
+            throw "Starting VPN connection failed"
         }
-        Write-Host "  ✓ VPN verbinding gestart" -ForegroundColor Green
-        Write-Verbose "VPN verbinding succesvol gestart"
-        Write-Log "VPN verbinding gestart" -Level "INFO"
+        Write-Host "  ✓ VPN connection started" -ForegroundColor Green
+        Write-Verbose "VPN connection successfully started"
+        Write-Log "VPN connection started" -Level "INFO"
         
-        # Stap 6: Verbinding testen
-        Write-Progress -Activity "Client Setup" -Status "Stap 6 van 6: VPN verbinding testen" -PercentComplete 83.33
-        Write-Host "`n[6/6] VPN verbinding testen..." -ForegroundColor Cyan
-        Start-Sleep -Seconds 30  # Wacht langer tot verbinding volledig is opgezet
+        # Step 6: Test connection
+        Write-Progress -Activity "Client Setup" -Status "Step 6 of 6: Testing VPN connection" -PercentComplete 83.33
+        Write-Host "`n[6/6] Testing VPN connection..." -ForegroundColor Cyan
+        Start-Sleep -Seconds 30  # Wait longer for connection to be fully established
         $testResult = Test-VPNConnection
         if (-not $testResult) {
-            throw "VPN verbinding test mislukt"
+            throw "VPN connection test failed"
         }
-        Write-Verbose "VPN verbinding succesvol getest"
-        Write-Log "VPN verbinding getest" -Level "INFO"
+        Write-Verbose "VPN connection successfully tested"
+        Write-Log "VPN connection tested" -Level "INFO"
         
         Write-Progress -Activity "Client Setup" -Completed
         
-        Show-Menu -Mode Success -SuccessTitle "Client Setup Succesvol Voltooid!" -LogFile $script:LogFile
+        Show-Menu -Mode Success -SuccessTitle "Client Setup Successfully Completed!" -LogFile $script:LogFile
     }
     catch {
         Write-Progress -Activity "Client Setup" -Completed
-        Write-Log "Fout tijdens Client Setup: $($_.Exception.Message)" -Level "ERROR"
-        $choice = Show-Menu -Mode Error -SuccessTitle "Client Setup Gefaald!" -LogFile $script:LogFile -ExtraMessage "Controleer het logbestand voor details." -Options @("Opnieuw proberen", "Terug naar hoofdmenu", "Afsluiten")
+        Write-Log "Error during Client Setup: $($_.Exception.Message)" -Level "ERROR"
+        $choice = Show-Menu -Mode Error -SuccessTitle "Client Setup Failed!" -LogFile $script:LogFile -ExtraMessage "Check the log file for details." -Options @("Try again", "Back to main menu", "Exit")
         switch ($choice) {
             1 {
-                # Rollback uitvoeren voordat opnieuw proberen
-                Write-Host "`n[*] Rollback uitvoeren om wijzigingen ongedaan te maken..." -ForegroundColor Yellow
-                Invoke-Rollback -SetupType "Client"
+                # Perform rollback before retrying
+                Write-Host "`n[*] Performing rollback to undo changes..." -ForegroundColor Yellow
                 Invoke-Rollback -SetupType "Client"
                 Invoke-OpenVPNClientSetup
             }
             2 {
-                # Rollback uitvoeren voordat terug naar hoofdmenu
-                Write-Host "`n[*] Rollback uitvoeren om wijzigingen ongedaan te maken..." -ForegroundColor Yellow
+                # Perform rollback before returning to main menu
+                Write-Host "`n[*] Performing rollback to undo changes..." -ForegroundColor Yellow
                 Invoke-Rollback -SetupType "Client"
                 Start-VPNSetup
             }
             3 {
-                # Rollback uitvoeren voordat afsluiten
-                Write-Host "`n[*] Rollback uitvoeren om wijzigingen ongedaan te maken..." -ForegroundColor Yellow
+                # Perform rollback before exiting
+                Write-Host "`n[*] Performing rollback to undo changes..." -ForegroundColor Yellow
                 Invoke-Rollback -SetupType "Client"
                 exit
             }
@@ -116,54 +115,54 @@ function Invoke-OpenVPNClientSetup {
 function Invoke-RemoteOpenVPNClientSetup {
     <#
     .SYNOPSIS
-        Voert remote VPN-client setup uit.
+        Performs remote VPN client setup.
 
     .DESCRIPTION
-        Deze functie voert setup uit voor een VPN client op een remote machine via PowerShell remoting.
+        This function performs setup for a VPN client on a remote machine via PowerShell remoting.
 
     .EXAMPLE
         Invoke-RemoteClientSetup
     #>
     
-    Write-Log "=== Remote Client Setup Gestart ===" -Level "INFO"
+    Write-Log "=== Remote Client Setup Started ===" -Level "INFO"
     
     try {
-        # Stap 1: Administrator check (voor lokale machine)
-        Write-Progress -Activity "Remote Client Setup" -Status "Stap 1 van 5: Controleren administrator rechten" -PercentComplete 0
-        Write-Host "`n[1/5] Controleren administrator rechten..." -ForegroundColor Cyan
+        # Step 1: Administrator check (for local machine)
+        Write-Progress -Activity "Remote Client Setup" -Status "Step 1 of 5: Checking administrator privileges" -PercentComplete 0
+        Write-Host "`n[1/5] Checking administrator privileges..." -ForegroundColor Cyan
         if (-not (Test-IsAdmin)) {
-            throw "Script moet als Administrator worden uitgevoerd!"
+            throw "Script must be run as Administrator!"
         }
-        Write-Host "  ✓ Administrator rechten bevestigd" -ForegroundColor Green
-        Write-Verbose "Lokale administrator rechten succesvol gecontroleerd"
-        Write-Log "Administrator rechten bevestigd" -Level "INFO"
+        Write-Host "  ✓ Administrator privileges confirmed" -ForegroundColor Green
+        Write-Verbose "Local administrator privileges successfully checked"
+        Write-Log "Administrator privileges confirmed" -Level "INFO"
         
-        # Stap 2: Remote computer details - gebruik settings wanneer beschikbaar
-        Write-Progress -Activity "Remote Client Setup" -Status "Stap 2 van 5: Remote computer configuratie" -PercentComplete 20
-        Write-Host "`n[2/5] Remote computer configuratie..." -ForegroundColor Cyan
+        # Step 2: Remote computer details - use settings when available
+        Write-Progress -Activity "Remote Client Setup" -Status "Step 2 of 5: Remote computer configuration" -PercentComplete 20
+        Write-Host "`n[2/5] Remote computer configuration..." -ForegroundColor Cyan
 
-        # remoteClientIP ophalen en valideren; als leeg -> fout (geen prompt)
+        # Retrieve and validate remoteClientIP; if empty -> error (no prompt)
         try {
-            if ($Script:Settings.ContainsKey('remoteClientIP') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.remoteClientIP) -and $Script:Settings.remoteClientIP -ne 'jouw.client.ip.hier') {
+            if ($Script:Settings.ContainsKey('remoteClientIP') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.remoteClientIP) -and $Script:Settings.remoteClientIP -ne 'your.client.ip.here') {
                 $computerName = $Script:Settings.remoteClientIP
-                Write-Verbose "Remote client afkomstig uit settings: $computerName"
+                Write-Verbose "Remote client obtained from settings: $computerName"
             }
         }
         catch {
-            Write-Verbose "Fout bij ophalen remoteClientIP uit settings: $_"
+            Write-Verbose "Error retrieving remoteClientIP from settings: $_"
         }
 
         if ([string]::IsNullOrWhiteSpace($computerName)) {
-            throw "Instelling 'remoteClientIP' is leeg of ongeldig in Variable.psd1. Vul 'remoteClientIP' in of pas de configuratie aan."
+            throw "Setting 'remoteClientIP' is empty or invalid in Variable.psd1. Please fill in 'remoteClientIP' or adjust the configuration."
         }
         
         Write-Host "  ✓ Remote computer: $computerName" -ForegroundColor Green
-        Write-Verbose "Remote computer naam gebruikt: $computerName"
+        Write-Verbose "Remote computer name used: $computerName"
         Write-Log "Remote computer: $computerName" -Level "INFO"
         
-        # Stap 3: WinRM configuratie
-        Write-Progress -Activity "Remote Client Setup" -Status "Stap 3 van 5: WinRM configuratie controleren" -PercentComplete 40
-        Write-Host "`n[3/5] WinRM configuratie controleren..." -ForegroundColor Cyan
+        # Step 3: WinRM configuration
+        Write-Progress -Activity "Remote Client Setup" -Status "Step 3 of 5: Checking WinRM configuration" -PercentComplete 40
+        Write-Host "`n[3/5] Checking WinRM configuration..." -ForegroundColor Cyan
         try {
             $trustedHosts = (Get-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client -Name TrustedHosts -ErrorAction Stop).TrustedHosts
         }
@@ -171,105 +170,105 @@ function Invoke-RemoteOpenVPNClientSetup {
             $trustedHosts = ""
         }
         if ($trustedHosts -notlike "*$computerName*" -and $trustedHosts -ne "*") {
-            Write-Host "  Remote computer niet in TrustedHosts. Toevoegen..." -ForegroundColor Yellow
+            Write-Host "  Remote computer not in TrustedHosts. Adding..." -ForegroundColor Yellow
             $newTrustedHosts = if ($trustedHosts) { "$trustedHosts,$computerName" } else { $computerName }
             Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client -Name TrustedHosts -Value $newTrustedHosts
             Restart-Service winrm -Force
-            Write-Host "  ✓ $computerName toegevoegd aan TrustedHosts en WinRM herstart" -ForegroundColor Green
-            Write-Verbose "TrustedHosts bijgewerkt en WinRM herstart"
-            Write-Log "$computerName toegevoegd aan TrustedHosts en WinRM herstart" -Level "INFO"
+            Write-Host "  ✓ $computerName added to TrustedHosts and WinRM restarted" -ForegroundColor Green
+            Write-Verbose "TrustedHosts updated and WinRM restarted"
+            Write-Log "$computerName added to TrustedHosts and WinRM restarted" -Level "INFO"
         }
         elseif ($trustedHosts -eq "*") {
-            Write-Host "  ✓ TrustedHosts staat op wildcard (*), geen toevoeging nodig" -ForegroundColor Green
-            Write-Verbose "TrustedHosts staat op wildcard"
-            Write-Log "TrustedHosts staat op wildcard (*)" -Level "INFO"
+            Write-Host "  ✓ TrustedHosts is set to wildcard (*), no addition needed" -ForegroundColor Green
+            Write-Verbose "TrustedHosts set to wildcard"
+            Write-Log "TrustedHosts set to wildcard (*)" -Level "INFO"
         }
         else {
-            Write-Host "  ✓ $computerName staat al in TrustedHosts" -ForegroundColor Green
-            Write-Verbose "$computerName staat al in TrustedHosts"
-            Write-Log "$computerName staat al in TrustedHosts" -Level "INFO"
+            Write-Host "  ✓ $computerName is already in TrustedHosts" -ForegroundColor Green
+            Write-Verbose "$computerName is already in TrustedHosts"
+            Write-Log "$computerName is already in TrustedHosts" -Level "INFO"
         }
         
-        Write-Host "  Controleren of PSRemoting actief is op remote machine..." -ForegroundColor Cyan
+        Write-Host "  Checking if PSRemoting is active on remote machine..." -ForegroundColor Cyan
         try {
             Test-WSMan -ComputerName $computerName -ErrorAction Stop | Out-Null
-            Write-Host "  ✓ PSRemoting is actief op $computerName" -ForegroundColor Green
-            Write-Verbose "PSRemoting succesvol getest op $computerName"
-            Write-Log "PSRemoting actief op $computerName" -Level "INFO"
+            Write-Host "  ✓ PSRemoting is active on $computerName" -ForegroundColor Green
+            Write-Verbose "PSRemoting successfully tested on $computerName"
+            Write-Log "PSRemoting active on $computerName" -Level "INFO"
         }
         catch {
-            Write-Host "  ! PSRemoting lijkt niet actief op $computerName" -ForegroundColor Yellow
-            Write-Host "    Zorg ervoor dat 'Enable-PSRemoting -Force' is uitgevoerd op de remote machine" -ForegroundColor Yellow
-            $continue = Read-Host "  Doorgaan? (J/N)"
-            if ($continue -notmatch "^[Jj]") {
-                throw "PSRemoting niet beschikbaar op remote machine"
+            Write-Host "  ! PSRemoting does not seem to be active on $computerName" -ForegroundColor Yellow
+            Write-Host "    Make sure 'Enable-PSRemoting -Force' has been executed on the remote machine" -ForegroundColor Yellow
+            $continue = Read-Host "  Continue? (Y/N)"
+            if ($continue -notmatch "^[Yy]") {
+                throw "PSRemoting not available on remote machine"
             }
-            Write-Verbose "PSRemoting niet beschikbaar, maar doorgaan gekozen"
+            Write-Verbose "PSRemoting not available, but user chose to continue"
         }
         
-        # Stap 4: Credentials
-        Write-Progress -Activity "Remote Client Setup" -Status "Stap 4 van 5: Authenticatie" -PercentComplete 60
-        Write-Host "`n[4/5] Authenticatie..." -ForegroundColor Cyan
-        $cred = Get-Credential -Message "Voer credentials in voor $computerName (moet Administrator zijn)"
+        # Step 4: Credentials
+        Write-Progress -Activity "Remote Client Setup" -Status "Step 4 of 5: Authentication" -PercentComplete 60
+        Write-Host "`n[4/5] Authentication..." -ForegroundColor Cyan
+        $cred = Get-Credential -Message "Enter credentials for $computerName (must be Administrator)"
         if (-not $cred) {
-            throw "Credentials zijn verplicht"
+            throw "Credentials are required"
         }
-        Write-Host "  ✓ Credentials ingevoerd" -ForegroundColor Green
-        Write-Verbose "Credentials succesvol ingevoerd voor $computerName"
-        Write-Log "Credentials ingevoerd voor $computerName" -Level "INFO"
+        Write-Host "  ✓ Credentials entered" -ForegroundColor Green
+        Write-Verbose "Credentials successfully entered for $computerName"
+        Write-Log "Credentials entered for $computerName" -Level "INFO"
         
-        # Stap 5: Client ZIP bestand
-        Write-Progress -Activity "Remote Client Setup" -Status "Stap 5 van 5: Client configuratie bestand" -PercentComplete 80
-        Write-Host "`n[5/5] Client configuratie bestand..." -ForegroundColor Cyan
-        # Bepaal standaard client naam (verschillende settings keys mogelijk)
+        # Step 5: Client ZIP file
+        Write-Progress -Activity "Remote Client Setup" -Status "Step 5 of 5: Client configuration file" -PercentComplete 80
+        Write-Host "`n[5/5] Client configuration file..." -ForegroundColor Cyan
+        # Determine default client name (multiple settings keys possible)
         $clientDefaultName = if ($Script:Settings.ContainsKey('clientName') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.clientName)) { $Script:Settings.clientName } else { 'client' }
         $defaultZipPath = Join-Path $Script:OutputPath "vpn-client-$clientDefaultName.zip"
         if (Test-Path $defaultZipPath) {
             $zipPath = $defaultZipPath
-            Write-Host "  ✓ Standaard client ZIP bestand gevonden: $zipPath" -ForegroundColor Green
-            Write-Verbose "Standaard client ZIP bestand gebruikt: $zipPath"
-            Write-Log "Standaard client ZIP bestand gevonden: $zipPath" -Level "INFO"
+            Write-Host "  ✓ Default client ZIP file found: $zipPath" -ForegroundColor Green
+            Write-Verbose "Default client ZIP file used: $zipPath"
+            Write-Log "Default client ZIP file found: $zipPath" -Level "INFO"
         }
         else {
-            Write-Host "  Standaard client ZIP bestand niet gevonden op $defaultZipPath" -ForegroundColor Yellow
-            $zipPath = Read-Host "  Pad naar client ZIP bestand (gegenereerd door server setup)"
-            Write-Verbose "Handmatig ZIP pad ingevoerd: $zipPath"
+            Write-Host "  Default client ZIP file not found at $defaultZipPath" -ForegroundColor Yellow
+            $zipPath = Read-Host "  Path to client ZIP file (generated by server setup)"
+            Write-Verbose "Manual ZIP path entered: $zipPath"
         }
         if (-not (Test-Path $zipPath)) {
-            throw "ZIP bestand niet gevonden: $zipPath"
+            throw "ZIP file not found: $zipPath"
         }
-        Write-Host "  ✓ ZIP bestand gevonden: $zipPath" -ForegroundColor Green
-        Write-Log "ZIP bestand gevonden: $zipPath" -Level "INFO"
+        Write-Host "  ✓ ZIP file found: $zipPath" -ForegroundColor Green
+        Write-Log "ZIP file found: $zipPath" -Level "INFO"
         
-        # Remote installatie uitvoeren
-        Write-Progress -Activity "Remote Client Setup" -Status "Remote installatie uitvoeren" -PercentComplete 90
-        Write-Host "`n[*] Remote installatie starten..." -ForegroundColor Cyan
+        # Perform remote installation
+        Write-Progress -Activity "Remote Client Setup" -Status "Performing remote installation" -PercentComplete 90
+        Write-Host "`n[*] Starting remote installation..." -ForegroundColor Cyan
         if (-not (Install-RemoteClient -ComputerName $computerName -Credential $cred -ZipPath $zipPath -RemoteConfigPath $Script:Settings.remoteConfigPath)) {
-            throw "Remote client installatie mislukt"
+            throw "Remote client installation failed"
         }
-        Write-Host "  ✓ Remote installatie voltooid" -ForegroundColor Green
-        Write-Verbose "Remote client installatie succesvol voltooid voor $computerName"
-        Write-Log "Remote client installatie voltooid voor $computerName" -Level "INFO"
+        Write-Host "  ✓ Remote installation completed" -ForegroundColor Green
+        Write-Verbose "Remote client installation successfully completed for $computerName"
+        Write-Log "Remote client installation completed for $computerName" -Level "INFO"
 
-        # Remote OpenVPN service starten via GUI
-        Write-Progress -Activity "Remote Client Setup" -Status "OpenVPN service op remote machine starten" -PercentComplete 71
-        Write-Host "`n[*] OpenVPN service op remote machine starten..." -ForegroundColor Cyan
+        # Start remote OpenVPN service via GUI
+        Write-Progress -Activity "Remote Client Setup" -Status "Starting OpenVPN service on remote machine" -PercentComplete 95
+        Write-Host "`n[*] Starting OpenVPN service on remote machine..." -ForegroundColor Cyan
         $remoteOvpn = Join-Path $Script:Settings.remoteConfigPath "client.ovpn"
         if (-not (Start-VPNConnection -ConfigFile $remoteOvpn -ComputerName $computerName -Credential $cred)) {
-            throw "Remote OpenVPN service starten mislukt"
+            throw "Starting remote OpenVPN service failed"
         }
-        Write-Host " ✓ Remote OpenVPN starten voltooid" -ForegroundColor Green
-        Write-Verbose "Remote OpenVPN starten succesvol volottoid voor $computerName"
-        Write-Log "Remote OpenVPN service gestart voor $computerName" -Level "INFO"
+        Write-Host " ✓ Remote OpenVPN starting completed" -ForegroundColor Green
+        Write-Verbose "Remote OpenVPN starting successfully completed for $computerName"
+        Write-Log "Remote OpenVPN service started for $computerName" -Level "INFO"
         
         Write-Progress -Activity "Remote Client Setup" -Completed
         
-        Show-Menu -Mode Success -SuccessTitle "Remote Client Setup Succesvol Voltooid!" -LogFile $script:LogFile -ExtraMessage "Op de remote machine kun je nu de VPN verbinding starten via OpenVPN." -ComputerName $computerName
+        Show-Menu -Mode Success -SuccessTitle "Remote Client Setup Successfully Completed!" -LogFile $script:LogFile -ExtraMessage "On the remote machine you can now start the VPN connection via OpenVPN." -ComputerName $computerName
     }
     catch {
         Write-Progress -Activity "Remote Client Setup" -Completed
-        Write-Log "Fout tijdens Remote Client Setup: $($_.Exception.Message)" -Level "ERROR"
-        $choice = Show-Menu -Mode Error -SuccessTitle "Remote Client Setup Gefaald!" -LogFile $script:LogFile -ExtraMessage "Controleer het logbestand voor details." -Options @("Opnieuw proberen", "Terug naar hoofdmenu", "Afsluiten")
+        Write-Log "Error during Remote Client Setup: $($_.Exception.Message)" -Level "ERROR"
+        $choice = Show-Menu -Mode Error -SuccessTitle "Remote Client Setup Failed!" -LogFile $script:LogFile -ExtraMessage "Check the log file for details." -Options @("Try again", "Back to main menu", "Exit")
         switch ($choice) {
             1 { Invoke-RemoteOpenVPNClientSetup }
             2 { Start-VPNSetup }
@@ -277,45 +276,369 @@ function Invoke-RemoteOpenVPNClientSetup {
         }
     }
 }
+
+function Invoke-OpenVPNServerSetup {
+    <#
+    .SYNOPSIS
+        Performs full VPN server setup.
+
+    .DESCRIPTION
+        This function performs all steps for setting up an OpenVPN server, including installation, certificates, configuration, and starting the service.
+
+    .EXAMPLE
+        Invoke-ServerSetup
+    #>
+    
+    Write-Log "=== Server Setup Started ===" -Level "INFO"
+    
+    try {
+        # Step 1: Administrator check
+        Write-Progress -Activity "Server Setup" -Status "Step 1 of 8: Checking administrator privileges" -PercentComplete 0
+        Write-Host "`n[1/8] Checking administrator privileges..." -ForegroundColor Cyan
+        if (-not (Test-IsAdmin)) {
+            throw "Script must be run as Administrator!"
+        }
+        Write-Host "  ✓ Administrator privileges confirmed" -ForegroundColor Green
+        Write-Verbose "Administrator privileges successfully checked"
+        Write-Log "Administrator privileges confirmed" -Level "INFO"
+        
+        # Step 2: Install OpenVPN
+        Write-Progress -Activity "Server Setup" -Status "Step 2 of 8: Installing OpenVPN" -PercentComplete 12.5
+        Write-Host "`n[2/8] Installing OpenVPN..." -ForegroundColor Cyan
+        if (-not (Install-OpenVPN)) {
+            throw "OpenVPN installation failed"
+        }
+        Write-Host "  ✓ OpenVPN installed" -ForegroundColor Green
+        Write-Verbose "OpenVPN successfully installed"
+        Write-Log "OpenVPN installed" -Level "INFO"
+        
+        # Step 3: Configure firewall
+        Write-Progress -Activity "Server Setup" -Status "Step 3 of 8: Configuring Windows Firewall" -PercentComplete 25
+        Write-Host "`n[3/8] Configuring Windows Firewall..." -ForegroundColor Cyan
+        if (-not (Set-Firewall -Port 443 -Protocol "TCP")) {
+            throw "Firewall configuration failed"
+        }
+        Write-Host "  ✓ Firewall rules added" -ForegroundColor Green
+        Write-Verbose "Firewall rules successfully added"
+        Write-Log "Firewall rules added" -Level "INFO"
+        
+        # Step 3.5: Configure NAT and IP Forwarding for internet access
+        Write-Progress -Activity "Server Setup" -Status "Step 3.5 of 9: Configuring NAT and IP Forwarding" -PercentComplete 31
+        Write-Host "`n[3.5/9] Configuring NAT and IP Forwarding..." -ForegroundColor Cyan
+        if (-not (Enable-VPNNAT -VPNSubnet "10.8.0.0/24")) { 
+            Write-Host "  ! NAT configuration warning - manual configuration might be needed" -ForegroundColor Yellow
+            Write-Log "NAT configuration warning - manual setup might be needed" -Level "WARNING"
+        }
+        else {
+            Write-Host "  ✓ NAT and IP Forwarding configured" -ForegroundColor Green
+        }
+        
+        # Step 4: Collect user input
+        Write-Progress -Activity "Server Setup" -Status "Step 4 of 9: Collecting server configuration parameters" -PercentComplete 37.5
+        Write-Host "`n[4/9] Server configuration parameters..." -ForegroundColor Cyan
+        $serverConfig = Get-ServerConfiguration
+        Write-Verbose "Server configuration parameters collected: $($serverConfig | ConvertTo-Json)"
+        Write-Log "Server configuration parameters collected" -Level "INFO"
+        
+        # Step 5: EasyRSA and certificates
+        Write-Progress -Activity "Server Setup" -Status "Step 5 of 8: Generating certificates" -PercentComplete 50
+        Write-Host "`n[5/8] Generating certificates (this may take a while)..." -ForegroundColor Cyan
+        if (-not (Initialize-EasyRSA -EasyRSAPath $script:EasyRSAPath)) {
+            throw "EasyRSA initialization failed"
+        }
+        if (-not (Initialize-Certificates -ServerName $serverConfig.ServerName -Password $serverConfig.Password -EasyRSAPath $script:EasyRSAPath)) {
+            throw "Certificate generation failed"
+        }
+        Write-Host "  ✓ Certificates generated" -ForegroundColor Green
+        Write-Verbose "Certificates successfully generated for server $($serverConfig.ServerName)"
+        Write-Log "Certificates generated" -Level "INFO"
+        
+        # Step 6: Generate server configuration
+        Write-Progress -Activity "Server Setup" -Status "Step 6 of 8: Creating server configuration" -PercentComplete 62.5
+        Write-Host "`n[6/8] Creating server configuration..." -ForegroundColor Cyan
+        if (-not (New-ServerConfig -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -ConfigPath $script:ConfigPath)) {
+            throw "Server configuration generation failed"
+        }
+        Write-Host "  ✓ Server configuration created" -ForegroundColor Green
+        Write-Verbose "Server configuration successfully created"
+        Write-Log "Server configuration created" -Level "INFO"
+        
+        # Step 7: Start OpenVPN service
+        Write-Progress -Activity "Server Setup" -Status "Step 7 of 8: Starting OpenVPN service" -PercentComplete 75
+        Write-Host "`n[7/8] Starting OpenVPN service..." -ForegroundColor Cyan
+        if (-not (Start-VPNService)) {
+            throw "Starting OpenVPN service failed"
+        }
+        Write-Host "  ✓ OpenVPN service active" -ForegroundColor Green
+        Write-Verbose "OpenVPN service successfully started"
+        Write-Log "OpenVPN service active" -Level "INFO"
+        
+        # Step 8: Create client package
+        Write-Progress -Activity "Server Setup" -Status "Step 8 of 8: Creating client configuration package" -PercentComplete 87.5
+        Write-Host "`n[8/8] Creating client configuration package..." -ForegroundColor Cyan
+        $zipPath = New-ClientPackage -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -OutputPath $Script:OutputPath
+        if (-not $zipPath) {
+            throw "Creating client package failed"
+        }
+        Write-Host "  ✓ Client package created: $zipPath" -ForegroundColor Green
+        Write-Verbose "Client package successfully created: $zipPath"
+        Write-Log "Client package created: $zipPath" -Level "INFO"
+        
+        Write-Progress -Activity "Server Setup" -Completed
+        
+        Show-Menu -Mode Success -SuccessTitle "Server Setup Successfully Completed!" -LogFile $script:LogFile -ExtraInfo "Client package: $zipPath" -ExtraMessage "Transfer this ZIP file to the client to establish the connection."
+    }
+    catch {
+        Write-Progress -Activity "Server Setup" -Completed
+        Write-Log "Error during Server Setup: $($_.Exception.Message)" -Level "ERROR"   
+        $choice = Show-Menu -Mode Error -SuccessTitle "Server Setup Failed!" -LogFile $script:LogFile -ExtraMessage "Check the log file for details." -Options @("Try again", "Back to main menu", "Exit")
+        switch ($choice) {
+            1 {
+                # Perform rollback before retrying
+                Write-Host "`n[*] Performing rollback to undo changes..." -ForegroundColor Yellow
+                Invoke-Rollback -SetupType "Server"
+                Invoke-OpenVPNServerSetup
+            }
+            2 {
+                # Perform rollback before returning to main menu
+                Write-Host "`n[*] Performing rollback to undo changes..." -ForegroundColor Yellow
+                Invoke-Rollback -SetupType "Server"
+                Start-VPNSetup
+            }
+            3 {
+                # Perform rollback before exiting
+                Write-Host "`n[*] Performing rollback to undo changes..." -ForegroundColor Yellow
+                Invoke-Rollback -SetupType "Server"
+                exit
+            }
+        }
+    }
+}
+function Invoke-RemoteOpenVPNServerSetup {
+    <#
+    .SYNOPSIS
+        Performs remote VPN server setup.
+
+    .DESCRIPTION
+        This function performs setup for a VPN server on a remote machine via PowerShell remoting.
+
+    .EXAMPLE
+        Invoke-RemoteServerSetup
+    #>
+    
+    Write-Log "=== Remote Server Setup Started ===" -Level "INFO"
+    
+    try {
+        # Step 1: Administrator check (for local machine)
+        Write-Progress -Activity "Remote Server Setup" -Status "Step 1 of 7: Checking administrator privileges" -PercentComplete 0
+        Write-Host "`n[1/7] Checking administrator privileges..." -ForegroundColor Cyan
+        if (-not (Test-IsAdmin)) {
+            throw "Script must be run as Administrator!"
+        }
+        Write-Host "  ✓ Administrator privileges confirmed" -ForegroundColor Green
+        Write-Verbose "Local administrator privileges successfully checked"
+        Write-Log "Administrator privileges confirmed" -Level "INFO"
+        # Step 1.5: Check local OpenVPN installation
+        Write-Progress -Activity "Remote Server Setup" -Status "Step 1.5 of 7: Checking local OpenVPN installation" -PercentComplete 7
+        if (-not (Test-Path $Script:Settings.installedPath)) {
+            Write-Host "`n[1.5] Installing OpenVPN locally for certificate generation..." -ForegroundColor Cyan
+            if (-not (Install-OpenVPN)) {
+                throw "Local OpenVPN installation failed"
+            }
+            Write-Host "  ✓ OpenVPN installed locally" -ForegroundColor Green
+            Write-Verbose "OpenVPN installed locally for certificate generation"
+            Write-Log "OpenVPN installed locally" -Level "INFO"
+        }
+        else {
+            Write-Verbose "OpenVPN already installed locally"
+        }
+        
+        # Step 2: Remote computer details
+        Write-Progress -Activity "Remote Server Setup" -Status "Step 2 of 7: Remote computer configuration" -PercentComplete 14
+        Write-Host "`n[2/7] Remote computer configuration..." -ForegroundColor Cyan
+        # Retrieve Settings.serverIP
+        try {
+            if ($Script:Settings.ContainsKey('serverIP') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.serverIP) -and $Script:Settings.serverIP -ne 'your.server.ip.here') {
+                $computerName = $Script:Settings.serverIP
+                Write-Verbose "Remote server IP obtained from settings: $computerName"
+            } 
+        }    
+        catch {
+            throw "Server IP address is empty in Variable.psd1"
+        }
+
+        if ([string]::IsNullOrWhiteSpace($computerName)) {
+            throw "Setting 'remoteClientIP' is empty or invalid in Variable.psd1. Please fill in 'remoteClientIP' or adjust the configuration."
+        }
+        
+        Write-Host "  ✓ Remote computer: $computerName" -ForegroundColor Green
+        Write-Verbose "Remote computer name used: $computerName"
+        Write-Log "Remote computer: $computerName" -Level "INFO"
+        
+        # Step 3: WinRM configuration
+        Write-Progress -Activity "Remote Server Setup" -Status "Step 3 of 7: Checking WinRM configuration" -PercentComplete 21
+        Write-Host "`n[3/7] Checking WinRM configuration..." -ForegroundColor Cyan
+        try {
+            $trustedHosts = (Get-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client -Name TrustedHosts -ErrorAction Stop).TrustedHosts
+        }
+        catch {
+            $trustedHosts = ""
+        }
+        if ($trustedHosts -notlike "*$computerName*" -and $trustedHosts -ne "*") {
+            Write-Host "  Remote computer not in TrustedHosts. Adding..." -ForegroundColor Yellow
+            $newTrustedHosts = if ($trustedHosts) { "$trustedHosts,$computerName" } else { $computerName }
+            Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client -Name TrustedHosts -Value $newTrustedHosts
+            Restart-Service winrm -Force
+            Write-Host "  ✓ $computerName added to TrustedHosts and WinRM restarted" -ForegroundColor Green
+            Write-Verbose "TrustedHosts updated and WinRM restarted"
+        }
+        elseif ($trustedHosts -eq "*") {
+            Write-Host "  ✓ TrustedHosts is set to wildcard (*), no addition needed" -ForegroundColor Green
+            Write-Verbose "TrustedHosts set to wildcard"
+            Write-Log "TrustedHosts set to wildcard (*)" -Level "INFO"
+        }
+        else {
+            Write-Host "  ✓ $computerName is already in TrustedHosts" -ForegroundColor Green
+            Write-Verbose "$computerName is already in TrustedHosts"
+            Write-Log "$computerName is already in TrustedHosts" -Level "INFO"
+        }
+        
+        Write-Host "  Checking if PSRemoting is active on remote machine..." -ForegroundColor Cyan
+        try {
+            Test-WSMan -ComputerName $computerName -ErrorAction Stop | Out-Null
+            Write-Host "  ✓ PSRemoting active on $computerName" -ForegroundColor Green
+            Write-Verbose "PSRemoting successfully tested on $computerName"
+            Write-Log "PSRemoting active on $computerName" -Level "INFO"
+        }
+        catch {
+            Write-Host "  ! PSRemoting not active on $computerName. Enabling..." -ForegroundColor Yellow
+            Write-Host "    Execute the following on the remote machine as Administrator:" -ForegroundColor Yellow
+            Write-Host "    Enable-PSRemoting -Force" -ForegroundColor White
+            Write-Host "    Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client -Name TrustedHosts -Value '*'" -ForegroundColor White
+            throw "PSRemoting must be enabled on the remote machine"
+        }
+        
+        # Step 4: Obtain credentials
+        Write-Progress -Activity "Remote Server Setup" -Status "Step 4 of 7: Authentication" -PercentComplete 29
+        Write-Host "`n[4/7] Authentication..." -ForegroundColor Cyan
+        $cred = Get-Credential -Message "Enter Administrator credentials for $computerName"
+        if (-not $cred) {
+            throw "Credentials are required"
+        }
+        Write-Host "  ✓ Credentials obtained" -ForegroundColor Green
+        Write-Verbose "Credentials successfully entered for $computerName"
+        Write-Log "Credentials obtained for $computerName" -Level "INFO"
+        
+        # Step 5: Obtain server configuration
+        Write-Progress -Activity "Remote Server Setup" -Status "Step 5 of 7: Obtaining server configuration" -PercentComplete 36
+        Write-Host "`n[5/7] Server configuration..." -ForegroundColor Cyan
+        $serverConfig = Get-ServerConfiguration
+        Write-Host "  ✓ Server configuration obtained" -ForegroundColor Green
+        Write-Verbose "Server configuration obtained: $($serverConfig | ConvertTo-Json)"
+        Write-Log "Server configuration obtained" -Level "INFO"
+        
+        # Step 6: Generate certificates locally
+        Write-Progress -Activity "Remote Server Setup" -Status "Step 6 of 7: Generating certificates locally" -PercentComplete 43
+        Write-Host "`n[6/7] Generating certificates locally..." -ForegroundColor Cyan
+        $localEasyRSA = $Script:Settings.easyRSAPath
+        if (-not (Initialize-EasyRSA)) {
+            throw "EasyRSA initialization failed locally"
+        }
+        if (-not (Initialize-Certificates -ServerName $serverConfig.ServerName -Password $serverConfig.Password -EasyRSAPath $Script:Settings.easyRSAPath)) {
+            throw "Certificate generation failed locally"
+        }
+        Write-Host "  ✓ Certificates generated locally" -ForegroundColor Green
+        Write-Verbose "Certificates generated locally for server $($serverConfig.ServerName)"
+        Write-Log "Certificates generated locally" -Level "INFO"
+        
+        # Perform remote installation
+        Write-Progress -Activity "Remote Server Setup" -Status "Performing remote server installation" -PercentComplete 57
+        Write-Host "`n[*] Starting remote server installation..." -ForegroundColor Cyan
+        if (-not (Install-RemoteServer -ComputerName $computerName -Credential $cred -ServerConfig $serverConfig -LocalEasyRSAPath $localEasyRSA -RemoteConfigPath $Script:Settings.remoteConfigPath)) {
+            throw "Remote server installation failed"
+        }
+        Write-Host "  ✓ Remote installation completed" -ForegroundColor Green
+        Write-Verbose "Remote server installation successfully completed for $computerName"
+        Write-Log "Remote server installation completed for $computerName" -Level "INFO"
+
+        # Start remote OpenVPN service via GUI
+        Write-Progress -Activity "Remote Server Setup" -Status "Starting OpenVPN service on remote machine" -PercentComplete 71
+        Write-Host "`n[*] Starting OpenVPN service on remote machine..." -ForegroundColor Cyan
+        $remoteOvpn = Join-Path $Script:Settings.remoteConfigPath "server.ovpn"
+        if (-not (Start-VPNConnection -ConfigFile $remoteOvpn -ComputerName $computerName -Credential $cred)) {
+            throw "Starting remote OpenVPN service failed"
+        }
+        Write-Host " ✓ Remote OpenVPN starting completed" -ForegroundColor Green
+        Write-Verbose "Remote OpenVPN starting successfully completed for $computerName"
+        Write-Log "Remote OpenVPN service started for $computerName" -Level "INFO"
+        
+        # Step 7: Create client package
+        Write-Progress -Activity "Remote Server Setup" -Status "Step 7 of 7: Creating client configuration package" -PercentComplete 86
+        Write-Host "`n[7/7] Creating client configuration package..." -ForegroundColor Cyan
+        $zipPath = New-ClientPackage -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -OutputPath $Script:OutputPath
+        if (-not $zipPath) {
+            throw "Creating client package failed"
+        }
+        Write-Host "  ✓ Client package created: $zipPath" -ForegroundColor Green
+        Write-Verbose "Client package successfully created: $zipPath"
+        Write-Log "Client package created: $zipPath" -Level "INFO"
+        
+        Write-Progress -Activity "Remote Server Setup" -Completed
+        
+        Show-Menu -Mode Success -SuccessTitle "Remote Server Setup Successfully Completed!" -LogFile $script:LogFile -ExtraMessage "The VPN server is now running on the remote machine.`nClient package available: $zipPath" -ComputerName $computerName
+    }
+    catch {
+        Write-Progress -Activity "Remote Server Setup" -Completed
+        Write-Log "Error during Remote Server Setup: $($_.Exception.Message)" -Level "ERROR"
+        $choice = Show-Menu -Mode Error -SuccessTitle "Remote Server Setup Failed!" -LogFile $script:LogFile -ExtraMessage "Check the log file for details." -Options @("Try again", "Back to main menu", "Exit")
+        switch ($choice) {
+            1 { Invoke-RemoteOpenVPNServerSetup }
+            2 { Start-VPNSetup }
+            3 { exit }
+        }
+    }
+}
+
+# Batch Remote Client Setup but also has the functionality for WireGuard clients
 function Invoke-BatchRemoteClientSetup {
     <#
     .SYNOPSIS
-        Voert batch remote VPN-client setup uit voor meerdere computers.
+        Performs batch remote VPN client setup for multiple computers.
     #>
     
-    Write-Log "=== Batch Remote Client Setup Gestart ===" -Level "INFO"
+    Write-Log "=== Batch Remote Client Setup Started ===" -Level "INFO"
     
     # Keuze protocol
     $protocol = Select-VPNProtocol
     
     try {
-        # Stap 1: CSV bestand vragen
-        Write-Host "`n[1/4] CSV bestand selecteren..." -ForegroundColor Cyan
-        $csvPath = Read-Host "  Voer het pad naar het CSV bestand in (bijv. C:\clients.csv)"
-        if (-not (Test-Path $csvPath)) { throw "CSV bestand niet gevonden: $csvPath" }
-        Write-Host "  ✓ CSV bestand gevonden" -ForegroundColor Green
+        # Step 1: Select CSV file
+        Write-Host "`n[1/4] Selecting CSV file..." -ForegroundColor Cyan
+        $csvPath = Read-Host "  Enter the path to the CSV file (e.g. C:\clients.csv)"
+        if (-not (Test-Path $csvPath)) { throw "CSV file not found: $csvPath" }
+        Write-Host "  ✓ CSV file found" -ForegroundColor Green
         
         $clients = Import-Csv -Path $csvPath
-        if ($clients.Count -eq 0) { throw "Geen clients gevonden in CSV" }
-        Write-Log "$($clients.Count) clients gevonden" -Level "INFO"
+        if ($clients.Count -eq 0) { throw "No clients found in CSV" }
+        Write-Log "$($clients.Count) clients found" -Level "INFO"
         
-        # Stap 2: Protocol specifieke input
+        # Step 2: Protocol specific input
         if ($protocol -eq "OpenVPN") {
             # ... OpenVPN Existing Logic ...
-            Write-Host "`n[2/4] Client ZIP bestand selecteren..." -ForegroundColor Cyan
+            Write-Host "`n[2/4] Selecting client ZIP file..." -ForegroundColor Cyan
             $clientDefaultName = if ($Script:Settings.ContainsKey('clientName')) { $Script:Settings.clientName } else { 'client' }
             $defaultZipPath = Join-Path $Script:OutputPath "vpn-client-$clientDefaultName.zip"
              
             if (Test-Path $defaultZipPath) {
-                Write-Host "  Standaard gevonden: $defaultZipPath"
-                if ((Read-Host "  Gebruiken? (J/N)") -match "^[Jj]") { $zipPath = $defaultZipPath }
+                Write-Host "  Default found: $defaultZipPath"
+                if ((Read-Host "  Use? (Y/N)") -match "^[Yy]") { $zipPath = $defaultZipPath }
             }
              
-            if (-not $zipPath) { $zipPath = Read-Host "  Pad naar client ZIP bestand" }
-            if (-not (Test-Path $zipPath)) { throw "ZIP bestand niet gevonden" }
+            if (-not $zipPath) { $zipPath = Read-Host "  Path to client ZIP file" }
+            if (-not (Test-Path $zipPath)) { throw "ZIP file not found" }
              
             # Execute Batch OpenVPN
-            Write-Host "`n[3/4] Starten Batch OpenVPN Setup..." -ForegroundColor Cyan
+            Write-Host "`n[3/4] Starting Batch OpenVPN Setup..." -ForegroundColor Cyan
             $cpuCores = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
             $throttleLimit = [math]::Max(1, $cpuCores - 1)
              
@@ -324,9 +647,9 @@ function Invoke-BatchRemoteClientSetup {
         }
         elseif ($protocol -eq "WireGuard") {
             # WireGuard Logic
-            Write-Host "`n[2/4] WireGuard Server gegevens..." -ForegroundColor Cyan
+            Write-Host "`n[2/4] WireGuard Server data..." -ForegroundColor Cyan
             
-            # Probeer gegevens uit een bestaande client config te halen (lokaal)
+            # Try to retrieve data from an existing client config (local)
             $wgClientConfigMatch = Get-ChildItem -Path $Script:OutputPath -Filter "wg-client*.conf" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
             
             $serverEndpoint = $null
@@ -342,22 +665,22 @@ function Invoke-BatchRemoteClientSetup {
             }
             
             if (-not $serverEndpoint -or -not $serverPubKey) {
-                Write-Host "  Kon server gegevens niet automatisch vinden." -ForegroundColor Yellow
-                if (-not $serverEndpoint) { $serverEndpoint = Read-Host "  Server Endpoint (Publiek IP:Poort, bijv. 1.2.3.4:51820)" }
+                Write-Host "  Could not automatically find server data." -ForegroundColor Yellow
+                if (-not $serverEndpoint) { $serverEndpoint = Read-Host "  Server Endpoint (Public IP:Port, e.g. 1.2.3.4:51820)" }
                 if (-not $serverPubKey) { $serverPubKey = Read-Host "  Server Public Key" }
             }
             else {
-                Write-Host "  ✓ Server gegevens geladen uit $($wgClientConfigMatch.Name)" -ForegroundColor Green
+                Write-Host "  ✓ Server data loaded from $($wgClientConfigMatch.Name)" -ForegroundColor Green
                 Write-Host "    Endpoint: $serverEndpoint" -ForegroundColor Gray
                 Write-Host "    Public Key: $serverPubKey" -ForegroundColor Gray
             }
              
-            if (-not $serverEndpoint -or -not $serverPubKey) { throw "Server gegevens verplicht" }
+            if (-not $serverEndpoint -or -not $serverPubKey) { throw "Server data is required" }
              
             $serverKeys = @{ PublicKey = $serverPubKey }
              
             # Execute Batch WireGuard
-            Write-Host "`n[3/4] Starten Batch WireGuard Setup..." -ForegroundColor Cyan
+            Write-Host "`n[3/4] Starting Batch WireGuard Setup..." -ForegroundColor Cyan
              
             # Module path fix
             $modPath = Join-Path $PSScriptRoot "../module/AutoSecureVPN.psm1"
@@ -365,8 +688,8 @@ function Invoke-BatchRemoteClientSetup {
             $results = Invoke-BatchRemoteWireGuardClientInstall -Clients $clients -ServerKeys $serverKeys -ServerEndpoint $serverEndpoint -ModulePath $modPath -Settings $Script:Settings
         }
 
-        # Resultaten tonen
-        Write-Host "`nResultaten:" -ForegroundColor Yellow
+        # Show results
+        Write-Host "`nResults:" -ForegroundColor Yellow
         $successCount = 0
         foreach ($result in $results) {
             if ($result -like "SUCCESS:*") {
@@ -378,339 +701,18 @@ function Invoke-BatchRemoteClientSetup {
             }
         }
         
-        Write-Log "Batch Remote Setup voltooid ($successCount/$($clients.Count) succesvol)" -Level "INFO"
+        Write-Log "Batch Remote Setup completed ($successCount/$($clients.Count) successful)" -Level "INFO"
         
         if ($successCount -eq $clients.Count) {
-            Show-Menu -Mode Success -SuccessTitle "Batch Setup Succesvol!" -LogFile $script:LogFile
+            Show-Menu -Mode Success -SuccessTitle "Batch Setup Successful!" -LogFile $script:LogFile
         }
         else {
-            Show-Menu -Mode Error -SuccessTitle "Batch Setup Deels Mislukt" -LogFile $script:LogFile
+            Show-Menu -Mode Error -SuccessTitle "Batch Setup Partially Failed" -LogFile $script:LogFile
         }
 
     }
     catch {
-        Write-Log "Fout tijdens Batch Setup: $_" -Level "ERROR"
-        Show-Menu -Mode Error -SuccessTitle "Batch Setup Gefaald!" -ExtraMessage $_
-    }
-}
-function Invoke-OpenVPNServerSetup {
-    <#
-    .SYNOPSIS
-        Voert volledige VPN-server setup uit.
-
-    .DESCRIPTION
-        Deze functie voert alle stappen uit voor het opzetten van een OpenVPN server, inclusief installatie, certificaten, configuratie en service start.
-
-    .EXAMPLE
-        Invoke-ServerSetup
-    #>
-    
-    Write-Log "=== Server Setup Gestart ===" -Level "INFO"
-    
-    try {
-        # Stap 1: Administrator check
-        Write-Progress -Activity "Server Setup" -Status "Stap 1 van 8: Controleren administrator rechten" -PercentComplete 0
-        Write-Host "`n[1/8] Controleren administrator rechten..." -ForegroundColor Cyan
-        if (-not (Test-IsAdmin)) {
-            throw "Script moet als Administrator worden uitgevoerd!"
-        }
-        Write-Host "  ✓ Administrator rechten bevestigd" -ForegroundColor Green
-        Write-Verbose "Administrator rechten succesvol gecontroleerd"
-        Write-Log "Administrator rechten bevestigd" -Level "INFO"
-        
-        # Stap 2: OpenVPN installeren
-        Write-Progress -Activity "Server Setup" -Status "Stap 2 van 8: OpenVPN installeren" -PercentComplete 12.5
-        Write-Host "`n[2/8] OpenVPN installeren..." -ForegroundColor Cyan
-        if (-not (Install-OpenVPN)) {
-            throw "OpenVPN installatie mislukt"
-        }
-        Write-Host "  ✓ OpenVPN geïnstalleerd" -ForegroundColor Green
-        Write-Verbose "OpenVPN succesvol geïnstalleerd"
-        Write-Log "OpenVPN geïnstalleerd" -Level "INFO"
-        
-        # Stap 3: Firewall configureren
-        Write-Progress -Activity "Server Setup" -Status "Stap 3 van 8: Windows Firewall configureren" -PercentComplete 25
-        Write-Host "`n[3/8] Windows Firewall configureren..." -ForegroundColor Cyan
-        if (-not (Set-Firewall -Port 443 -Protocol "TCP")) {
-            throw "Firewall configuratie mislukt"
-        }
-        Write-Host "  ✓ Firewall regels toegevoegd" -ForegroundColor Green
-        Write-Verbose "Firewall regels succesvol toegevoegd"
-        Write-Log "Firewall regels toegevoegd" -Level "INFO"
-        
-        # Stap 3.5: NAT en IP Forwarding configureren voor internet toegang
-        Write-Progress -Activity "Server Setup" -Status "Stap 3.5 van 9: NAT en IP Forwarding configureren" -PercentComplete 31
-        Write-Host "`n[3.5/9] NAT en IP Forwarding configureren..." -ForegroundColor Cyan
-        if (-not (Enable-VPNNAT -VPNSubnet "10.8.0.0/24")) { 
-            Write-Host "  ! NAT configuratie warning - mogelijk handmatige configuratie nodig" -ForegroundColor Yellow
-            Write-Log "NAT configuratie warning - handmatige setup mogelijk nodig" -Level "WARNING"
-        }
-        else {
-            Write-Host "  ✓ NAT en IP Forwarding geconfigureerd" -ForegroundColor Green
-        }
-        
-        # Stap 4: Gebruikersinput verzamelen
-        Write-Progress -Activity "Server Setup" -Status "Stap 4 van 9: Server configuratie parameters verzamelen" -PercentComplete 37.5
-        Write-Host "`n[4/9] Server configuratie parameters..." -ForegroundColor Cyan
-        $serverConfig = Get-ServerConfiguration
-        Write-Verbose "Server configuratie parameters verzameld: $($serverConfig | ConvertTo-Json)"
-        Write-Log "Server configuratie parameters verzameld" -Level "INFO"
-        
-        # Stap 5: EasyRSA en certificaten
-        Write-Progress -Activity "Server Setup" -Status "Stap 5 van 8: Certificaten genereren" -PercentComplete 50
-        Write-Host "`n[5/8] Certificaten genereren (dit kan even duren)..." -ForegroundColor Cyan
-        if (-not (Initialize-EasyRSA -EasyRSAPath $script:EasyRSAPath)) {
-            throw "EasyRSA initialisatie mislukt"
-        }
-        if (-not (Initialize-Certificates -ServerName $serverConfig.ServerName -Password $serverConfig.Password -EasyRSAPath $script:EasyRSAPath)) {
-            throw "Certificaat generatie mislukt"
-        }
-        Write-Host "  ✓ Certificaten gegenereerd" -ForegroundColor Green
-        Write-Verbose "Certificaten succesvol gegenereerd voor server $($serverConfig.ServerName)"
-        Write-Log "Certificaten gegenereerd" -Level "INFO"
-        
-        # Stap 6: Server configuratie genereren
-        Write-Progress -Activity "Server Setup" -Status "Stap 6 van 8: Server configuratie aanmaken" -PercentComplete 62.5
-        Write-Host "`n[6/8] Server configuratie aanmaken..." -ForegroundColor Cyan
-        if (-not (New-ServerConfig -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -ConfigPath $script:ConfigPath)) {
-            throw "Server configuratie generatie mislukt"
-        }
-        Write-Host "  ✓ Server configuratie aangemaakt" -ForegroundColor Green
-        Write-Verbose "Server configuratie succesvol aangemaakt"
-        Write-Log "Server configuratie aangemaakt" -Level "INFO"
-        
-        # Stap 7: OpenVPN service starten
-        Write-Progress -Activity "Server Setup" -Status "Stap 7 van 8: OpenVPN service starten" -PercentComplete 75
-        Write-Host "`n[7/8] OpenVPN service starten..." -ForegroundColor Cyan
-        if (-not (Start-VPNService)) {
-            throw "OpenVPN service starten mislukt"
-        }
-        Write-Host "  ✓ OpenVPN service actief" -ForegroundColor Green
-        Write-Verbose "OpenVPN service succesvol gestart"
-        Write-Log "OpenVPN service actief" -Level "INFO"
-        
-        # Stap 8: Client package maken
-        Write-Progress -Activity "Server Setup" -Status "Stap 8 van 8: Client configuratie package maken" -PercentComplete 87.5
-        Write-Host "`n[8/8] Client configuratie package maken..." -ForegroundColor Cyan
-        $zipPath = New-ClientPackage -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -OutputPath $Script:OutputPath
-        if (-not $zipPath) {
-            throw "Client package aanmaken mislukt"
-        }
-        Write-Host "  ✓ Client package aangemaakt: $zipPath" -ForegroundColor Green
-        Write-Verbose "Client package succesvol aangemaakt: $zipPath"
-        Write-Log "Client package aangemaakt: $zipPath" -Level "INFO"
-        
-        Write-Progress -Activity "Server Setup" -Completed
-        
-        Show-Menu -Mode Success -SuccessTitle "Server Setup Succesvol Voltooid!" -LogFile $script:LogFile -ExtraInfo "Client package: $zipPath" -ExtraMessage "Dit ZIP-bestand naar de client overzetten om de verbinding te maken."
-    }
-    catch {
-        Write-Progress -Activity "Server Setup" -Completed
-        Write-Log "Fout tijdens Server Setup: $($_.Exception.Message)" -Level "ERROR"   
-        $choice = Show-Menu -Mode Error -SuccessTitle "Server Setup Gefaald!" -LogFile $script:LogFile -ExtraMessage "Controleer het logbestand voor details." -Options @("Opnieuw proberen", "Terug naar hoofdmenu", "Afsluiten")
-        switch ($choice) {
-            1 {
-                # Rollback uitvoeren voordat opnieuw proberen
-                Write-Host "`n[*] Rollback uitvoeren om wijzigingen ongedaan te maken..." -ForegroundColor Yellow
-                Invoke-Rollback -SetupType "Server"
-                Invoke-OpenVPNServerSetup
-            }
-            2 {
-                # Rollback uitvoeren voordat terug naar hoofdmenu
-                Write-Host "`n[*] Rollback uitvoeren om wijzigingen ongedaan te maken..." -ForegroundColor Yellow
-                Invoke-Rollback -SetupType "Server"
-                Start-VPNSetup
-            }
-            3 {
-                # Rollback uitvoeren voordat afsluiten
-                Write-Host "`n[*] Rollback uitvoeren om wijzigingen ongedaan te maken..." -ForegroundColor Yellow
-                Invoke-Rollback -SetupType "Server"
-                exit
-            }
-        }
-    }
-}
-function Invoke-RemoteOpenVPNServerSetup {
-    <#
-    .SYNOPSIS
-        Voert remote VPN-server setup uit.
-
-    .DESCRIPTION
-        Deze functie voert setup uit voor een VPN server op een remote machine via PowerShell remoting.
-
-    .EXAMPLE
-        Invoke-RemoteServerSetup
-    #>
-    
-    Write-Log "=== Remote Server Setup Gestart ===" -Level "INFO"
-    
-    try {
-        # Stap 1: Administrator check (voor lokale machine)
-        Write-Progress -Activity "Remote Server Setup" -Status "Stap 1 van 7: Controleren administrator rechten" -PercentComplete 0
-        Write-Host "`n[1/7] Controleren administrator rechten..." -ForegroundColor Cyan
-        if (-not (Test-IsAdmin)) {
-            throw "Script moet als Administrator worden uitgevoerd!"
-        }
-        Write-Host "  ✓ Administrator rechten bevestigd" -ForegroundColor Green
-        Write-Verbose "Lokale administrator rechten succesvol gecontroleerd"
-        Write-Log "Administrator rechten bevestigd" -Level "INFO"
-        # Stap 1.5: Controleer lokale OpenVPN installatie
-        Write-Progress -Activity "Remote Server Setup" -Status "Stap 1.5 van 7: Lokale OpenVPN installatie controleren" -PercentComplete 7
-        if (-not (Test-Path $Script:Settings.installedPath)) {
-            Write-Host "`n[1.5] OpenVPN lokaal installeren voor certificaat generatie..." -ForegroundColor Cyan
-            if (-not (Install-OpenVPN)) {
-                throw "Lokale OpenVPN installatie mislukt"
-            }
-            Write-Host "  ✓ OpenVPN lokaal geïnstalleerd" -ForegroundColor Green
-            Write-Verbose "OpenVPN lokaal geïnstalleerd voor certificaat generatie"
-            Write-Log "OpenVPN lokaal geïnstalleerd" -Level "INFO"
-        }
-        else {
-            Write-Verbose "OpenVPN al lokaal geïnstalleerd"
-        }
-        
-        # Stap 2: Remote computer details
-        Write-Progress -Activity "Remote Server Setup" -Status "Stap 2 van 7: Remote computer configuratie" -PercentComplete 14
-        Write-Host "`n[2/7] Remote computer configuratie..." -ForegroundColor Cyan
-        # Settings.serverIP ophalen
-        try {
-            if ($Script:Settings.ContainsKey('serverIP') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.serverIP) -and $Script:Settings.serverIP -ne 'jouw.server.ip.hier') {
-                $computerName = $Script:Settings.serverIP
-                Write-Verbose "Remote server IP afkomstig uit settings: $computerName"
-            } 
-        }    
-        catch {
-            throw "Server IP address is leeg in variabel.psd1"
-        }
-
-        if ([string]::IsNullOrWhiteSpace($computerName)) {
-            throw "Instelling 'remoteClientIP' is leeg of ongeldig in Variable.psd1. Vul 'remoteClientIP' in of pas de configuratie aan."
-        }
-        
-        Write-Host "  ✓ Remote computer: $computerName" -ForegroundColor Green
-        Write-Verbose "Remote computer naam gebruikt: $computerName"
-        Write-Log "Remote computer: $computerName" -Level "INFO"
-        
-        # Stap 3: WinRM configuratie
-        Write-Progress -Activity "Remote Server Setup" -Status "Stap 3 van 7: WinRM configuratie controleren" -PercentComplete 21
-        Write-Host "`n[3/7] WinRM configuratie controleren..." -ForegroundColor Cyan
-        try {
-            $trustedHosts = (Get-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client -Name TrustedHosts -ErrorAction Stop).TrustedHosts
-        }
-        catch {
-            $trustedHosts = ""
-        }
-        if ($trustedHosts -notlike "*$computerName*" -and $trustedHosts -ne "*") {
-            Write-Host "  Remote computer niet in TrustedHosts. Toevoegen..." -ForegroundColor Yellow
-            $newTrustedHosts = if ($trustedHosts) { "$trustedHosts,$computerName" } else { $computerName }
-            Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client -Name TrustedHosts -Value $newTrustedHosts
-            Restart-Service winrm -Force
-            Write-Host "  ✓ $computerName toegevoegd aan TrustedHosts en WinRM herstart" -ForegroundColor Green
-            Write-Verbose "TrustedHosts bijgewerkt en WinRM herstart"
-        }
-        elseif ($trustedHosts -eq "*") {
-            Write-Host "  ✓ TrustedHosts staat op wildcard (*), geen toevoeging nodig" -ForegroundColor Green
-            Write-Verbose "TrustedHosts staat op wildcard"
-            Write-Log "TrustedHosts staat op wildcard (*)" -Level "INFO"
-        }
-        else {
-            Write-Host "  ✓ $computerName staat al in TrustedHosts" -ForegroundColor Green
-            Write-Verbose "$computerName staat al in TrustedHosts"
-            Write-Log "$computerName staat al in TrustedHosts" -Level "INFO"
-        }
-        
-        Write-Host "  Controleren of PSRemoting actief is op remote machine..." -ForegroundColor Cyan
-        try {
-            Test-WSMan -ComputerName $computerName -ErrorAction Stop | Out-Null
-            Write-Host "  ✓ PSRemoting actief op $computerName" -ForegroundColor Green
-            Write-Verbose "PSRemoting succesvol getest op $computerName"
-            Write-Log "PSRemoting actief op $computerName" -Level "INFO"
-        }
-        catch {
-            Write-Host "  ! PSRemoting niet actief op $computerName. Inschakelen..." -ForegroundColor Yellow
-            Write-Host "    Voer het volgende uit op de remote machine als Administrator:" -ForegroundColor Yellow
-            Write-Host "    Enable-PSRemoting -Force" -ForegroundColor White
-            Write-Host "    Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client -Name TrustedHosts -Value '*'" -ForegroundColor White
-            throw "PSRemoting moet ingeschakeld zijn op de remote machine"
-        }
-        
-        # Stap 4: Credentials verkrijgen
-        Write-Progress -Activity "Remote Server Setup" -Status "Stap 4 van 7: Authenticatie" -PercentComplete 29
-        Write-Host "`n[4/7] Authenticatie..." -ForegroundColor Cyan
-        $cred = Get-Credential -Message "Voer Administrator credentials in voor $computerName"
-        if (-not $cred) {
-            throw "Credentials zijn verplicht"
-        }
-        Write-Host "  ✓ Credentials verkregen" -ForegroundColor Green
-        Write-Verbose "Credentials succesvol ingevoerd voor $computerName"
-        Write-Log "Credentials verkregen voor $computerName" -Level "INFO"
-        
-        # Stap 5: Server configuratie verkrijgen
-        Write-Progress -Activity "Remote Server Setup" -Status "Stap 5 van 7: Server configuratie verkrijgen" -PercentComplete 36
-        Write-Host "`n[5/7] Server configuratie..." -ForegroundColor Cyan
-        $serverConfig = Get-ServerConfiguration
-        Write-Host "  ✓ Server configuratie verkregen" -ForegroundColor Green
-        Write-Verbose "Server configuratie verkregen: $($serverConfig | ConvertTo-Json)"
-        Write-Log "Server configuratie verkregen" -Level "INFO"
-        
-        # Stap 6: Certificaten lokaal genereren
-        Write-Progress -Activity "Remote Server Setup" -Status "Stap 6 van 7: Certificaten lokaal genereren" -PercentComplete 43
-        Write-Host "`n[6/7] Certificaten lokaal genereren..." -ForegroundColor Cyan
-        $localEasyRSA = $Script:Settings.easyRSAPath
-        if (-not (Initialize-EasyRSA)) {
-            throw "EasyRSA initialisatie mislukt lokaal"
-        }
-        if (-not (Initialize-Certificates -ServerName $serverConfig.ServerName -Password $serverConfig.Password -EasyRSAPath $Script:Settings.easyRSAPath)) {
-            throw "Certificaat generatie mislukt lokaal"
-        }
-        Write-Host "  ✓ Certificaten lokaal gegenereerd" -ForegroundColor Green
-        Write-Verbose "Certificaten lokaal gegenereerd voor server $($serverConfig.ServerName)"
-        Write-Log "Certificaten lokaal gegenereerd" -Level "INFO"
-        
-        # Remote installatie uitvoeren
-        Write-Progress -Activity "Remote Server Setup" -Status "Remote server installatie uitvoeren" -PercentComplete 57
-        Write-Host "`n[*] Remote server installatie starten..." -ForegroundColor Cyan
-        if (-not (Install-RemoteServer -ComputerName $computerName -Credential $cred -ServerConfig $serverConfig -LocalEasyRSAPath $localEasyRSA -RemoteConfigPath $Script:Settings.remoteConfigPath)) {
-            throw "Remote server installatie mislukt"
-        }
-        Write-Host "  ✓ Remote installatie voltooid" -ForegroundColor Green
-        Write-Verbose "Remote server installatie succesvol voltooid voor $computerName"
-        Write-Log "Remote server installatie voltooid voor $computerName" -Level "INFO"
-
-        # Remote OpenVPN service starten via GUI
-        Write-Progress -Activity "Remote Server Setup" -Status "OpenVPN service op remote machine starten" -PercentComplete 71
-        Write-Host "`n[*] OpenVPN service op remote machine starten..." -ForegroundColor Cyan
-        $remoteOvpn = Join-Path $Script:Settings.remoteConfigPath "server.ovpn"
-        if (-not (Start-VPNConnection -ConfigFile $remoteOvpn -ComputerName $computerName -Credential $cred)) {
-            throw "Remote OpenVPN service starten mislukt"
-        }
-        Write-Host " ✓ Remote OpenVPN starten voltooid" -ForegroundColor Green
-        Write-Verbose "Remote OpenVPN starten succesvol volottoid voor $computerName"
-        Write-Log "Remote OpenVPN service gestart voor $computerName" -Level "INFO"
-        
-        # Stap 7: Client package maken
-        Write-Progress -Activity "Remote Server Setup" -Status "Stap 7 van 7: Client configuratie package maken" -PercentComplete 86
-        Write-Host "`n[7/7] Client configuratie package maken..." -ForegroundColor Cyan
-        $zipPath = New-ClientPackage -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -OutputPath $Script:OutputPath
-        if (-not $zipPath) {
-            throw "Client package aanmaken mislukt"
-        }
-        Write-Host "  ✓ Client package aangemaakt: $zipPath" -ForegroundColor Green
-        Write-Verbose "Client package succesvol aangemaakt: $zipPath"
-        Write-Log "Client package aangemaakt: $zipPath" -Level "INFO"
-        
-        Write-Progress -Activity "Remote Server Setup" -Completed
-        
-        Show-Menu -Mode Success -SuccessTitle "Remote Server Setup Succesvol Voltooid!" -LogFile $script:LogFile -ExtraMessage "De VPN server draait nu op de remote machine.`nClient package beschikbaar: $zipPath" -ComputerName $computerName
-    }
-    catch {
-        Write-Progress -Activity "Remote Server Setup" -Completed
-        Write-Log "Fout tijdens Remote Server Setup: $($_.Exception.Message)" -Level "ERROR"
-        $choice = Show-Menu -Mode Error -SuccessTitle "Remote Server Setup Gefaald!" -LogFile $script:LogFile -ExtraMessage "Controleer het logbestand voor details." -Options @("Opnieuw proberen", "Terug naar hoofdmenu", "Afsluiten")
-        switch ($choice) {
-            1 { Invoke-RemoteOpenVPNServerSetup }
-            2 { Start-VPNSetup }
-            3 { exit }
-        }
+        Write-Log "Error during Batch Setup: $_" -Level "ERROR"
+        Show-Menu -Mode Error -SuccessTitle "Batch Setup Failed!" -ExtraMessage $_
     }
 }

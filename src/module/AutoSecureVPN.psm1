@@ -1,6 +1,6 @@
 # Function comments are generated with AI assistance.
 
-#Requires -Version 7.0
+#Requires -Version 5.1
 
 # Dot-source functional files from the current folder
 Get-ChildItem -Path "$PSScriptRoot\*.ps1" -Exclude "AutoSecureVPN.psm1" | ForEach-Object { . $_.FullName }
@@ -31,7 +31,7 @@ if ($PSScriptRoot -and -not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
         }
     }
     catch {
-        Write-Log "Kon settings niet laden: $($_.Exception.Message)" -Level "WARNING"
+        Write-Log "Could not load settings: $($_.Exception.Message)" -Level "WARNING"
     }
 }
 

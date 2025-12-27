@@ -1,23 +1,23 @@
 <#
-    WAAROM ZOVEEL MOCKS IN DEZE TESTS?
+    WHY SO MANY MOCKS IN THESE TESTS?
 
-    Core functies zijn moeilijk te testen omdat ze:
-    - Windows services starten/stoppen
-    - Netwerk adapters en firewall configureren
-    - Externe executables uitvoeren (wg.exe)
-    - Register instellingen manipuleren
+    Core functions are difficult to test because they:
+    - Start/stop Windows services
+    - Configure network adapters and firewall
+    - Execute external executables (wg.exe)
+    - Manipulate registry settings
 
-    In CI/CD (GitHub Actions) werken deze niet omdat:
-    - Geen echte netwerk adapters beschikbaar
-    - Services kunnen niet draaien
-    - wg.exe bestaat niet in de container
+    In CI/CD (GitHub Actions) these do not work because:
+    - No real network adapters available
+    - Services cannot run
+    - wg.exe does not exist in the container
 
-    Daarom mocken we alles voor:
-    - CI compatibiliteit
-    - Systeem veiligheid (geen echte veranderingen)
-    - Snelle, reproduceerbare tests
+    Therefore, we mock everything for:
+    - CI compatibility
+    - System safety (no real changes)
+    - Fast, reproducible tests
 
-    Trade-off: testen niet alle echte logica, maar wel CI/CD werkend houden.
+    Trade-off: we don't test all real logic, but we do keep CI/CD working.
 #>
 
 
@@ -39,36 +39,36 @@ InModuleScope AutoSecureVPN {
         
         # Initialize Script-scoped variables used by the module
         $Script:Settings = @{
-            logFileName = "AutoSecureVPN.log"
+            logFileName        = "AutoSecureVPN.log"
             transcriptFileName = "transcript.log"
-            configPath = "C:\Program Files\OpenVPN\config"
-            easyRSAPath = "C:\Program Files\OpenVPN\easy-rsa"
-            outputPath = "output"
-            installerPath = "C:\Temp\openvpn-install.msi"
-            installedPath = "C:\Program Files\OpenVPN"
-            openVPNExePath = "C:\Program Files\OpenVPN\bin\openvpn.exe"
-            openVPNGuiPath = "C:\Program Files\OpenVPN\bin\openvpn-gui.exe"
-            easyRSAVersion = ""
-            easyRSAKeySize = 2048
-            easyRSACAExpire = 3650
-            easyRSACertExpire = 3650
-            easyRSACRLDays = 180
-            easyRSAAlgo = "rsa"
-            easyRSABatch = "1"
-            easyRSAReqCN = "vpn-server"
-            port = 443
-            protocol = "TCP"
-            vpnSubnet = "10.8.0.0"
-            vpnMask = "255.255.255.0"
-            testIP = "10.8.0.1"
-            dns1 = "8.8.8.8"
-            dns2 = "8.8.4.4"
-            serverName = "server"
-            serverIP = "192.168.0.132"
-            serverWanIP = "81.164.163.23"
-            lanSubnet = "192.168.0.0"
-            lanMask = "255.255.255.0"
-            noPass = $true
+            configPath         = "C:\Program Files\OpenVPN\config"
+            easyRSAPath        = "C:\Program Files\OpenVPN\easy-rsa"
+            outputPath         = "output"
+            installerPath      = "C:\Temp\openvpn-install.msi"
+            installedPath      = "C:\Program Files\OpenVPN"
+            openVPNExePath     = "C:\Program Files\OpenVPN\bin\openvpn.exe"
+            openVPNGuiPath     = "C:\Program Files\OpenVPN\bin\openvpn-gui.exe"
+            easyRSAVersion     = ""
+            easyRSAKeySize     = 2048
+            easyRSACAExpire    = 3650
+            easyRSACertExpire  = 3650
+            easyRSACRLDays     = 180
+            easyRSAAlgo        = "rsa"
+            easyRSABatch       = "1"
+            easyRSAReqCN       = "vpn-server"
+            port               = 443
+            protocol           = "TCP"
+            vpnSubnet          = "10.8.0.0"
+            vpnMask            = "255.255.255.0"
+            testIP             = "10.8.0.1"
+            dns1               = "8.8.8.8"
+            dns2               = "8.8.4.4"
+            serverName         = "server"
+            serverIP           = "192.168.0.132"
+            serverWanIP        = "81.164.163.23"
+            lanSubnet          = "192.168.0.0"
+            lanMask            = "255.255.255.0"
+            noPass             = $true
         }
         $Script:BasePath = "TestDrive:"
     }

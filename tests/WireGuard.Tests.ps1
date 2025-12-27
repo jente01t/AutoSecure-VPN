@@ -1,23 +1,23 @@
 <#
-    WAAROM ZOVEEL MOCKS IN DEZE TESTS?
+    WHY SO MANY MOCKS IN THESE TESTS?
 
-    WireGuard functies zijn moeilijk te testen omdat ze:
-    - Windows services starten/stoppen
-    - Netwerk adapters en firewall configureren
-    - Externe executables uitvoeren (wg.exe)
-    - Register instellingen manipuleren
+    WireGuard functions are difficult to test because they:
+    - Start/stop Windows services
+    - Configure network adapters and firewall
+    - Execute external executables (wg.exe)
+    - Manipulate registry settings
 
-    In CI/CD (GitHub Actions) werken deze niet omdat:
-    - Geen echte netwerk adapters beschikbaar
-    - Services kunnen niet draaien
-    - wg.exe bestaat niet in de container
+    In CI/CD (GitHub Actions) these do not work because:
+    - No real network adapters available
+    - Services cannot run
+    - wg.exe does not exist in the container
 
-    Daarom mocken we alles voor:
-    - CI compatibiliteit
-    - Systeem veiligheid (geen echte veranderingen)
-    - Snelle, reproduceerbare tests
+    Therefore, we mock everything for:
+    - CI compatibility
+    - System safety (no real changes)
+    - Fast, reproducible tests
 
-    Trade-off: testen niet alle echte logica, maar wel CI/CD werkend houden.
+    Trade-off: we don't test all real logic, but we do keep CI/CD working.
 #>
 
 #Requires -Modules Pester
@@ -58,7 +58,7 @@ InModuleScope AutoSecureVPN {
         
         It "Throws if wg.exe not found" {
             Mock Test-Path { return $false }
-            { Initialize-WireGuardKeys -WgPath "C:\fake\wg.exe" } | Should -Throw "*wg.exe niet gevonden*"
+            { Initialize-WireGuardKeys -WgPath "C:\fake\wg.exe" } | Should -Throw "*wg.exe not found*"
         }
     }
 
@@ -235,7 +235,7 @@ InModuleScope AutoSecureVPN {
         }
         
         It "Throws if wg.exe not found" {
-            Mock Start-WireGuardService { throw "WireGuard executable niet gevonden" } -ModuleName AutoSecureVPN
+            Mock Start-WireGuardService { throw "WireGuard executable not found" } -ModuleName AutoSecureVPN
             
             { Start-WireGuardService -ConfigPath "C:\config.conf" } | Should -Throw
         }

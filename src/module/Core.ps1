@@ -5,54 +5,54 @@
 function Show-Menu {
     <#
     .SYNOPSIS
-        Toont een menu met opties en vraagt om keuze, of toont een succes bericht.
+        Displays a menu with options and asks for choice, or shows a success message.
 
     .DESCRIPTION
-        Deze functie toont een menu met een titel, lijst van opties, en wacht op gebruikersinvoer.
-        Het valideert de keuze en retourneert het gekozen nummer.
-        Als Mode 'Success' is, toont het een succes bericht in een box.
+        This function displays a menu with a title, list of options, and waits for user input.
+        It validates the choice and returns the chosen number.
+        If Mode is 'Success', it displays a success message in a box.
 
     .PARAMETER Mode
-        'Menu' voor menu tonen, 'Success' voor succes bericht.
+        'Menu' for displaying menu, 'Success' for success message.
 
     .PARAMETER Title
-        De titel van het menu of succes bericht.
+        The title of the menu or success message.
 
     .PARAMETER Options
-        Een array van opties om te tonen (alleen voor Menu).
+        An array of options to display (Menu only).
 
     .PARAMETER SuccessTitle
-        De titel voor succes bericht (alleen voor Success).
+        The title for success message (Success only).
 
     .PARAMETER LogFile
-        Pad naar logbestand (voor Success).
+        Path to log file (for Success).
 
     .PARAMETER ExtraMessage
-        Extra bericht (voor Success).
+        Extra message (for Success).
 
     .PARAMETER ComputerName
-        Naam van computer voor log (voor Success).
+        Name of computer for log (for Success).
 
     .PARAMETER HeaderColor
-        Kleur voor de header (standaard Cyan).
+        Color for the header (default Cyan).
 
     .PARAMETER OptionColor
-        Kleur voor de opties (standaard White).
+        Color for the options (default White).
 
     .PARAMETER FooterColor
-        Kleur voor de footer (standaard Cyan).
+        Color for the footer (default Cyan).
 
     .PARAMETER SeparatorChar
-        Karakter voor de scheiding (standaard '=').
+        Character for the separator (default '=').
 
     .PARAMETER NoPrompt
-        Als true, geen prompt tonen en null retourneren (alleen voor Menu).
+        If true, do not show prompt and return null (Menu only).
 
     .PARAMETER Prompt
-        De prompt tekst (standaard 'Keuze: ') (alleen voor Menu).
+        The prompt text (default 'Choice: ') (Menu only).
 
     .OUTPUTS
-        System.Int32 voor Menu, None voor Success.
+        System.Int32 for Menu, None for Success.
 
     .EXAMPLE
         Show-Menu -Mode Menu -Title "Hoofdmenu" -Options @("Optie 1", "Optie 2")
@@ -61,7 +61,7 @@ function Show-Menu {
         Show-Menu -Mode Success -SuccessTitle "Remote Client Setup Succesvol Voltooid!" -LogFile $script:LogFile -ExtraMessage "Op de remote machine kun je nu de VPN verbinding starten via OpenVPN." -ComputerName $computerName
 
     .NOTES
-        Deze functie gebruikt Write-Host voor console output en Read-Host voor input.
+        This function uses Write-Host for console output and Read-Host for input.
     #>
     param(
         [Parameter(Mandatory = $true, Position = 0)][ValidateSet('Menu', 'Success', 'Error')][string]$Mode,
@@ -76,26 +76,26 @@ function Show-Menu {
         [Parameter(Position = 9)][ConsoleColor]$OptionColor = 'White',
         [Parameter(Position = 10)][ConsoleColor]$FooterColor = 'Cyan',
         [Parameter(Position = 11)][string]$SeparatorChar = '=',
-        [Parameter(Position = 12)][switch]$NoPrompt,
-        [Parameter(Position = 13)][string]$Prompt = 'Keuze: '
+        [Parameter(Mandatory = $false, Position = 12)][switch]$NoPrompt,
+        [Parameter(Position = 13)][string]$Prompt = 'Choice: '
         , [Parameter(Position = 14)][string]$ErrorMessage
     )
 
-    # Afhankelijk van de Mode, toon een menu, succesbericht of foutbericht
+    # Depending on the Mode, show a menu, success message or error message
     if ($Mode -eq 'Menu') {
-        # Valideer dat Title en Options aanwezig zijn voor Menu mode
+        # Validate that Title and Options are present for Menu mode
         if (-not $Title -or -not $Options) {
-            throw "Voor Mode 'Menu' zijn Title en Options verplicht."
+            throw "For Mode 'Menu', Title and Options are required."
         }
-        # Wis het scherm voor een schone weergave
+        # Clear the screen for a clean display
         Clear-Host
-        # Maak een scheidingslijn voor de header
+        # Create a separator line for the header
         $sep = ($SeparatorChar * 30)
         Write-Host $sep -ForegroundColor $HeaderColor
         Write-Host "      $Title" -ForegroundColor $HeaderColor
         Write-Host $sep -ForegroundColor $HeaderColor
 
-        # Toon alle opties genummerd
+        # Show all options numbered
         for ($i = 0; $i -lt $Options.Count; $i++) {
             $num = $i + 1
             Write-Host "$num. $($Options[$i])" -ForegroundColor $OptionColor
@@ -103,31 +103,31 @@ function Show-Menu {
 
         Write-Host $sep -ForegroundColor $FooterColor
 
-        # Als NoPrompt is ingesteld, retourneer null zonder prompt
+        # If NoPrompt is set, return null without prompt
         if ($NoPrompt) { return $null }
 
-        # Vraag om gebruikersinvoer en valideer de keuze
+        # Ask for user input and validate the choice
         while ($true) {
             $userInput = Read-Host -Prompt $Prompt
             if ($userInput -match '^[0-9]+$') {
                 $n = [int]$userInput
                 if ($n -ge 1 -and $n -le $Options.Count) { return $n }
             }
-            Write-Host "Ongeldige keuze, probeer opnieuw." -ForegroundColor Red
+            Write-Host "Invalid choice, please try again." -ForegroundColor Red
         }
     }
     elseif ($Mode -eq 'Success') {
-        # Valideer dat SuccessTitle aanwezig is voor Success mode
+        # Validate that SuccessTitle is present for Success mode
         if (-not $SuccessTitle) {
-            throw "Voor Mode 'Success' is SuccessTitle verplicht."
+            throw "For Mode 'Success', SuccessTitle is required."
         }
-        # Toon een succesbox met de titel
+        # Show a success box with the title
         Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Green
         Write-Host "║  $SuccessTitle  ║" -ForegroundColor Green
         Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Green
-        # Toon extra informatie indien beschikbaar
+        # Show extra information if available
         if ($LogFile) {
-            Write-Host "`nLogbestand: $LogFile" -ForegroundColor Yellow
+            Write-Host "`nLog file: $LogFile" -ForegroundColor Yellow
         }
         if ($ExtraInfo) {
             Write-Host "$ExtraInfo" -ForegroundColor Yellow
@@ -135,26 +135,26 @@ function Show-Menu {
         if ($ExtraMessage) {
             Write-Host "`n$ExtraMessage" -ForegroundColor Cyan
         }
-        # Log de succesvolle actie indien ComputerName gegeven
+        # Log the successful action if ComputerName given
         if ($ComputerName) {
-            Write-Log "Remote client setup succesvol voltooid voor $ComputerName" -Level "SUCCESS"
+            Write-Log "Remote client setup successfully completed for $ComputerName" -Level "SUCCESS"
         }
     }
     elseif ($Mode -eq 'Error') {
-        # Valideer dat SuccessTitle aanwezig is voor Error mode (hergebruikt als fouttitel)
+        # Validate that SuccessTitle is present for Error mode (reused as error title)
         if (-not $SuccessTitle) {
-            throw "Voor Mode 'Error' is SuccessTitle verplicht."
+            throw "For Mode 'Error', SuccessTitle is required."
         }
-        # Toon een foutbox met de titel
+        # Show an error box with the title
         Write-Host "`n╔════════════════════════════════════════════╗" -ForegroundColor Red
         Write-Host "║  $SuccessTitle  ║" -ForegroundColor Red
         Write-Host "╚════════════════════════════════════════════╝" -ForegroundColor Red
-        # Bepaal de beste fouttekst om te tonen (prioriteit: expliciete parameter > extra velden > globale fout)
+        # Determine the best error text to show (priority: explicit parameter > extra fields > global error)
         $displayError = $null
         if ($ErrorMessage) { $displayError = $ErrorMessage }
         elseif ($ExtraMessage) { $displayError = $ExtraMessage }
         elseif ($ExtraInfo) { $displayError = $ExtraInfo }
-        elseif ($LogFile) { $displayError = "Zie logbestand: $LogFile" }
+        elseif ($LogFile) { $displayError = "See log file: $LogFile" }
         elseif ($global:Error.Count -gt 0) {
             try {
                 $err = $global:Error[0]
@@ -165,24 +165,24 @@ function Show-Menu {
             catch { $displayError = $null }
         }
 
-        # Toon de foutdetails indien beschikbaar
+        # Show the error details if available
         if ($displayError) {
             Write-Host "`nERROR:" -ForegroundColor Red
             Write-Host "$displayError" -ForegroundColor Yellow
         }
         elseif ($LogFile) {
-            Write-Host "`nLogbestand: $LogFile" -ForegroundColor Yellow
+            Write-Host "`nLog file: $LogFile" -ForegroundColor Yellow
         }
-        # Log de fout indien ComputerName gegeven
+        # Log the error if ComputerName given
         if ($ComputerName) {
-            Write-Log "Batch remote client setup gefaald ($ComputerName)" -Level "ERROR"
+            Write-Log "Batch remote client setup failed ($ComputerName)" -Level "ERROR"
         }
-        # Als opties gegeven zijn, toon een menu voor herstel (zonder scherm te wissen)
+        # If options are given, show a menu for recovery (without clearing the screen)
         if ($Options) {
-            # Houd de foutuitvoer zichtbaar boven het optiemenu
+            # Keep the error output visible above the option menu
             $sep = ($SeparatorChar * 30)
             Write-Host $sep -ForegroundColor $HeaderColor
-            Write-Host "      Fout opgetreden - Kies een optie" -ForegroundColor $HeaderColor
+            Write-Host "      Error occurred - Choose an option" -ForegroundColor $HeaderColor
             Write-Host $sep -ForegroundColor $HeaderColor
             for ($i = 0; $i -lt $Options.Count; $i++) {
                 $num = $i + 1
@@ -190,14 +190,14 @@ function Show-Menu {
             }
             Write-Host $sep -ForegroundColor $FooterColor
             if (-not $NoPrompt) {
-                # Vraag om keuze voor herstel
+                # Ask for recovery choice
                 while ($true) {
                     $userInput = Read-Host -Prompt $Prompt
                     if ($userInput -match '^[0-9]+$') {
                         $n = [int]$userInput
                         if ($n -ge 1 -and $n -le $Options.Count) { return $n }
                     }
-                    Write-Host "Ongeldige keuze, probeer opnieuw." -ForegroundColor Red
+                    Write-Host "Invalid choice, please try again." -ForegroundColor Red
                 }
             }
         }
@@ -206,13 +206,13 @@ function Show-Menu {
 function Wait-Input {
     <#
     .SYNOPSIS
-        Wacht op gebruikersinvoer om door te gaan.
+        Waits for user input to continue.
 
     .DESCRIPTION
-        Deze functie toont een bericht en wacht tot de gebruiker Enter drukt.
+        This function displays a message and waits until the user presses Enter.
 
     .PARAMETER Message
-        Het bericht om te tonen (standaard 'Druk Enter om door te gaan...').
+        The message to display (default 'Press Enter to continue...').
 
     .OUTPUTS
         None
@@ -221,25 +221,25 @@ function Wait-Input {
         Wait-Input
 
     .NOTES
-        Deze functie gebruikt Read-Host om te wachten op input.
+        This function uses Read-Host to wait for input.
     #>
-    param([Parameter(Position = 0)][string]$Message = 'Druk Enter om door te gaan...')
+    param([Parameter(Position = 0)][string]$Message = 'Press Enter to continue...')
     Read-Host -Prompt $Message | Out-Null
 }
 
 function Set-ModuleSettings {
     <#
     .SYNOPSIS
-        Stelt de module settings in voor remote operaties.
+        Sets the module settings for remote operations.
 
     .DESCRIPTION
-        Deze functie stelt $Script:Settings en $Script:BasePath in voor gebruik in remote sessies.
+        This function sets $Script:Settings and $Script:BasePath for use in remote sessions.
 
     .PARAMETER Settings
-        De hashtable met settings.
+        The hashtable with settings.
 
     .PARAMETER BasePath
-        Het base path voor de module.
+        The base path for the module.
 
     .OUTPUTS
         None
@@ -248,7 +248,7 @@ function Set-ModuleSettings {
         Set-ModuleSettings -Settings $mySettings -BasePath "C:\Temp"
 
     .NOTES
-        Deze functie wijzigt script-scoped variabelen.
+        This function modifies script-scoped variables.
     #>
     param(
         [Parameter(Mandatory = $true, Position = 0)][hashtable]$Settings,
@@ -261,47 +261,47 @@ function Set-ModuleSettings {
 function Test-IsAdmin {
     <#
     .SYNOPSIS
-        Controleert of het script als administrator wordt uitgevoerd.
+        Checks if the script is run as administrator.
 
     .DESCRIPTION
-        Deze functie controleert of de huidige gebruiker administrator rechten heeft.
+        This function checks if the current user has administrator privileges.
 
     .OUTPUTS
         System.Boolean
-        $true als administrator, anders $false.
+        $true if administrator, otherwise $false.
 
     .EXAMPLE
-        if (-not (Test-IsAdmin)) { Write-Log "Administrator rechten vereist" -Level "ERROR" }
+        if (-not (Test-IsAdmin)) { Write-Log "Administrator privileges required" -Level "ERROR" }
 
-    Referentie: https://codeandkeep.com/Check-If-Running-As-Admin/.
+    Reference: https://codeandkeep.com/Check-If-Running-As-Admin/.
     #>
     return ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 function Write-Log {
     <#
     .SYNOPSIS
-        Schrijft een bericht naar het logbestand en console.
+        Writes a message to the log file and console.
 
     .DESCRIPTION
-        Deze functie logt een bericht met niveau, timestamp, naar een bestand en console.
+        This function logs a message with level, timestamp, to a file and console.
 
     .PARAMETER Message
-        Het bericht om te loggen.
+        The message to log.
 
     .PARAMETER Level
-        Het logniveau (INFO, WARNING, ERROR, SUCCESS).
+        The log level (INFO, WARNING, ERROR, SUCCESS).
 
     .PARAMETER LogFile
-        Het pad naar het logbestand (optioneel, gebruikt standaard pad).
+        The path to the log file (optional, uses default path).
 
     .OUTPUTS
         None
 
     .EXAMPLE
-        Write-Log "Operatie voltooid" -Level "SUCCESS"
+        Write-Log "Operation completed" -Level "SUCCESS"
 
     .NOTES
-        Deze functie gebruikt Add-Content voor bestand output en Write-Verbose voor console.
+        This function uses Add-Content for file output and Write-Verbose for console.
     #>
     param(
         [Parameter(Mandatory = $true, Position = 0)][string]$Message,
@@ -309,30 +309,30 @@ function Write-Log {
         [Parameter(Position = 2)][string]$LogFile = $null
     )
     
-    # Stel standaard logpad in indien niet opgegeven
+    # Set default log path if not specified
     if (-not $LogFile) {
-        # Gebruik altijd de root van het project voor logs, ongeacht instellingen
+        # Always use the project root for logs, regardless of settings
         $logsPath = Join-Path $Script:BasePath "logs"
-        # Maak logs directory aan indien deze niet bestaat
+        # Create logs directory if it does not exist
         if (-not (Test-Path $logsPath)) {
             New-Item -ItemType Directory -Path $logsPath -Force | Out-Null
         }
         $LogFile = Join-Path $logsPath $Script:Settings.logFileName
     }
     
-    # Genereer timestamp en formatteer de log entry
+    # Generate timestamp and format the log entry
     $timestamp = Get-Date -Format $Script:Settings.logTimestampFormat
     $logEntry = "[$timestamp] [$Level] $Message"
     
-    # Probeer de log entry naar het bestand te schrijven
+    # Try to write the log entry to the file
     try {
         Add-Content -Path $LogFile -Value $logEntry -Encoding UTF8
     }
     catch {
-        Write-Verbose "Kan niet schrijven naar logbestand: $_"
+        Write-Verbose "Cannot write to log file: $_"
     }
     
-    # # Schrijf ook naar de console afhankelijk van het logniveau
+    # # Also write to the console depending on the log level
     # switch ($Level.ToUpper()) {
     #     "ERROR" { Write-Host $logEntry -ForegroundColor Red }
     #     "WARNING" { Write-Host $logEntry -ForegroundColor Yellow }
@@ -343,25 +343,25 @@ function Write-Log {
 function Set-Firewall {
     <#
     .SYNOPSIS
-        Configureert de Windows Firewall voor OpenVPN.
+        Configures the Windows Firewall for OpenVPN.
 
     .DESCRIPTION
-        Deze functie voegt een inbound firewall regel toe voor de opgegeven poort en protocol.
+        This function adds an inbound firewall rule for the specified port and protocol.
 
     .PARAMETER Port
-        De poort om te openen (standaard uit settings).
+        The port to open (default from settings).
 
     .PARAMETER Protocol
-        Het protocol (TCP/UDP, standaard uit settings).
+        The protocol (TCP/UDP, default from settings).
 
     .OUTPUTS
         System.Boolean
-        $true bij succes, anders $false.
+        $true on success, otherwise $false.
 
     .EXAMPLE
         Set-Firewall -Port 443 -Protocol "TCP"
 
-    Referentie: Gebaseerd op New-NetFirewallRule cmdlet (Microsoft PowerShell Documentatie: https://docs.microsoft.com/en-us/powershell/module/netsecurity/new-netfirewallrule), en Get-NetFirewallRule voor controle (https://docs.microsoft.com/en-us/powershell/module/netsecurity/get-netfirewallrule).
+    Reference: Based on New-NetFirewallRule cmdlet (Microsoft PowerShell Documentation: https://docs.microsoft.com/en-us/powershell/module/netsecurity/new-netfirewallrule), and Get-NetFirewallRule for check (https://docs.microsoft.com/en-us/powershell/module/netsecurity/get-netfirewallrule).
     #>
     param(
         [Parameter(Position = 0)][int]$Port,
@@ -378,13 +378,13 @@ function Set-Firewall {
     
     # Validate after defaults are set
     if ($Port -lt 1 -or $Port -gt 65535) {
-        throw "Port moet tussen 1 en 65535 zijn, kreeg: $Port"
+        throw "Port must be between 1 and 65535, received: $Port"
     }
     if ($Protocol -notin @('TCP', 'UDP')) {
-        throw "Protocol moet TCP of UDP zijn, kreeg: $Protocol"
+        throw "Protocol must be TCP or UDP, received: $Protocol"
     }
     
-    Write-Log "Firewall configuratie gestart voor poort $Port $Protocol" -Level "INFO"
+    Write-Log "Firewall configuration started for port $Port $Protocol" -Level "INFO"
     
     try {
         # Enable firewall rule for OpenVPN
@@ -394,7 +394,7 @@ function Set-Firewall {
         $existingRule = Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue
         
         if ($existingRule) {
-            Write-Log "Firewall regel bestaat al: $ruleName" -Level "INFO"
+            Write-Log "Firewall rule already exists: $ruleName" -Level "INFO"
             return $true
         }
         
@@ -406,34 +406,34 @@ function Set-Firewall {
             -Action Allow `
             -Profile Any
         
-        Write-Log "Firewall regel toegevoegd: $ruleName" -Level "SUCCESS"
+        Write-Log "Firewall rule added: $ruleName" -Level "SUCCESS"
         return $true
     }
     catch {
-        Write-Log "Fout tijdens firewall configuratie: $_" -Level "ERROR"
+        Write-Log "Error during firewall configuration: $_" -Level "ERROR"
         return $false
     }
 }
 function Enable-VPNNAT {
     <#
     .SYNOPSIS
-        Configureert NAT voor VPN subnet (WireGuard of OpenVPN).
+        Configures NAT for VPN subnet (WireGuard or OpenVPN).
     
     .DESCRIPTION
-        Deze functie configureert Network Address Translation (NAT) zodat
-        VPN clients internettoegang hebben via de server.
-        Werkt voor zowel WireGuard als OpenVPN.
-        Probeert eerst NetNat, valt terug op ICS bij "Invalid class" errors.
+        This function configures Network Address Translation (NAT) so that
+        VPN clients have internet access via the server.
+        Works for both WireGuard and OpenVPN.
+        Tries NetNat first, falls back to ICS on "Invalid class" errors.
         
     .PARAMETER VPNSubnet
-        Het VPN subnet in CIDR notatie (bijv. 10.13.13.0/24).
+        The VPN subnet in CIDR notation (e.g. 10.13.13.0/24).
         
     .PARAMETER InterfaceAlias
-        De naam van de internet-facing network interface (optioneel, auto-detect).
+        The name of the internet-facing network interface (optional, auto-detect).
     
     .OUTPUTS
         System.Boolean
-        $true bij succes, anders $false.
+        $true on success, otherwise $false.
         
     .EXAMPLE
         Enable-VPNNAT -VPNSubnet "10.13.13.0/24"
@@ -443,10 +443,10 @@ function Enable-VPNNAT {
         [Parameter(Mandatory = $false)][string]$InterfaceAlias
     )
     
-    # Compacte en veilige fallback:
-    # - Gebruik expliciet doorgegeven $VPNSubnet als deze niet leeg is
-    # - Anders gebruik instelling $Script:Settings.wireGuardBaseSubnet als die bestaat en niet leeg is
-    # - Als beide ontbreken: expliciete fout zodat admin de setting kan corrigeren
+    # Compact and safe fallback:
+    # - Use explicitly passed $VPNSubnet if it's not empty
+    # - Otherwise use setting $Script:Settings.wireGuardBaseSubnet if it exists and is not empty
+    # - If both are missing: explicit error so the admin can correct the setting
     if ([string]::IsNullOrWhiteSpace($VPNSubnet)) {
         $base = $null
         if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardBaseSubnet')) {
@@ -457,28 +457,28 @@ function Enable-VPNNAT {
             $VPNSubnet = "${base}.0/24"
         }
         else {
-            throw "VPNSubnet niet opgegeven en 'wireGuardBaseSubnet' ontbreekt of is leeg in Settings. Voeg een waarde toe aan de config of geef -VPNSubnet op."
+            throw "VPNSubnet not specified and 'wireGuardBaseSubnet' is missing or empty in Settings. Add a value to the config or specify -VPNSubnet."
         }
     }
     
     try {
-        # Eerst IP Forwarding inschakelen
+        # First enable IP Forwarding
         if (-not (Enable-IPForwarding)) {
-            Write-Log "Kon IP Forwarding niet inschakelen" -Level "ERROR"
+            Write-Log "Could not enable IP Forwarding" -Level "ERROR"
             return $false
         }
         
-        # ICS Persistence fix - voorkom dat Windows ICS automatisch uitschakelt
+        # ICS Persistence fix - prevent Windows from automatically disabling ICS
         try {
             $icsRegPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\SharedAccess"
             Set-ItemProperty -Path $icsRegPath -Name "EnableRebootPersistConnection" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
-            Write-Log "ICS persistence ingeschakeld (voorkomt auto-reset)" -Level "INFO"
+            Write-Log "ICS persistence enabled (prevents auto-reset)" -Level "INFO"
         }
         catch {
-            Write-Log "Kon ICS persistence registry niet instellen: $_" -Level "WARNING"
+            Write-Log "Could not set ICS persistence registry: $_" -Level "WARNING"
         }
         
-        # Bepaal de internet-facing interface als niet opgegeven
+        # Determine the internet-facing interface if not specified
         if (-not $InterfaceAlias) {
             $defaultRoute = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | 
             Where-Object { $_.NextHop -ne "0.0.0.0" } | 
@@ -486,7 +486,7 @@ function Enable-VPNNAT {
             
             if ($defaultRoute) {
                 $InterfaceAlias = (Get-NetAdapter -InterfaceIndex $defaultRoute.InterfaceIndex -ErrorAction SilentlyContinue).Name
-                Write-Log "Internet interface gedetecteerd: $InterfaceAlias" -Level "INFO"
+                Write-Log "Internet interface detected: $InterfaceAlias" -Level "INFO"
             }
             
             if (-not $InterfaceAlias) {
@@ -497,78 +497,78 @@ function Enable-VPNNAT {
                     } | Select-Object -First 1).Name
                 
                 if (-not $InterfaceAlias) {
-                    throw "Kon geen internet interface detecteren"
+                    throw "Could not detect any internet interface"
                 }
             }
         }
         
-        Write-Log "Configureren NAT voor $VPNSubnet via $InterfaceAlias..." -Level "INFO"
+        Write-Log "Configuring NAT for $VPNSubnet via $InterfaceAlias..." -Level "INFO"
         
         $natConfigured = $false
         
-        # Methode 1: Probeer NetNat (kan "Invalid class" geven op sommige systemen)
+        # Method 1: Try NetNat (can give "Invalid class" on some systems)
         try {
             $netNatAvailable = Get-Command -Name "New-NetNat" -ErrorAction SilentlyContinue
             if ($netNatAvailable) {
                 $natName = "WireGuardNAT"
                 
-                # Test of NetNat WMI class werkt
-                $testNat = Get-NetNat -ErrorAction Stop 2>&1
+                # Test if NetNat WMI class works
+                Get-NetNat -ErrorAction Stop | Out-Null
                 
                 # Verwijder bestaande NAT met dezelfde naam
                 $existingNat = Get-NetNat -Name $natName -ErrorAction SilentlyContinue
                 if ($existingNat) {
                     Remove-NetNat -Name $natName -Confirm:$false -ErrorAction SilentlyContinue
-                    Write-Log "Bestaande NAT regel verwijderd" -Level "INFO"
+                    Write-Log "Existing NAT rule removed" -Level "INFO"
                 }
                 
-                # Maak nieuwe NAT regel
+                # Create new NAT rule
                 New-NetNat -Name $natName -InternalIPInterfaceAddressPrefix $VPNSubnet -ErrorAction Stop
-                Write-Log "NAT regel '$natName' aangemaakt voor $VPNSubnet" -Level "SUCCESS"
+                Write-Log "NAT rule '$natName' created for $VPNSubnet" -Level "SUCCESS"
                 $natConfigured = $true
             }
         }
         catch {
             $errorMsg = $_.Exception.Message
             if ($errorMsg -match "Invalid class|not found|WBEM|WMI") {
-                Write-Log "NetNat niet beschikbaar (WMI error), probeer ICS fallback..." -Level "WARNING"
+                Write-Log "NetNat not available (WMI error), trying ICS fallback..." -Level "WARNING"
             }
             else {
-                Write-Log "NetNat error: $errorMsg - probeer ICS fallback..." -Level "WARNING"
+                Write-Log "NetNat error: $errorMsg - trying ICS fallback..." -Level "WARNING"
             }
         }
         
-        # Methode 2: Registry-based ICS (meer betrouwbaar dan COM)
+        # Method 2: Registry-based ICS (more reliable than COM)
         if (-not $natConfigured) {
             try {
-                Write-Log "Configureren ICS via registry methode..." -Level "INFO"
+                Write-Log "Configuring ICS via registry method..." -Level "INFO"
                 
                 # Haal GUID van interfaces op
                 $internetAdapter = Get-NetAdapter -Name $InterfaceAlias -ErrorAction SilentlyContinue
                 $wgAdapter = Get-NetAdapter | Where-Object { $_.Name -like "*wg*" -or $_.InterfaceDescription -like "*WireGuard*" } | Select-Object -First 1
                 
                 if (-not $internetAdapter -or -not $wgAdapter) {
-                    Write-Log "Kon adapters niet vinden voor ICS" -Level "WARNING"
+                    Write-Log "Could not find adapters for ICS" -Level "WARNING"
                 }
                 else {
                     # Get the interface GUIDs from registry
                     $netCfgPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Network\{4D36E972-E325-11CE-BFC1-08002BE10318}"
                     
-                    $internetGuid = $null
-                    $wgGuid = $null
-                    
-                    Get-ChildItem $netCfgPath -ErrorAction SilentlyContinue | ForEach-Object {
+                    $guidResults = Get-ChildItem $netCfgPath -ErrorAction SilentlyContinue | ForEach-Object {
                         $connPath = Join-Path $_.PSPath "Connection"
                         if (Test-Path $connPath) {
                             $connName = (Get-ItemProperty $connPath -Name "Name" -ErrorAction SilentlyContinue).Name
                             if ($connName -eq $InterfaceAlias) {
-                                $internetGuid = $_.PSChildName
+                                [PSCustomObject]@{ Type = "Internet"; Guid = $_.PSChildName }
                             }
-                            if ($connName -eq $wgAdapter.Name) {
-                                $wgGuid = $_.PSChildName
+                            elseif ($connName -eq $wgAdapter.Name) {
+                                [PSCustomObject]@{ Type = "WG"; Guid = $_.PSChildName }
                             }
                         }
                     }
+                    
+                    $internetGuid = ($guidResults | Where-Object { $_.Type -eq "Internet" }).Guid
+                    $wgGuid = ($guidResults | Where-Object { $_.Type -eq "WG" }).Guid
                     
                     if ($internetGuid -and $wgGuid) {
                         Write-Log "Internet GUID: $internetGuid, WireGuard GUID: $wgGuid" -Level "INFO"
@@ -594,23 +594,23 @@ function Enable-VPNNAT {
                         Start-Service SharedAccess -ErrorAction SilentlyContinue
                         Start-Sleep -Seconds 2
                         
-                        Write-Log "ICS geconfigureerd via registry: $InterfaceAlias -> $($wgAdapter.Name)" -Level "SUCCESS"
+                        Write-Log "ICS configured via registry: $InterfaceAlias -> $($wgAdapter.Name)" -Level "SUCCESS"
                         $natConfigured = $true
                     }
                     else {
-                        Write-Log "Kon interface GUIDs niet vinden" -Level "WARNING"
+                        Write-Log "Could not find interface GUIDs" -Level "WARNING"
                     }
                 }
             }
             catch {
-                Write-Log "Registry ICS configuratie mislukt: $_" -Level "WARNING"
+                Write-Log "Registry ICS configuration failed: $_" -Level "WARNING"
             }
         }
         
-        # Methode 3: COM-based ICS met service restart (fallback)
+        # Method 3: COM-based ICS with service restart (fallback)
         if (-not $natConfigured) {
             try {
-                Write-Log "Probeer ICS via COM met service restart..." -Level "INFO"
+                Write-Log "Trying ICS via COM with service restart..." -Level "INFO"
                 
                 # Stop SharedAccess first to clear state
                 Stop-Service SharedAccess -Force -ErrorAction SilentlyContinue
@@ -621,7 +621,7 @@ function Enable-VPNNAT {
                 $netShare = New-Object -ComObject HNetCfg.HNetShare
                 $connections = $netShare.EnumEveryConnection
                 
-                # Eerst ALLE sharing uitschakelen
+                # First disable ALL sharing
                 foreach ($conn in $connections) {
                     try {
                         $cfg = $netShare.INetSharingConfigurationForINetConnection($conn)
@@ -630,10 +630,10 @@ function Enable-VPNNAT {
                     catch {}
                 }
                 
-                # Wacht even
+                # Wait a bit
                 Start-Sleep -Seconds 1
                 
-                # Zoek connecties opnieuw
+                # Find connections again
                 $internetConnection = $null
                 $wgConnection = $null
                 
@@ -649,27 +649,27 @@ function Enable-VPNNAT {
                 if ($internetConnection) {
                     $cfg = $netShare.INetSharingConfigurationForINetConnection($internetConnection)
                     $cfg.EnableSharing(0)  # Public
-                    Write-Log "ICS Public enabled op $InterfaceAlias" -Level "SUCCESS"
+                    Write-Log "ICS Public enabled on $InterfaceAlias" -Level "SUCCESS"
                     
                     if ($wgConnection) {
                         Start-Sleep -Milliseconds 500
                         $wgCfg = $netShare.INetSharingConfigurationForINetConnection($wgConnection)
                         $wgCfg.EnableSharing(1)  # Private
-                        Write-Log "ICS Private enabled op WireGuard" -Level "SUCCESS"
+                        Write-Log "ICS Private enabled on WireGuard" -Level "SUCCESS"
                     }
                     
                     $natConfigured = $true
                 }
             }
             catch {
-                Write-Log "COM ICS configuratie mislukt: $_" -Level "WARNING"
+                Write-Log "COM ICS configuration failed: $_" -Level "WARNING"
             }
         }
         
-        # Methode 4: Handmatige routing + netsh als laatste fallback
+        # Method 4: Manual routing + netsh as last fallback
         if (-not $natConfigured) {
             try {
-                Write-Log "Probeer netsh routing als laatste fallback..." -Level "INFO"
+                Write-Log "Trying netsh routing as last fallback..." -Level "INFO"
                 
                 $wgAdapter = Get-NetAdapter | Where-Object { $_.Name -like "*wg*" -or $_.InterfaceDescription -like "*WireGuard*" } | Select-Object -First 1
                 $internetAdapter = Get-NetAdapter -Name $InterfaceAlias -ErrorAction SilentlyContinue
@@ -682,15 +682,15 @@ function Enable-VPNNAT {
                 $null = netsh routing ip nat install 2>&1
                 $null = netsh routing ip nat add interface "$InterfaceAlias" full 2>&1
                 
-                Write-Log "Netsh routing geconfigureerd" -Level "SUCCESS"
+                Write-Log "Netsh routing configured" -Level "SUCCESS"
                 $natConfigured = $true
             }
             catch {
-                Write-Log "Netsh routing mislukt: $_" -Level "WARNING"
+                Write-Log "Netsh routing failed: $_" -Level "WARNING"
             }
         }
         
-        # Configureer Windows Firewall voor forwarding
+        # Configure Windows Firewall for forwarding
         try {
             $fwRuleName = "WireGuard-VPN-Forward"
             $existingFwRule = Get-NetFirewallRule -Name $fwRuleName -ErrorAction SilentlyContinue
@@ -712,14 +712,14 @@ function Enable-VPNNAT {
                     -Profile Any `
                     -Enabled True | Out-Null
                     
-                Write-Log "Firewall regels toegevoegd voor VPN forwarding" -Level "INFO"
+                Write-Log "Firewall rules added for VPN forwarding" -Level "INFO"
             }
         }
         catch {
-            Write-Log "Firewall configuratie warning: $_" -Level "WARNING"
+            Write-Log "Firewall configuration warning: $_" -Level "WARNING"
         }
         
-        # VERIFICATIE: Check of ICS daadwerkelijk werkt
+        # VERIFICATION: Check if ICS actually works
         $icsActuallyEnabled = $false
         try {
             $netShare = New-Object -ComObject HNetCfg.HNetShare -ErrorAction Stop
@@ -729,7 +729,7 @@ function Enable-VPNNAT {
                     $config = $netShare.INetSharingConfigurationForINetConnection($conn)
                     if ($props.Name -eq $InterfaceAlias -and $config.SharingEnabled -and $config.SharingConnectionType -eq 0) {
                         $icsActuallyEnabled = $true
-                        Write-Log "VERIFICATIE: ICS is actief op $InterfaceAlias" -Level "SUCCESS"
+                        Write-Log "VERIFICATION: ICS is active on $InterfaceAlias" -Level "SUCCESS"
                         break
                     }
                 }
@@ -737,55 +737,55 @@ function Enable-VPNNAT {
             }
         }
         catch {
-            Write-Log "Kon ICS status niet verifieren" -Level "WARNING"
+            Write-Log "Could not verify ICS status" -Level "WARNING"
         }
         
         if ($icsActuallyEnabled) {
-            Write-Log "NAT/ICS configuratie voltooid en geverifieerd voor WireGuard VPN" -Level "SUCCESS"
+            Write-Log "NAT/ICS configuration completed and verified for WireGuard VPN" -Level "SUCCESS"
             return $true
         }
         elseif ($natConfigured) {
-            # Methodes rapporteerden succes maar verificatie faalde
-            Write-Log "NAT methodes uitgevoerd maar ICS niet geverifieerd - mogelijk herstart nodig" -Level "WARNING"
+            # Methods reported success but verification failed
+            Write-Log "NAT methods executed but ICS not verified - restart might be required" -Level "WARNING"
             Write-Log "=======================================" -Level "WARNING"
-            Write-Log "HANDMATIGE ACTIE VEREIST:" -Level "WARNING"
-            Write-Log "1. Open Netwerkcentrum (ncpa.cpl)" -Level "WARNING"
-            Write-Log "2. Rechtsklik op 'WiFi' -> Properties -> Sharing tab" -Level "WARNING"
-            Write-Log "3. Vink aan: 'Allow other network users to connect...'" -Level "WARNING"
-            Write-Log "4. Selecteer 'wg_server' als Home networking connection" -Level "WARNING"
-            Write-Log "5. Klik OK" -Level "WARNING"
+            Write-Log "MANUAL ACTION REQUIRED:" -Level "WARNING"
+            Write-Log "1. Open Network Connections (ncpa.cpl)" -Level "WARNING"
+            Write-Log "2. Right-click on 'WiFi' -> Properties -> Sharing tab" -Level "WARNING"
+            Write-Log "3. Check: 'Allow other network users to connect...'" -Level "WARNING"
+            Write-Log "4. Select 'wg_server' as Home networking connection" -Level "WARNING"
+            Write-Log "5. Click OK" -Level "WARNING"
             Write-Log "=======================================" -Level "WARNING"
-            return $true  # Return true zodat setup doorgaat, user ziet warning
+            return $true  # Return true so setup continues, user sees warning
         }
         else {
-            Write-Log "NAT configuratie gefaald - handmatige configuratie nodig" -Level "ERROR"
-            Write-Log "TIP: Schakel Internet Connection Sharing handmatig in via Netwerkcentrum" -Level "INFO"
+            Write-Log "NAT configuration failed - manual configuration required" -Level "ERROR"
+            Write-Log "TIP: Enable Internet Connection Sharing manually via Network Connections" -Level "INFO"
             return $false
         }
     }
     catch {
-        Write-Log "Fout bij configureren NAT: $_" -Level "ERROR"
+        Write-Log "Error configuring NAT: $_" -Level "ERROR"
         return $false
     }
 }
 function Enable-IPForwarding {
     <#
     .SYNOPSIS
-        Schakelt IP Forwarding in op Windows voor VPN routing.
+        Enables IP Forwarding on Windows for VPN routing.
     
     .DESCRIPTION
-        Deze functie schakelt IP routing in via het Windows register.
-        Dit is vereist om VPN verkeer door te sturen naar het internet.
+        This function enables IP routing via the Windows registry.
+        This is required to forward VPN traffic to the internet.
         
     .OUTPUTS
         System.Boolean
-        $true bij succes, anders $false.
+        $true on success, otherwise $false.
         
     .EXAMPLE
         Enable-IPForwarding
         
     .NOTES
-        Vereist admin rechten. Een herstart kan nodig zijn voor activatie.
+        Requires admin privileges. A restart may be required for activation.
     #>
     param()
     
@@ -794,12 +794,12 @@ function Enable-IPForwarding {
         $currentValue = Get-ItemProperty -Path $regPath -Name "IPEnableRouter" -ErrorAction SilentlyContinue
         
         if ($currentValue.IPEnableRouter -eq 1) {
-            Write-Log "IP Forwarding is al ingeschakeld" -Level "INFO"
+            Write-Log "IP Forwarding is already enabled" -Level "INFO"
             return $true
         }
         
         Set-ItemProperty -Path $regPath -Name "IPEnableRouter" -Value 1 -Type DWord
-        Write-Log "IP Forwarding ingeschakeld in register. Herstart mogelijk vereist." -Level "SUCCESS"
+        Write-Log "IP Forwarding enabled in registry. Restart may be required." -Level "SUCCESS"
         
         # Probeer ook RemoteAccess service te starten voor directe activatie
         try {
@@ -808,31 +808,31 @@ function Enable-IPForwarding {
                 if ($rasService.Status -ne "Running") {
                     Set-Service -Name "RemoteAccess" -StartupType Automatic -ErrorAction SilentlyContinue
                     Start-Service -Name "RemoteAccess" -ErrorAction SilentlyContinue
-                    Write-Log "RemoteAccess service gestart voor IP routing" -Level "INFO"
+                    Write-Log "RemoteAccess service started for IP routing" -Level "INFO"
                 }
             }
         }
         catch {
-            Write-Log "RemoteAccess service kon niet gestart worden, herstart nodig: $_" -Level "WARNING"
+            Write-Log "RemoteAccess service could not be started, restart required: $_" -Level "WARNING"
         }
         
         return $true
     }
     catch {
-        Write-Log "Fout bij inschakelen IP Forwarding: $_" -Level "ERROR"
+        Write-Log "Error enabling IP Forwarding: $_" -Level "ERROR"
         return $false
     }
 }
 function Invoke-Rollback {
     <#
     .SYNOPSIS
-        Voert rollback uit om alle wijzigingen ongedaan te maken bij falen van setup.
+        Performs rollback to undo all changes upon setup failure.
 
     .DESCRIPTION
-        Deze functie probeert alle wijzigingen die tijdens de setup zijn gemaakt ongedaan te maken, inclusief stoppen van services, verwijderen van bestanden en firewall regels.
+        This function attempts to revert all changes made during setup, including stopping services, removing files and firewall rules.
 
     .PARAMETER SetupType
-        Type van setup ('Server' of 'Client').
+        Type of setup ('Server' or 'Client').
 
     .OUTPUTS
         None
@@ -841,7 +841,7 @@ function Invoke-Rollback {
         Invoke-Rollback -SetupType "Server"
 
     .NOTES
-        Deze functie probeert fouten te negeren en logt waarschuwingen bij mislukkingen.
+        This function tries to ignore errors and logs warnings on failures.
     #>
     param(
         [Parameter(Mandatory = $true, Position = 0)]
@@ -849,140 +849,140 @@ function Invoke-Rollback {
         [string]$SetupType
     )
 
-    Write-Log "Rollback gestart voor $SetupType setup" -Level "WARNING"
+    Write-Log "Rollback started for $SetupType setup" -Level "WARNING"
 
     try {
         switch ($SetupType) {
             "Server" {
                 # Stop OpenVPN service
-                Write-Log "Stoppen OpenVPN service" -Level "INFO"
+                Write-Log "Stopping OpenVPN service" -Level "INFO"
                 try {
                     $service = Get-Service -Name "OpenVPNService" -ErrorAction SilentlyContinue
                     if ($service -and $service.Status -eq 'Running') {
                         Stop-Service -Name "OpenVPNService" -Force
-                        Write-Log "OpenVPN service gestopt" -Level "INFO"
+                        Write-Log "OpenVPN service stopped" -Level "INFO"
                     }
                 }
                 catch {
-                    Write-Log "Kon OpenVPN service niet stoppen: $_" -Level "WARNING"
+                    Write-Log "Could not stop OpenVPN service: $_" -Level "WARNING"
                 }
 
-                # Verwijder firewall regel
-                Write-Log "Verwijderen firewall regel" -Level "INFO"
+                # Remove firewall rule
+                Write-Log "Removing firewall rule" -Level "INFO"
                 try {
                     $ruleName = "OpenVPN-Inbound-TCP-443"
                     $existingRule = Get-NetFirewallRule -Name $ruleName -ErrorAction SilentlyContinue
                     if ($existingRule) {
                         Remove-NetFirewallRule -Name $ruleName
-                        Write-Log "Firewall regel '$ruleName' verwijderd" -Level "INFO"
+                        Write-Log "Firewall rule '$ruleName' removed" -Level "INFO"
                     }
                 }
                 catch {
-                    Write-Log "Kon firewall regel niet verwijderen: $_" -Level "WARNING"
+                    Write-Log "Could not remove firewall rule: $_" -Level "WARNING"
                 }
 
-                # Verwijder server configuratie bestand
-                Write-Log "Verwijderen server configuratie bestand" -Level "INFO"
+                # Remove server configuration file
+                Write-Log "Removing server configuration file" -Level "INFO"
                 try {
                     $serverConfigPath = Join-Path $Script:Settings.configPath "server.ovpn"
                     if (Test-Path $serverConfigPath) {
                         Remove-Item -Path $serverConfigPath -Force
-                        Write-Log "Server configuratie bestand verwijderd: $serverConfigPath" -Level "INFO"
+                        Write-Log "Server configuration file removed: $serverConfigPath" -Level "INFO"
                     }
                 }
                 catch {
-                    Write-Log "Kon server configuratie bestand niet verwijderen: $_" -Level "WARNING"
+                    Write-Log "Could not remove server configuration file: $_" -Level "WARNING"
                 }
 
-                # Verwijder PKI directory
-                Write-Log "Verwijderen certificaten (PKI directory)" -Level "INFO"
+                # Remove PKI directory
+                Write-Log "Removing certificates (PKI directory)" -Level "INFO"
                 try {
                     $pkiPath = Join-Path $Script:Settings.easyRSAPath "pki"
                     if (Test-Path $pkiPath) {
                         Remove-Item -Path $pkiPath -Recurse -Force
-                        Write-Log "PKI directory verwijderd: $pkiPath" -Level "INFO"
+                        Write-Log "PKI directory removed: $pkiPath" -Level "INFO"
                     }
                 }
                 catch {
-                    Write-Log "Kon PKI directory niet verwijderen: $_" -Level "WARNING"
+                    Write-Log "Could not remove PKI directory: $_" -Level "WARNING"
                 }
 
-                # Verwijder client package ZIP
-                Write-Log "Verwijderen client package ZIP" -Level "INFO"
+                # Remove client package ZIP
+                Write-Log "Removing client package ZIP" -Level "INFO"
                 try {
                     $outputPath = Join-Path $Script:BasePath $Script:Settings.outputPath
                     $zipPath = Join-Path $outputPath "vpn-client-$($Script:Settings.clientName).zip"
                     if (Test-Path $zipPath) {
                         Remove-Item -Path $zipPath -Force
-                        Write-Log "Client package ZIP verwijderd: $zipPath" -Level "INFO"
+                        Write-Log "Client package ZIP removed: $zipPath" -Level "INFO"
                     }
                 }
                 catch {
-                    Write-Log "Kon client package ZIP niet verwijderen: $_" -Level "WARNING"
+                    Write-Log "Could not remove client package ZIP: $_" -Level "WARNING"
                 }
 
-                # Verwijder EasyRSA directory (optioneel, alleen als leeg)
-                Write-Log "Verwijderen EasyRSA directory indien leeg" -Level "INFO"
+                # Remove EasyRSA directory (optional, only if empty)
+                Write-Log "Removing EasyRSA directory if empty" -Level "INFO"
                 try {
                     $easyRSAPath = $Script:Settings.easyRSAPath
                     if (Test-Path $easyRSAPath) {
                         $items = Get-ChildItem -Path $easyRSAPath -Recurse
                         if ($items.Count -eq 0) {
                             Remove-Item -Path $easyRSAPath -Recurse -Force
-                            Write-Log "EasyRSA directory verwijderd: $easyRSAPath" -Level "INFO"
+                            Write-Log "EasyRSA directory removed: $easyRSAPath" -Level "INFO"
                         }
                     }
                 }
                 catch {
-                    Write-Log "Kon EasyRSA directory niet verwijderen: $_" -Level "WARNING"
+                    Write-Log "Could not remove EasyRSA directory: $_" -Level "WARNING"
                 }
             }
 
             "Client" {
-                # Stop VPN verbinding
-                Write-Log "Stoppen VPN verbinding" -Level "INFO"
+                # Stop VPN connection
+                Write-Log "Stopping VPN connection" -Level "INFO"
                 try {
                     $openvpnProcesses = Get-Process -Name "openvpn" -ErrorAction SilentlyContinue
                     if ($openvpnProcesses) {
                         $openvpnProcesses | Stop-Process -Force
-                        Write-Log "OpenVPN processen gestopt" -Level "INFO"
+                        Write-Log "OpenVPN processes stopped" -Level "INFO"
                     }
                 }
                 catch {
-                    Write-Log "Kon OpenVPN processen niet stoppen: $_" -Level "WARNING"
+                    Write-Log "Could not stop OpenVPN processes: $_" -Level "WARNING"
                 }
 
-                # Verwijder geïmporteerde configuratie bestanden
-                Write-Log "Verwijderen geïmporteerde configuratie bestanden" -Level "INFO"
+                # Remove imported configuration files
+                Write-Log "Removing imported configuration files" -Level "INFO"
                 try {
                     $configPath = $Script:Settings.configPath
                     if (Test-Path $configPath) {
                         $ovpnFiles = Get-ChildItem -Path $configPath -Filter "*.ovpn" -ErrorAction SilentlyContinue
                         foreach ($file in $ovpnFiles) {
                             Remove-Item -Path $file.FullName -Force
-                            Write-Log "Configuratie bestand verwijderd: $($file.FullName)" -Level "INFO"
+                            Write-Log "Configuration file removed: $($file.FullName)" -Level "INFO"
                         }
                         $certFiles = Get-ChildItem -Path $configPath -Filter "*.crt" -ErrorAction SilentlyContinue
                         foreach ($file in $certFiles) {
                             Remove-Item -Path $file.FullName -Force
-                            Write-Log "Certificaat bestand verwijderd: $($file.FullName)" -Level "INFO"
+                            Write-Log "Certificate file removed: $($file.FullName)" -Level "INFO"
                         }
                         $keyFiles = Get-ChildItem -Path $configPath -Filter "*.key" -ErrorAction SilentlyContinue
                         foreach ($file in $keyFiles) {
                             Remove-Item -Path $file.FullName -Force
-                            Write-Log "Key bestand verwijderd: $($file.FullName)" -Level "INFO"
+                            Write-Log "Key file removed: $($file.FullName)" -Level "INFO"
                         }
                     }
                 }
                 catch {
-                    Write-Log "Kon configuratie bestanden niet verwijderen: $_" -Level "WARNING"
+                    Write-Log "Could not remove configuration files: $_" -Level "WARNING"
                 }
             }
         }
 
-        Write-Log "Rollback voor $SetupType setup voltooid" -Level "SUCCESS"
+        Write-Log "Rollback for $SetupType setup completed" -Level "SUCCESS"
     }
     catch {
-        Write-Log "Fout tijdens rollback: $_" -Level "ERROR"
+        Write-Log "Error during rollback: $_" -Level "ERROR"
     }
 }

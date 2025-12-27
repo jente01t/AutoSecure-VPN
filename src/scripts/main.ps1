@@ -1,17 +1,17 @@
 <#
 .SYNOPSIS
-    Automatische OpenVPN Server en Client Setup voor Windows
+    Automatic OpenVPN Server and Client Setup for Windows
     
 .DESCRIPTION
-    Dit script installeert en configureert automatisch OpenVPN voor zowel server als client setup.
-    Het biedt volledige automatisering van certificaatgeneratie, firewall-configuratie en VPN-verbinding.
+    This script automatically installs and configures OpenVPN for both server and client setup.
+    It provides full automation of certificate generation, firewall configuration, and VPN connection.
     
 .NOTES
-    Vereist: PowerShell 7.0, Administrator rechten
+    Requires: PowerShell 7.0, Administrator privileges
 #>
 
 #Requires -RunAsAdministrator
-#Requires -Version 7.0
+#Requires -Version 5.1
 
 [CmdletBinding()]
 param()
@@ -29,15 +29,15 @@ try {
     }
 }
 catch {
-    Write-Host "FOUT: Kan module AutoSecureVPN niet laden. $_" -ForegroundColor Red
-    Read-Host "`nDruk op Enter om af te sluiten"
+    Write-Host "ERROR: Could not load AutoSecureVPN module. $_" -ForegroundColor Red
+    Read-Host "`nPress Enter to exit"
     exit 1
 }
 
 # Dot-source Orchestration Libraries
 Get-ChildItem -Path "$PSScriptRoot\*.ps1" -Exclude "main.ps1" | ForEach-Object { . $_.FullName }
 
-# Stel base path in
+# Set base path
 $Script:BasePath = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 
 # Load settings
@@ -62,14 +62,14 @@ try {
     }
 }
 catch {
-    Write-Host "Kon settings niet laden: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "Could not load settings: $($_.Exception.Message)" -ForegroundColor Yellow
 }
 
-# Start het script
+# Start the script
 Start-VPNSetup
 
-# Het laden van settings en base path gebeurt nu in de module AutoSecureVPN.
-# main.ps1 zorgt voor de import en de transcriptie.
+# Loading settings and base path is now handled in the AutoSecureVPN module.
+# main.ps1 handles import and transcription.
 
 # Stop transcript
 Stop-Transcript

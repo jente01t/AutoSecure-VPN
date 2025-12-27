@@ -30,7 +30,7 @@
     Copyright         = '(c) Jente. All rights reserved.'
 
     # Description of the functionality provided by this module
-    Description       = 'Module voor automatische VPN setup met OpenVPN en WireGuard ondersteuning.'
+    Description       = 'Module for automatic VPN setup with OpenVPN and WireGuard support.'
 
     # Minimum version of the PowerShell engine required by this module
     # PowerShellVersion = ''
@@ -69,17 +69,7 @@
     # NestedModules = @()
 
     # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-    FunctionsToExport = @('Show-Menu', 'Wait-Input', 'Set-ModuleSettings', 'Test-IsAdmin', 
-               'Write-Log', 'Set-Firewall', 'Enable-VPNNAT', 'Invoke-Rollback', 
-               'Install-OpenVPN', 'Initialize-EasyRSA', 'Initialize-Certificates', 
-               'New-ServerConfig', 'Start-VPNService', 'New-ClientPackage', 
-               'Import-ClientConfiguration', 'Test-TAPAdapter', 
-               'Start-VPNConnection', 'Test-VPNConnection', 'Install-RemoteClient', 
-               'Invoke-BatchRemoteClientInstall', 'Install-WireGuard', 
-               'New-WireGuardKeys', 'New-WireGuardServerConfig', 
-               'New-WireGuardClientConfig', 'Start-WireGuard', 'Stop-WireGuard', 
-               'Invoke-RemoteWireGuardInstall', 
-               'Invoke-BatchRemoteWireGuardClientInstall')
+    FunctionsToExport = @('*')
 
     # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
     CmdletsToExport   = @()
