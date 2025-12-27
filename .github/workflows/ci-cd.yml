@@ -7,7 +7,7 @@ on:
       - main
 
 jobs:
-  test:
+  unit-test:
     runs-on: windows-latest
     steps:
     - name: Checkout code
@@ -16,5 +16,11 @@ jobs:
     - name: Install Pester
       run: Install-Module -Name Pester -Force -SkipPublisherCheck
 
-    - name: Run Tests
-      run: Invoke-Pester -Path .\tests\AutoSecureVPN.Tests.ps1
+    - name: Run Core Tests
+      run: Invoke-Pester -Path .\tests\Core.Tests.ps1 -CI
+
+    - name: Run OpenVPN Tests
+      run: Invoke-Pester -Path .\tests\OpenVPN.Tests.ps1 -CI
+
+    - name: Run WireGuard Tests
+      run: Invoke-Pester -Path .\tests\WireGuard.Tests.ps1 -CI
