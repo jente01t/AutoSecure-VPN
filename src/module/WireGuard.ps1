@@ -684,17 +684,18 @@ PersistentKeepalive = $($Script:Settings.wireGuardDefaultPersistentKeepalive)
     Write-Host "==========================================" -ForegroundColor Yellow 
     Write-Verbose "Server updates saved in $serverUpdateFile - add these manually to your server config!"
     
-    # Run Sequential Install
-    Write-Verbose "Starting sequential installation on $($preparedClients.Count) clients..."
+    # Run Parallel Install
+    Write-Verbose "Starting parallel installation on $($preparedClients.Count) clients..."
     $localModulePath = $ModulePath
     
-    $parallelResults = foreach ($pc in $preparedClients) {
+    $parallelResults = $preparedClients | ForEach-Object -Parallel {
+        $pc = $_
         
         $securePassword = ConvertTo-SecureString $pc.Password -AsPlainText -Force
         $cred = New-Object System.Management.Automation.PSCredential ($pc.Username, $securePassword)
         
         # Load Module
-        Import-Module $localModulePath -Force
+        Import-Module $using:localModulePath -Force
         
         if (Install-RemoteWireGuardClient -ComputerName $pc.IP -Credential $cred -ClientConfigContent $pc.ConfigContent) {
             "SUCCESS: $($pc.Name) ($($pc.IP))"
@@ -703,8 +704,8 @@ PersistentKeepalive = $($Script:Settings.wireGuardDefaultPersistentKeepalive)
             "ERROR: $($pc.Name) ($($pc.IP))"
         }
         
-    }
+    } -ThrottleLimit $ThrottleLimit
     
-    Write-Verbose "Sequential installation completed"
+    Write-Verbose "Parallel installation completed"
     return $parallelResults
 }

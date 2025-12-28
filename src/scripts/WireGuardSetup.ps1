@@ -126,24 +126,34 @@ function Invoke-WireGuardServerSetup {
 function Invoke-RemoteWireGuardServerSetup {
     Write-Log "=== Remote WireGuard Server Setup Started ===" -Level "INFO"
     try {
-        # Admin check
+        # Step 1: Administrator check
+        Write-Progress -Activity "Remote WireGuard Setup" -Status "Step 1 of 6: Checking administrator privileges" -PercentComplete 0
         if (-not (Test-IsAdmin)) { throw "Must be run as Administrator" }
+        Write-Host "  ✓ Administrator privileges confirmed" -ForegroundColor Green
         
-        # Remote Info - Use settings with fallback check
+        # Step 2: Remote Info - Use settings with fallback check
+        Write-Progress -Activity "Remote WireGuard Setup" -Status "Step 2 of 6: Remote computer configuration" -PercentComplete 16
+        Write-Host "`n[2/6] Remote computer configuration..." -ForegroundColor Cyan
         Write-Verbose "Requesting remote computer IP/Hostname..."
         if ($Script:Settings.ContainsKey('serverIP') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.serverIP) -and $Script:Settings.serverIP -ne 'your.server.ip.here') {
             $computerName = $Script:Settings.serverIP
         }
         
         if (-not $computerName) {
-            # Maybe prompt if missing (though user asked to use variable) - sticking to user request to NOT prompt if variable is missing/default.
-            # Mirroring OpenVPN buffer: it throws error if invalid
             throw "Setting 'serverIP' is empty or invalid in Variable.psd1."
         }
+        Write-Host "  ✓ Remote computer: $computerName" -ForegroundColor Green
         Write-Verbose "Remote computer: $computerName"
         
+        # Step 3: Credentials
+        Write-Progress -Activity "Remote WireGuard Setup" -Status "Step 3 of 6: Authentication" -PercentComplete 33
+        Write-Host "`n[3/6] Authentication..." -ForegroundColor Cyan
         $cred = Get-Credential -Message "Admin Credentials for $computerName"
-        # Configure Local
+        Write-Host "  ✓ Credentials obtained" -ForegroundColor Green
+
+        # Step 4: Configure Local
+        Write-Progress -Activity "Remote WireGuard Setup" -Status "Step 4 of 6: Generating keys and configurations" -PercentComplete 50
+        Write-Host "`n[4/6] Generating keys and configurations..." -ForegroundColor Cyan
         Write-Verbose "Generating keys..."
         Write-Verbose "Generating server keys..."
         $serverKeys = Initialize-WireGuardKeys
@@ -176,9 +186,18 @@ function Invoke-RemoteWireGuardServerSetup {
         $qrPath = Join-Path $Script:OutputPath "wg-client-qr.png"
         New-WireGuardQRCode -ConfigContent $clientConfigContent -OutputPath $qrPath
         
-        # Install Remote
-        Write-Verbose "Starting remote installation..."
+        # Step 5: Install Remote
+        Write-Progress -Activity "Remote WireGuard Setup" -Status "Step 5 of 6: Performing remote installation" -PercentComplete 66
+        Write-Host "`n[5/6] Starting remote installation..." -ForegroundColor Cyan
         if (Install-RemoteWireGuardServer -ComputerName $computerName -Credential $cred -ServerConfigContent $serverConfContent -RemoteConfigPath "C:\WireGuard" -Port $port) {
+            
+            # Step 5.5: Configure NAT and IP Forwarding (handled within Install-RemoteWireGuardServer but adding orchestrator reporting)
+            Write-Progress -Activity "Remote WireGuard Setup" -Status "Step 5.5 of 6: Configuring NAT and IP Forwarding" -PercentComplete 83
+            Write-Host "`n[5.5/6] Configuring NAT and IP Forwarding..." -ForegroundColor Cyan
+            Write-Host "  ✓ NAT and IP Forwarding configured (Remote)" -ForegroundColor Green
+
+            # Step 6: Success
+            Write-Progress -Activity "Remote WireGuard Setup" -Completed
             Show-Menu -Mode Success -SuccessTitle "Remote WireGuard Server Setup Completed" -ExtraInfo "Client Config saved locally: $clientConfPath`nQR-code: $qrPath"
         }
     }

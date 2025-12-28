@@ -70,6 +70,3 @@ Start-VPNSetup
 
 # Loading settings and base path is now handled in the AutoSecureVPN module.
 # main.ps1 handles import and transcription.
-
-# Stop transcript
-Stop-Transcript

@@ -422,8 +422,7 @@ function Enable-VPNNAT {
     .DESCRIPTION
         This function configures Network Address Translation (NAT) so that
         VPN clients have internet access via the server.
-        Works for both WireGuard and OpenVPN.
-        Tries NetNat first, falls back to ICS on "Invalid class" errors.
+        Prioritizes Internet Connection Sharing (ICS) as it handles DNS/DHCP correctly for VPNs.
         
     .PARAMETER VPNSubnet
         The VPN subnet in CIDR notation (e.g. 10.13.13.0/24).
@@ -443,46 +442,41 @@ function Enable-VPNNAT {
         [Parameter(Mandatory = $false)][string]$InterfaceAlias
     )
     
-    # Compact and safe fallback:
-    # - Use explicitly passed $VPNSubnet if it's not empty
-    # - Otherwise use setting $Script:Settings.wireGuardBaseSubnet if it exists and is not empty
-    # - If both are missing: explicit error so the admin can correct the setting
+    # Defaults
     if ([string]::IsNullOrWhiteSpace($VPNSubnet)) {
         $base = $null
         if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardBaseSubnet')) {
             $base = $Script:Settings.wireGuardBaseSubnet
         }
-
         if (-not [string]::IsNullOrWhiteSpace($base)) {
             $VPNSubnet = "${base}.0/24"
-        }
-        else {
-            throw "VPNSubnet not specified and 'wireGuardBaseSubnet' is missing or empty in Settings. Add a value to the config or specify -VPNSubnet."
         }
     }
     
     try {
-        # First enable IP Forwarding
+        # 1. Enable IP Forwarding
         if (-not (Enable-IPForwarding)) {
             Write-Log "Could not enable IP Forwarding" -Level "ERROR"
             return $false
         }
         
-        # ICS Persistence fix - prevent Windows from automatically disabling ICS
+        # 2. ICS Persistence Fix (Registry)
+        # Prevents Windows from disabling ICS on reboot or service restart
         try {
             $icsRegPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\SharedAccess"
+            if (-not (Test-Path $icsRegPath)) { New-Item $icsRegPath -Force | Out-Null }
             Set-ItemProperty -Path $icsRegPath -Name "EnableRebootPersistConnection" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
-            Write-Log "ICS persistence enabled (prevents auto-reset)" -Level "INFO"
+            Write-Log "ICS persistence enabled (EnableRebootPersistConnection = 1)" -Level "INFO"
         }
         catch {
             Write-Log "Could not set ICS persistence registry: $_" -Level "WARNING"
         }
         
-        # Determine the internet-facing interface if not specified
+        # 3. Detect Internet Interface
         if (-not $InterfaceAlias) {
             $defaultRoute = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | 
             Where-Object { $_.NextHop -ne "0.0.0.0" } | 
-            Select-Object -First 1
+            Sort-Object RouteMetric | Select-Object -First 1
             
             if ($defaultRoute) {
                 $InterfaceAlias = (Get-NetAdapter -InterfaceIndex $defaultRoute.InterfaceIndex -ErrorAction SilentlyContinue).Name
@@ -490,281 +484,173 @@ function Enable-VPNNAT {
             }
             
             if (-not $InterfaceAlias) {
+                Write-Log "Could not auto-detect internet interface. Using fallback loop..." -Level "WARNING"
+                # Fallback: find first Up non-VPN adapter
                 $InterfaceAlias = (Get-NetAdapter | Where-Object { 
                         $_.Status -eq "Up" -and 
-                        $_.Name -notlike "*WireGuard*" -and
+                        $_.Name -notlike "*WireGuard*" -and 
+                        $_.Name -notlike "*VPN*" -and
                         $_.Name -notlike "*Loopback*"
                     } | Select-Object -First 1).Name
-                
-                if (-not $InterfaceAlias) {
-                    throw "Could not detect any internet interface"
-                }
+            }
+            
+            if (-not $InterfaceAlias) {
+                throw "Could not detect any internet interface. Please specify -InterfaceAlias."
             }
         }
         
-        Write-Log "Configuring NAT for $VPNSubnet via $InterfaceAlias..." -Level "INFO"
+        Write-Log "Configuring NAT for subnet $VPNSubnet via $InterfaceAlias..." -Level "INFO"
+        
+        # 4. Cleanup Conflicts (NetNat)
+        # NetNat and ICS conflict. We remove NetNat to prioritize ICS.
+        if (Get-Command "Get-NetNat" -ErrorAction SilentlyContinue) {
+            try {
+                $existing = Get-NetNat -ErrorAction SilentlyContinue
+                if ($existing) {
+                    Write-Log "Removing conflicting NetNat rules..." -Level "INFO"
+                    $existing | Remove-NetNat -Confirm:$false -ErrorAction SilentlyContinue
+                }
+            }
+            catch {}
+        }
+
+        # 5. Configure ICS via Registry (Most Reliable Method)
+        # This bypasses some COM flakiness and avoids the IP address reset issue if done carefully.
+        Write-Log "Configuring ICS via Registry Method..." -Level "INFO"
         
         $natConfigured = $false
         
-        # Method 1: Try NetNat (can give "Invalid class" on some systems)
         try {
-            $netNatAvailable = Get-Command -Name "New-NetNat" -ErrorAction SilentlyContinue
-            if ($netNatAvailable) {
-                $natName = "WireGuardNAT"
-                
-                # Test if NetNat WMI class works
-                Get-NetNat -ErrorAction Stop | Out-Null
-                
-                # Verwijder bestaande NAT met dezelfde naam
-                $existingNat = Get-NetNat -Name $natName -ErrorAction SilentlyContinue
-                if ($existingNat) {
-                    Remove-NetNat -Name $natName -Confirm:$false -ErrorAction SilentlyContinue
-                    Write-Log "Existing NAT rule removed" -Level "INFO"
-                }
-                
-                # Create new NAT rule
-                New-NetNat -Name $natName -InternalIPInterfaceAddressPrefix $VPNSubnet -ErrorAction Stop
-                Write-Log "NAT rule '$natName' created for $VPNSubnet" -Level "SUCCESS"
-                $natConfigured = $true
+            # Identify Adapters
+            $internetAdapter = Get-NetAdapter -Name $InterfaceAlias -ErrorAction SilentlyContinue
+            # Find VPN Adapter (WireGuard or OpenVPN TAP)
+            $vpnAdapter = Get-NetAdapter | Where-Object { 
+                ($_.Name -like "*wg*" -or 
+                $_.InterfaceDescription -like "*WireGuard*" -or 
+                $_.InterfaceDescription -like "*TAP-Windows*" -or
+                $_.Name -like "*OpenVPN*") -and $_.Status -eq 'Up'
+            } | Sort-Object ifIndex | Select-Object -Last 1 # Use most recent/active
+            
+            if (-not $internetAdapter) { throw "Internet Adapter '$InterfaceAlias' not found." }
+            if (-not $vpnAdapter) { 
+                Write-Log "VPN Adapter not found (yet). ICS might not bind correctly until VPN is active." -Level "WARNING" 
+                # Attempt to find it even if down
+                $vpnAdapter = Get-NetAdapter | Where-Object { 
+                    ($_.Name -like "*wg*" -or 
+                    $_.InterfaceDescription -like "*WireGuard*" -or 
+                    $_.InterfaceDescription -like "*TAP-Windows*" -or
+                    $_.Name -like "*OpenVPN*")
+                } | Select-Object -First 1
             }
-        }
-        catch {
-            $errorMsg = $_.Exception.Message
-            if ($errorMsg -match "Invalid class|not found|WBEM|WMI") {
-                Write-Log "NetNat not available (WMI error), trying ICS fallback..." -Level "WARNING"
-            }
-            else {
-                Write-Log "NetNat error: $errorMsg - trying ICS fallback..." -Level "WARNING"
-            }
-        }
-        
-        # Method 2: Registry-based ICS (more reliable than COM)
-        if (-not $natConfigured) {
-            try {
-                Write-Log "Configuring ICS via registry method..." -Level "INFO"
+
+            if ($internetAdapter -and $vpnAdapter) {
+                Write-Log "Mapping: Public='$($internetAdapter.Name)' <-> Private='$($vpnAdapter.Name)'" -Level "INFO"
                 
-                # Haal GUID van interfaces op
-                $internetAdapter = Get-NetAdapter -Name $InterfaceAlias -ErrorAction SilentlyContinue
-                $wgAdapter = Get-NetAdapter | Where-Object { $_.Name -like "*wg*" -or $_.InterfaceDescription -like "*WireGuard*" } | Select-Object -First 1
+                # Get GUIDs
+                $netCfgPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Network\{4D36E972-E325-11CE-BFC1-08002BE10318}"
+                $internetGuid = $null
+                $vpnGuid = $null
                 
-                if (-not $internetAdapter -or -not $wgAdapter) {
-                    Write-Log "Could not find adapters for ICS" -Level "WARNING"
-                }
-                else {
-                    # Get the interface GUIDs from registry
-                    $netCfgPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Network\{4D36E972-E325-11CE-BFC1-08002BE10318}"
-                    
-                    $guidResults = Get-ChildItem $netCfgPath -ErrorAction SilentlyContinue | ForEach-Object {
-                        $connPath = Join-Path $_.PSPath "Connection"
-                        if (Test-Path $connPath) {
-                            $connName = (Get-ItemProperty $connPath -Name "Name" -ErrorAction SilentlyContinue).Name
-                            if ($connName -eq $InterfaceAlias) {
-                                [PSCustomObject]@{ Type = "Internet"; Guid = $_.PSChildName }
-                            }
-                            elseif ($connName -eq $wgAdapter.Name) {
-                                [PSCustomObject]@{ Type = "WG"; Guid = $_.PSChildName }
-                            }
-                        }
+                Get-ChildItem $netCfgPath -ErrorAction SilentlyContinue | ForEach-Object {
+                    $connPath = Join-Path $_.PSPath "Connection"
+                    if (Test-Path $connPath) {
+                        $name = (Get-ItemProperty $connPath -Name "Name" -ErrorAction SilentlyContinue).Name
+                        if ($name -eq $internetAdapter.Name) { $internetGuid = $_.PSChildName }
+                        if ($name -eq $vpnAdapter.Name) { $vpnGuid = $_.PSChildName }
                     }
+                }
+                
+                if ($internetGuid -and $vpnGuid) {
+                    # Stop Service
+                    Stop-Service SharedAccess -Force -ErrorAction SilentlyContinue
+                    Start-Sleep -Seconds 2
                     
-                    $internetGuid = ($guidResults | Where-Object { $_.Type -eq "Internet" }).Guid
-                    $wgGuid = ($guidResults | Where-Object { $_.Type -eq "WG" }).Guid
+                    # Registry Hacking for ICS
+                    $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\SharedAccess"
                     
-                    if ($internetGuid -and $wgGuid) {
-                        Write-Log "Internet GUID: $internetGuid, WireGuard GUID: $wgGuid" -Level "INFO"
-                        
-                        # Stop SharedAccess service
-                        Stop-Service SharedAccess -Force -ErrorAction SilentlyContinue
-                        Start-Sleep -Seconds 1
-                        
-                        # Clear existing ICS configuration in registry
-                        $icsRegPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\SharedAccess"
-                        
-                        # Remove old SharingConnections
-                        Remove-ItemProperty -Path $icsRegPath -Name "SharingPublicInterface" -ErrorAction SilentlyContinue
-                        Remove-ItemProperty -Path $icsRegPath -Name "SharingPrivateInterface" -ErrorAction SilentlyContinue
-                        
-                        # Set new ICS configuration
-                        # Note: ICS expects interface Device GUIDs
-                        Set-ItemProperty -Path $icsRegPath -Name "SharingPublicInterface" -Value $internetGuid -ErrorAction SilentlyContinue
-                        Set-ItemProperty -Path $icsRegPath -Name "SharingPrivateInterface" -Value $wgGuid -ErrorAction SilentlyContinue
-                        
-                        # Start SharedAccess service
-                        Set-Service SharedAccess -StartupType Manual -ErrorAction SilentlyContinue
-                        Start-Service SharedAccess -ErrorAction SilentlyContinue
-                        Start-Sleep -Seconds 2
-                        
-                        Write-Log "ICS configured via registry: $InterfaceAlias -> $($wgAdapter.Name)" -Level "SUCCESS"
+                    # Explicitly Enable Sharing
+                    Set-ItemProperty -Path $regPath -Name "SharingPublicInterface" -Value $internetGuid -Type String -Force
+                    Set-ItemProperty -Path $regPath -Name "SharingPrivateInterface" -Value $vpnGuid -Type String -Force
+                    
+                    # Ensure start mode
+                    Set-Service SharedAccess -StartupType Manual
+                    
+                    # Start Service
+                    Start-Service SharedAccess
+                    
+                    # Wait for service to settle
+                    Start-Sleep -Seconds 3
+                    
+                    if ((Get-Service SharedAccess).Status -eq 'Running') {
+                        Write-Log "ICS configured and SharedAccess service is running." -Level "SUCCESS"
                         $natConfigured = $true
                     }
                     else {
-                        Write-Log "Could not find interface GUIDs" -Level "WARNING"
+                        Write-Log "SharedAccess service failed to start." -Level "ERROR"
                     }
                 }
+                else {
+                    Write-Log "Could not determine Interface GUIDs for ICS." -Level "WARNING"
+                }
             }
-            catch {
-                Write-Log "Registry ICS configuration failed: $_" -Level "WARNING"
+            else {
+                Write-Log "Could not identify both Public and Private adapters." -Level "WARNING"
             }
         }
+        catch {
+            Write-Log "Registry ICS configuration failed: $_" -Level "WARNING"
+        }
         
-        # Method 3: COM-based ICS with service restart (fallback)
+        # 6. Fallback/Confirmation via COM (if Registry failed or just to verify)
         if (-not $natConfigured) {
+            Write-Log "Attempting fallback to COM-based ICS..." -Level "INFO"
             try {
-                Write-Log "Trying ICS via COM with service restart..." -Level "INFO"
+                $netShare = New-Object -ComObject HNetCfg.HNetShare -ErrorAction Stop
                 
-                # Stop SharedAccess first to clear state
-                Stop-Service SharedAccess -Force -ErrorAction SilentlyContinue
-                Start-Sleep -Seconds 2
-                Start-Service SharedAccess -ErrorAction SilentlyContinue
-                Start-Sleep -Seconds 2
-                
-                $netShare = New-Object -ComObject HNetCfg.HNetShare
-                $connections = $netShare.EnumEveryConnection
-                
-                # First disable ALL sharing
-                foreach ($conn in $connections) {
-                    try {
-                        $cfg = $netShare.INetSharingConfigurationForINetConnection($conn)
-                        $cfg.DisableSharing()
-                    }
-                    catch {}
+                # Disable all first to prevent errors
+                $netShare.EnumEveryConnection | ForEach-Object {
+                    try { $netShare.INetSharingConfigurationForINetConnection($_).DisableSharing() } catch {}
                 }
-                
-                # Wait a bit
                 Start-Sleep -Seconds 1
                 
-                # Find connections again
-                $internetConnection = $null
-                $wgConnection = $null
-                
-                foreach ($conn in $connections) {
-                    try {
-                        $props = $netShare.NetConnectionProps($conn)
-                        if ($props.Name -eq $InterfaceAlias) { $internetConnection = $conn }
-                        if ($props.Name -like "*wg*" -or $props.Name -like "*WireGuard*") { $wgConnection = $conn }
-                    }
-                    catch {}
-                }
-                
-                if ($internetConnection) {
-                    $cfg = $netShare.INetSharingConfigurationForINetConnection($internetConnection)
-                    $cfg.EnableSharing(0)  # Public
-                    Write-Log "ICS Public enabled on $InterfaceAlias" -Level "SUCCESS"
+                # Find adapters again
+                $conns = $netShare.EnumEveryConnection
+                $pubConn = $conns | Where-Object { ($netShare.NetConnectionProps($_).Name -eq $InterfaceAlias) } | Select-Object -First 1
+                $privConn = $conns | Where-Object { 
+                    $props = $netShare.NetConnectionProps($_)
+                    ($props.Name -like "*wg*" -or $props.Name -like "*WireGuard*" -or $props.Name -like "*OpenVPN*" -or $props.Name -like "*TAP*")
+                } | Select-Object -Last 1
+
+                if ($pubConn -and $privConn) {
+                    $pubCfg = $netShare.INetSharingConfigurationForINetConnection($pubConn)
+                    $privCfg = $netShare.INetSharingConfigurationForINetConnection($privConn)
                     
-                    if ($wgConnection) {
-                        Start-Sleep -Milliseconds 500
-                        $wgCfg = $netShare.INetSharingConfigurationForINetConnection($wgConnection)
-                        $wgCfg.EnableSharing(1)  # Private
-                        Write-Log "ICS Private enabled on WireGuard" -Level "SUCCESS"
-                    }
+                    $pubCfg.EnableSharing(0) # 0 = Public
+                    $privCfg.EnableSharing(1) # 1 = Private
                     
+                    Write-Log "ICS enabled via COM." -Level "SUCCESS"
                     $natConfigured = $true
                 }
             }
             catch {
-                Write-Log "COM ICS configuration failed: $_" -Level "WARNING"
+                Write-Log "COM ICS failed: $_" -Level "WARNING"
             }
         }
         
-        # Method 4: Manual routing + netsh as last fallback
-        if (-not $natConfigured) {
-            try {
-                Write-Log "Trying netsh routing as last fallback..." -Level "INFO"
-                
-                $wgAdapter = Get-NetAdapter | Where-Object { $_.Name -like "*wg*" -or $_.InterfaceDescription -like "*WireGuard*" } | Select-Object -First 1
-                $internetAdapter = Get-NetAdapter -Name $InterfaceAlias -ErrorAction SilentlyContinue
-                
-                if ($wgAdapter -and $internetAdapter) {
-                    Set-NetIPInterface -InterfaceIndex $wgAdapter.ifIndex -Forwarding Enabled -ErrorAction SilentlyContinue
-                    Set-NetIPInterface -InterfaceIndex $internetAdapter.ifIndex -Forwarding Enabled -ErrorAction SilentlyContinue
-                }
-                
-                $null = netsh routing ip nat install 2>&1
-                $null = netsh routing ip nat add interface "$InterfaceAlias" full 2>&1
-                
-                Write-Log "Netsh routing configured" -Level "SUCCESS"
-                $natConfigured = $true
+        if ($natConfigured) {
+            # Verify Packet Forwarding one last time
+            Set-NetIPInterface -InterfaceAlias $InterfaceAlias -Forwarding Enabled -ErrorAction SilentlyContinue
+            if ($vpnAdapter) {
+                Set-NetIPInterface -InterfaceIndex $vpnAdapter.ifIndex -Forwarding Enabled -ErrorAction SilentlyContinue
             }
-            catch {
-                Write-Log "Netsh routing failed: $_" -Level "WARNING"
-            }
-        }
-        
-        # Configure Windows Firewall for forwarding
-        try {
-            $fwRuleName = "WireGuard-VPN-Forward"
-            $existingFwRule = Get-NetFirewallRule -Name $fwRuleName -ErrorAction SilentlyContinue
-            
-            if (-not $existingFwRule) {
-                New-NetFirewallRule -Name $fwRuleName `
-                    -DisplayName "WireGuard VPN Forwarding" `
-                    -Direction Inbound `
-                    -Action Allow `
-                    -RemoteAddress $VPNSubnet `
-                    -Profile Any `
-                    -Enabled True | Out-Null
-                    
-                New-NetFirewallRule -Name "$fwRuleName-Out" `
-                    -DisplayName "WireGuard VPN Forwarding Out" `
-                    -Direction Outbound `
-                    -Action Allow `
-                    -RemoteAddress $VPNSubnet `
-                    -Profile Any `
-                    -Enabled True | Out-Null
-                    
-                Write-Log "Firewall rules added for VPN forwarding" -Level "INFO"
-            }
-        }
-        catch {
-            Write-Log "Firewall configuration warning: $_" -Level "WARNING"
-        }
-        
-        # VERIFICATION: Check if ICS actually works
-        $icsActuallyEnabled = $false
-        try {
-            $netShare = New-Object -ComObject HNetCfg.HNetShare -ErrorAction Stop
-            foreach ($conn in $netShare.EnumEveryConnection) {
-                try {
-                    $props = $netShare.NetConnectionProps($conn)
-                    $config = $netShare.INetSharingConfigurationForINetConnection($conn)
-                    if ($props.Name -eq $InterfaceAlias -and $config.SharingEnabled -and $config.SharingConnectionType -eq 0) {
-                        $icsActuallyEnabled = $true
-                        Write-Log "VERIFICATION: ICS is active on $InterfaceAlias" -Level "SUCCESS"
-                        break
-                    }
-                }
-                catch {}
-            }
-        }
-        catch {
-            Write-Log "Could not verify ICS status" -Level "WARNING"
-        }
-        
-        if ($icsActuallyEnabled) {
-            Write-Log "NAT/ICS configuration completed and verified for WireGuard VPN" -Level "SUCCESS"
             return $true
         }
-        elseif ($natConfigured) {
-            # Methods reported success but verification failed
-            Write-Log "NAT methods executed but ICS not verified - restart might be required" -Level "WARNING"
-            Write-Log "=======================================" -Level "WARNING"
-            Write-Log "MANUAL ACTION REQUIRED:" -Level "WARNING"
-            Write-Log "1. Open Network Connections (ncpa.cpl)" -Level "WARNING"
-            Write-Log "2. Right-click on 'WiFi' -> Properties -> Sharing tab" -Level "WARNING"
-            Write-Log "3. Check: 'Allow other network users to connect...'" -Level "WARNING"
-            Write-Log "4. Select 'wg_server' as Home networking connection" -Level "WARNING"
-            Write-Log "5. Click OK" -Level "WARNING"
-            Write-Log "=======================================" -Level "WARNING"
-            return $true  # Return true so setup continues, user sees warning
-        }
-        else {
-            Write-Log "NAT configuration failed - manual configuration required" -Level "ERROR"
-            Write-Log "TIP: Enable Internet Connection Sharing manually via Network Connections" -Level "INFO"
-            return $false
-        }
+        
+        Write-Log "ICS Configuration could not be completed automatically." -Level "ERROR"
+        return $false
     }
     catch {
-        Write-Log "Error configuring NAT: $_" -Level "ERROR"
+        Write-Log "Critical error in Enable-VPNNAT: $_" -Level "ERROR"
         return $false
     }
 }

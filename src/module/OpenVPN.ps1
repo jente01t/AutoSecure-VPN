@@ -86,10 +86,13 @@ function Install-RemoteServer {
         $remoteModuleDir = Join-Path $remoteTemp "AutoSecureVPN"
         $remoteEasyRSA = Join-Path $remoteTemp "easy-rsa"
         $remoteEasyRSAZip = Join-Path $remoteTemp "easy-rsa.zip"
+        $remoteConfigDir = Join-Path $remoteTemp "config"
 
         # Validate local files/paths before attempting remote copy
         if (-not (Test-Path $localModuleDir)) { throw "Local module directory not found: $localModuleBase" }
         if (-not (Test-Path $LocalEasyRSAPath)) { throw "Local EasyRSA path not found: $LocalEasyRSAPath" }
+        $localConfigDir = Join-Path (Split-Path $localModuleDir -Parent) "config"
+        if (-not (Test-Path $localConfigDir)) { throw "Local config directory not found: $localConfigDir" }
 
         # Compress EasyRSA locally for much faster transfer (10x+ speedup)
         $tempZip = [System.IO.Path]::GetTempFileName() + ".zip"
@@ -100,6 +103,9 @@ function Install-RemoteServer {
         Write-Log "Transferring module directory to remote server..." -Level "INFO"
         Copy-Item -Path $localModuleDir -Destination $remoteModuleDir -ToSession $session -ErrorAction Stop -Recurse -Force
         
+        Write-Log "Transferring config directory to remote server..." -Level "INFO"
+        Copy-Item -Path $localConfigDir -Destination $remoteConfigDir -ToSession $session -Recurse -Force
+        
         Write-Log "Transferring compressed EasyRSA to remote server..." -Level "INFO"
         Copy-Item -Path $tempZip -Destination $remoteEasyRSAZip -ToSession $session -ErrorAction Stop -Force
         Write-Log "File transfer completed" -Level "INFO"
@@ -108,7 +114,7 @@ function Install-RemoteServer {
         Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
         
         Invoke-Command -Session $session -ScriptBlock {
-            param($moduleSettings, $moduleDirPath, $config, $remoteEasyRSAZip, $remoteEasyRSA, $remoteConfigPath)
+            param($moduleSettings, $moduleDirPath, $config, $remoteEasyRSAZip, $remoteEasyRSA, $remoteConfigPath, $remoteConfigDir)
             
             # Stop on errors from the start
             $ErrorActionPreference = 'Stop'
@@ -143,18 +149,11 @@ function Install-RemoteServer {
             }
             
             # Ensure critical settings have values with proper defaults
-            if (-not $moduleSettings.port -or [string]::IsNullOrWhiteSpace($moduleSettings.port) -or $moduleSettings.port -eq 0) { $moduleSettings.port = 443 }
-            if (-not $moduleSettings.protocol -or [string]::IsNullOrWhiteSpace($moduleSettings.protocol)) { $moduleSettings.protocol = 'TCP' }
-            if (-not $moduleSettings.easyRSAPath -or [string]::IsNullOrWhiteSpace($moduleSettings.easyRSAPath)) { $moduleSettings.easyRSAPath = 'C:\Program Files\OpenVPN\easy-rsa' }
-            # Set default for configPath
-            if (-not $moduleSettings.configPath -or [string]::IsNullOrWhiteSpace($moduleSettings.configPath)) {
-                $moduleSettings.configPath = 'C:\Program Files\OpenVPN\config'
-            }
-            # Override if remoteConfigPath is provided and not empty
-            if ($remoteConfigPath -and -not [string]::IsNullOrWhiteSpace($remoteConfigPath)) {
-                $moduleSettings.configPath = $remoteConfigPath
-            }
-            if (-not $moduleSettings.installedPath -or [string]::IsNullOrWhiteSpace($moduleSettings.installedPath)) { $moduleSettings.installedPath = 'C:\Program Files\OpenVPN\bin\openvpn.exe' }
+            if (-not $moduleSettings.port -or $moduleSettings.port -eq 0) { $moduleSettings.port = 443 }
+            if (-not $moduleSettings.protocol) { $moduleSettings.protocol = 'TCP' }
+            if (-not $moduleSettings.easyRSAPath) { $moduleSettings.easyRSAPath = 'C:\Program Files\OpenVPN\easy-rsa' }
+            if (-not $moduleSettings.configPath -or $remoteConfigPath) { $moduleSettings.configPath = if ($remoteConfigPath) { $remoteConfigPath } else { 'C:\Program Files\OpenVPN\config' } }
+            if (-not $moduleSettings.installedPath) { $moduleSettings.installedPath = 'C:\Program Files\OpenVPN\bin\openvpn.exe' }
             
             Write-Log "Remote settings configured: Port=$($moduleSettings.port), Protocol=$($moduleSettings.protocol)" -Level "INFO"
             
@@ -230,7 +229,8 @@ function Install-RemoteServer {
             
             Remove-Item $moduleDirPath -Recurse -Force
             Remove-Item $remoteEasyRSA -Recurse -Force
-        } -ArgumentList $Script:Settings, $remoteModuleDir, $ServerConfig, $remoteEasyRSAZip, $remoteEasyRSA, $RemoteConfigPath -ErrorAction Stop
+            Remove-Item $remoteConfigDir -Recurse -Force
+        } -ArgumentList $Script:Settings, $remoteModuleDir, $ServerConfig, $remoteEasyRSAZip, $remoteEasyRSA, $RemoteConfigPath, $remoteConfigDir -ErrorAction Stop
         
         Remove-PSSession $session
         
@@ -245,13 +245,14 @@ function Install-RemoteServer {
             $rollbackSession = New-PSSession -ComputerName $ComputerName -Credential $Credential -ErrorAction SilentlyContinue
             if ($rollbackSession) {
                 Invoke-Command -Session $rollbackSession -ScriptBlock {
-                    param($settings, $remoteEasyRSA, $remoteModule)
+                    param($settings, $remoteEasyRSA, $remoteModule, $remoteConfigDir)
                     # Clean up transferred files
                     Write-Verbose "Rolling back: cleaning up transferred files..."
                     Remove-Item $remoteModule -Force -ErrorAction SilentlyContinue
                     Remove-Item $remoteEasyRSA -Recurse -Force -ErrorAction SilentlyContinue
+                    Remove-Item $remoteConfigDir -Recurse -Force -ErrorAction SilentlyContinue
                     Write-Verbose "Rollback cleanup completed"
-                } -ArgumentList $Script:Settings, $remoteEasyRSA, $remoteModule
+                } -ArgumentList $Script:Settings, $remoteEasyRSA, $remoteModule, $remoteConfigDir
                 Remove-PSSession $rollbackSession
             }
         }
@@ -550,12 +551,18 @@ function Initialize-Certificates {
     param (
         [Parameter(Position = 0)][ValidatePattern('^[a-zA-Z0-9_-]{1,63}$')][string]$ServerName = $Script:Settings.servername,
         [Parameter(Position = 1)][System.Security.SecureString]$Password = $null,
-        [Parameter(Position = 2)][string]$EasyRSAPath = (Join-Path $Script:BasePath $Script:Settings.certPath)
+        [Parameter(Position = 2)][string]$EasyRSAPath = $Script:Settings.easyRSAPath
     )
     
     # Validate password if provided
     if ($Password -and $Password.Length -lt 8) {
         throw "Password must be at least 8 characters long"
+    }
+    
+    # Check if EasyRSA path exists
+    if (-not (Test-Path $EasyRSAPath)) {
+        Write-Log "EasyRSA path not found: $EasyRSAPath" -Level "ERROR"
+        return $false
     }
     
     try {
@@ -1207,7 +1214,7 @@ function Start-VPNConnection {
     try {
         if ($ComputerName) {
             # Remote execution - use Task Scheduler to start GUI interactively
-            $session = New-PSSession -ComputerName $ComputerName -Credential $Credential -ConfigurationName 'PowerShell.7' -ErrorAction Stop
+            $session = New-PSSession -ComputerName $ComputerName -Credential $Credential -ErrorAction Stop
 
             # Treat the provided ConfigFile as a path on the remote machine.
             # Do NOT attempt to Test-Path or copy from the local host when starting remotely.

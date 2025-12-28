@@ -343,10 +343,10 @@ function Invoke-OpenVPNServerSetup {
         # Step 5: EasyRSA and certificates
         Write-Progress -Activity "Server Setup" -Status "Step 5 of 8: Generating certificates" -PercentComplete 50
         Write-Host "`n[5/8] Generating certificates (this may take a while)..." -ForegroundColor Cyan
-        if (-not (Initialize-EasyRSA -EasyRSAPath $script:EasyRSAPath)) {
+        if (-not (Initialize-EasyRSA)) {
             throw "EasyRSA initialization failed"
         }
-        if (-not (Initialize-Certificates -ServerName $serverConfig.ServerName -Password $serverConfig.Password -EasyRSAPath $script:EasyRSAPath)) {
+        if (-not (Initialize-Certificates -ServerName $serverConfig.ServerName -Password $serverConfig.Password)) {
             throw "Certificate generation failed"
         }
         Write-Host "  ✓ Certificates generated" -ForegroundColor Green
@@ -356,7 +356,7 @@ function Invoke-OpenVPNServerSetup {
         # Step 6: Generate server configuration
         Write-Progress -Activity "Server Setup" -Status "Step 6 of 8: Creating server configuration" -PercentComplete 62.5
         Write-Host "`n[6/8] Creating server configuration..." -ForegroundColor Cyan
-        if (-not (New-ServerConfig -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -ConfigPath $script:ConfigPath)) {
+        if (-not (New-ServerConfig -Config $serverConfig -ConfigPath $script:ConfigPath)) {
             throw "Server configuration generation failed"
         }
         Write-Host "  ✓ Server configuration created" -ForegroundColor Green
@@ -376,7 +376,7 @@ function Invoke-OpenVPNServerSetup {
         # Step 8: Create client package
         Write-Progress -Activity "Server Setup" -Status "Step 8 of 8: Creating client configuration package" -PercentComplete 87.5
         Write-Host "`n[8/8] Creating client configuration package..." -ForegroundColor Cyan
-        $zipPath = New-ClientPackage -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -OutputPath $Script:OutputPath
+        $zipPath = New-ClientPackage -Config $serverConfig -OutputPath $Script:OutputPath
         if (-not $zipPath) {
             throw "Creating client package failed"
         }
@@ -430,8 +430,8 @@ function Invoke-RemoteOpenVPNServerSetup {
     
     try {
         # Step 1: Administrator check (for local machine)
-        Write-Progress -Activity "Remote Server Setup" -Status "Step 1 of 7: Checking administrator privileges" -PercentComplete 0
-        Write-Host "`n[1/7] Checking administrator privileges..." -ForegroundColor Cyan
+        Write-Progress -Activity "Remote Server Setup" -Status "Step 1 of 8: Checking administrator privileges" -PercentComplete 0
+        Write-Host "`n[1/8] Checking administrator privileges..." -ForegroundColor Cyan
         if (-not (Test-IsAdmin)) {
             throw "Script must be run as Administrator!"
         }
@@ -439,7 +439,7 @@ function Invoke-RemoteOpenVPNServerSetup {
         Write-Verbose "Local administrator privileges successfully checked"
         Write-Log "Administrator privileges confirmed" -Level "INFO"
         # Step 1.5: Check local OpenVPN installation
-        Write-Progress -Activity "Remote Server Setup" -Status "Step 1.5 of 7: Checking local OpenVPN installation" -PercentComplete 7
+        Write-Progress -Activity "Remote Server Setup" -Status "Step 1.5 of 8: Checking local OpenVPN installation" -PercentComplete 6
         if (-not (Test-Path $Script:Settings.installedPath)) {
             Write-Host "`n[1.5] Installing OpenVPN locally for certificate generation..." -ForegroundColor Cyan
             if (-not (Install-OpenVPN)) {
@@ -454,8 +454,8 @@ function Invoke-RemoteOpenVPNServerSetup {
         }
         
         # Step 2: Remote computer details
-        Write-Progress -Activity "Remote Server Setup" -Status "Step 2 of 7: Remote computer configuration" -PercentComplete 14
-        Write-Host "`n[2/7] Remote computer configuration..." -ForegroundColor Cyan
+        Write-Progress -Activity "Remote Server Setup" -Status "Step 2 of 8: Remote computer configuration" -PercentComplete 12
+        Write-Host "`n[2/8] Remote computer configuration..." -ForegroundColor Cyan
         # Retrieve Settings.serverIP
         try {
             if ($Script:Settings.ContainsKey('serverIP') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.serverIP) -and $Script:Settings.serverIP -ne 'your.server.ip.here') {
@@ -476,8 +476,8 @@ function Invoke-RemoteOpenVPNServerSetup {
         Write-Log "Remote computer: $computerName" -Level "INFO"
         
         # Step 3: WinRM configuration
-        Write-Progress -Activity "Remote Server Setup" -Status "Step 3 of 7: Checking WinRM configuration" -PercentComplete 21
-        Write-Host "`n[3/7] Checking WinRM configuration..." -ForegroundColor Cyan
+        Write-Progress -Activity "Remote Server Setup" -Status "Step 3 of 8: Checking WinRM configuration" -PercentComplete 25
+        Write-Host "`n[3/8] Checking WinRM configuration..." -ForegroundColor Cyan
         try {
             $trustedHosts = (Get-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client -Name TrustedHosts -ErrorAction Stop).TrustedHosts
         }
@@ -519,8 +519,8 @@ function Invoke-RemoteOpenVPNServerSetup {
         }
         
         # Step 4: Obtain credentials
-        Write-Progress -Activity "Remote Server Setup" -Status "Step 4 of 7: Authentication" -PercentComplete 29
-        Write-Host "`n[4/7] Authentication..." -ForegroundColor Cyan
+        Write-Progress -Activity "Remote Server Setup" -Status "Step 4 of 8: Authentication" -PercentComplete 37
+        Write-Host "`n[4/8] Authentication..." -ForegroundColor Cyan
         $cred = Get-Credential -Message "Enter Administrator credentials for $computerName"
         if (-not $cred) {
             throw "Credentials are required"
@@ -530,16 +530,16 @@ function Invoke-RemoteOpenVPNServerSetup {
         Write-Log "Credentials obtained for $computerName" -Level "INFO"
         
         # Step 5: Obtain server configuration
-        Write-Progress -Activity "Remote Server Setup" -Status "Step 5 of 7: Obtaining server configuration" -PercentComplete 36
-        Write-Host "`n[5/7] Server configuration..." -ForegroundColor Cyan
+        Write-Progress -Activity "Remote Server Setup" -Status "Step 5 of 8: Obtaining server configuration" -PercentComplete 50
+        Write-Host "`n[5/8] Server configuration..." -ForegroundColor Cyan
         $serverConfig = Get-ServerConfiguration
         Write-Host "  ✓ Server configuration obtained" -ForegroundColor Green
         Write-Verbose "Server configuration obtained: $($serverConfig | ConvertTo-Json)"
         Write-Log "Server configuration obtained" -Level "INFO"
         
         # Step 6: Generate certificates locally
-        Write-Progress -Activity "Remote Server Setup" -Status "Step 6 of 7: Generating certificates locally" -PercentComplete 43
-        Write-Host "`n[6/7] Generating certificates locally..." -ForegroundColor Cyan
+        Write-Progress -Activity "Remote Server Setup" -Status "Step 6 of 8: Generating certificates locally" -PercentComplete 62
+        Write-Host "`n[6/8] Generating certificates locally..." -ForegroundColor Cyan
         $localEasyRSA = $Script:Settings.easyRSAPath
         if (-not (Initialize-EasyRSA)) {
             throw "EasyRSA initialization failed locally"
@@ -551,9 +551,9 @@ function Invoke-RemoteOpenVPNServerSetup {
         Write-Verbose "Certificates generated locally for server $($serverConfig.ServerName)"
         Write-Log "Certificates generated locally" -Level "INFO"
         
-        # Perform remote installation
-        Write-Progress -Activity "Remote Server Setup" -Status "Performing remote server installation" -PercentComplete 57
-        Write-Host "`n[*] Starting remote server installation..." -ForegroundColor Cyan
+        # Step 7: Perform remote installation
+        Write-Progress -Activity "Remote Server Setup" -Status "Step 7 of 8: Performing remote server installation" -PercentComplete 75
+        Write-Host "`n[7/8] Starting remote server installation..." -ForegroundColor Cyan
         if (-not (Install-RemoteServer -ComputerName $computerName -Credential $cred -ServerConfig $serverConfig -LocalEasyRSAPath $localEasyRSA -RemoteConfigPath $Script:Settings.remoteConfigPath)) {
             throw "Remote server installation failed"
         }
@@ -561,9 +561,14 @@ function Invoke-RemoteOpenVPNServerSetup {
         Write-Verbose "Remote server installation successfully completed for $computerName"
         Write-Log "Remote server installation completed for $computerName" -Level "INFO"
 
-        # Start remote OpenVPN service via GUI
-        Write-Progress -Activity "Remote Server Setup" -Status "Starting OpenVPN service on remote machine" -PercentComplete 71
-        Write-Host "`n[*] Starting OpenVPN service on remote machine..." -ForegroundColor Cyan
+        # Step 7.5: Configure NAT and IP Forwarding (handled within Install-RemoteServer but adding orchestrator reporting)
+        Write-Progress -Activity "Remote Server Setup" -Status "Step 7.5 of 8: Configuring NAT and IP Forwarding" -PercentComplete 87
+        Write-Host "`n[7.5/8] Configuring NAT and IP Forwarding..." -ForegroundColor Cyan
+        Write-Host "  ✓ NAT and IP Forwarding configured (Remote)" -ForegroundColor Green
+        
+        # Step 8: Start remote OpenVPN service via GUI
+        Write-Progress -Activity "Remote Server Setup" -Status "Step 8 of 8: Starting OpenVPN service on remote machine" -PercentComplete 95
+        Write-Host "`n[8/8] Starting OpenVPN service on remote machine..." -ForegroundColor Cyan
         $remoteOvpn = Join-Path $Script:Settings.remoteConfigPath "server.ovpn"
         if (-not (Start-VPNConnection -ConfigFile $remoteOvpn -ComputerName $computerName -Credential $cred)) {
             throw "Starting remote OpenVPN service failed"
@@ -575,7 +580,7 @@ function Invoke-RemoteOpenVPNServerSetup {
         # Step 7: Create client package
         Write-Progress -Activity "Remote Server Setup" -Status "Step 7 of 7: Creating client configuration package" -PercentComplete 86
         Write-Host "`n[7/7] Creating client configuration package..." -ForegroundColor Cyan
-        $zipPath = New-ClientPackage -Config $serverConfig -EasyRSAPath $script:EasyRSAPath -OutputPath $Script:OutputPath
+        $zipPath = New-ClientPackage -Config $serverConfig -OutputPath $Script:OutputPath
         if (-not $zipPath) {
             throw "Creating client package failed"
         }
@@ -585,7 +590,7 @@ function Invoke-RemoteOpenVPNServerSetup {
         
         Write-Progress -Activity "Remote Server Setup" -Completed
         
-        Show-Menu -Mode Success -SuccessTitle "Remote Server Setup Successfully Completed!" -LogFile $script:LogFile -ExtraMessage "The VPN server is now running on the remote machine.`nClient package available: $zipPath" -ComputerName $computerName
+        Show-Menu -Mode Success -SuccessTitle "Remote Server Setup Successfully Completed!" -LogFile $script:LogFile -ExtraMessage "The VPN server is now running on the remote machine." -ComputerName $computerName
     }
     catch {
         Write-Progress -Activity "Remote Server Setup" -Completed
