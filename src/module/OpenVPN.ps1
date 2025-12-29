@@ -46,7 +46,21 @@ function Install-RemoteServer {
         $session = New-PSSession -ComputerName $ComputerName -Credential $Credential -SessionOption $sessionOption -ErrorAction Stop
         
         # Get local paths (robust fallback when module base is empty)
-        $moduleBase = $MyInvocation.MyCommand.Module.ModuleBase
+        # Get local paths
+        $moduleBase = $null
+        
+        # Priority 1: Use Script BasePath if available and valid (Development/Source context)
+        if ($Script:BasePath -and (Test-Path (Join-Path $Script:BasePath 'src\module\AutoSecureVPN.psd1'))) {
+            $moduleBase = Join-Path $Script:BasePath 'src\module'
+            Write-Verbose "Using source module path from Script Scope: $moduleBase"
+        }
+        
+        # Priority 2: Use loaded module base (Installed context)
+        if (-not $moduleBase -or [string]::IsNullOrWhiteSpace($moduleBase)) {
+            $moduleBase = $MyInvocation.MyCommand.Module.ModuleBase
+        }
+
+        # Priority 3: Fallbacks
         if (-not $moduleBase -or [string]::IsNullOrWhiteSpace($moduleBase)) {
             $moduleBase = $PSScriptRoot
             if (-not $moduleBase -or [string]::IsNullOrWhiteSpace($moduleBase)) {
@@ -82,14 +96,25 @@ function Install-RemoteServer {
 
         # copy module to remote temp path
         $remoteTemp = "C:\Temp"
-        Invoke-Command -Session $session -ScriptBlock { if (-not (Test-Path "C:\Temp")) { New-Item -ItemType Directory -Path "C:\Temp" -Force } } -ErrorAction Stop
         $remoteModuleDir = Join-Path $remoteTemp "AutoSecureVPN"
         $remoteEasyRSA = Join-Path $remoteTemp "easy-rsa"
         $remoteEasyRSAZip = Join-Path $remoteTemp "easy-rsa.zip"
         $remoteConfigDir = Join-Path $remoteTemp "config"
 
+        Invoke-Command -Session $session -ScriptBlock { 
+            param($temp, $modDir, $cfgDir, $rsaDir) 
+            if (-not (Test-Path $temp)) { New-Item -ItemType Directory -Path $temp -Force | Out-Null } 
+            # Clean up before copy to prevent nesting and stale files
+            if (Test-Path $modDir) { Remove-Item $modDir -Recurse -Force -ErrorAction SilentlyContinue }
+            if (Test-Path $cfgDir) { Remove-Item $cfgDir -Recurse -Force -ErrorAction SilentlyContinue }
+            if (Test-Path $rsaDir) { Remove-Item $rsaDir -Recurse -Force -ErrorAction SilentlyContinue }
+            
+            New-Item -ItemType Directory -Path $modDir -Force | Out-Null
+            New-Item -ItemType Directory -Path $cfgDir -Force | Out-Null
+        } -ArgumentList $remoteTemp, $remoteModuleDir, $remoteConfigDir, $remoteEasyRSA
+        
         # Validate local files/paths before attempting remote copy
-        if (-not (Test-Path $localModuleDir)) { throw "Local module directory not found: $localModuleBase" }
+        if (-not (Test-Path $localModuleDir)) { throw "Local module directory not found" }
         if (-not (Test-Path $LocalEasyRSAPath)) { throw "Local EasyRSA path not found: $LocalEasyRSAPath" }
         $localConfigDir = Join-Path (Split-Path $localModuleDir -Parent) "config"
         if (-not (Test-Path $localConfigDir)) { throw "Local config directory not found: $localConfigDir" }
@@ -100,11 +125,11 @@ function Install-RemoteServer {
         Compress-Archive -Path "$LocalEasyRSAPath\*" -DestinationPath $tempZip -Force
 
         # Copy files to remote (compression already provides major speedup)
-        Write-Log "Transferring module directory to remote server..." -Level "INFO"
-        Copy-Item -Path $localModuleDir -Destination $remoteModuleDir -ToSession $session -ErrorAction Stop -Recurse -Force
+        Write-Log "Transferring module files to remote server..." -Level "INFO"
+        Copy-Item -Path "$localModuleDir\*" -Destination $remoteModuleDir -ToSession $session -ErrorAction Stop -Recurse -Force
         
-        Write-Log "Transferring config directory to remote server..." -Level "INFO"
-        Copy-Item -Path $localConfigDir -Destination $remoteConfigDir -ToSession $session -Recurse -Force
+        Write-Log "Transferring config files to remote server..." -Level "INFO"
+        Copy-Item -Path "$localConfigDir\*" -Destination $remoteConfigDir -ToSession $session -Recurse -Force
         
         Write-Log "Transferring compressed EasyRSA to remote server..." -Level "INFO"
         Copy-Item -Path $tempZip -Destination $remoteEasyRSAZip -ToSession $session -ErrorAction Stop -Force
@@ -190,12 +215,7 @@ function Install-RemoteServer {
                     throw "Firewall configuration failed"
                 }
                 
-                Write-Verbose "Configuring NAT for internet access..."
-                # Configure NAT for internet access (10.8.0.0/24 = OpenVPN default subnet)
-                if (-not (Enable-VPNNAT -VPNSubnet "10.8.0.0/24")) { 
-                    Write-Verbose "NAT configuration warning - manual configuration may be needed"
-                }
-                
+
                 Write-Verbose "Copying EasyRSA with certificates..."
                 $targetEasyRSAPath = $Script:Settings.easyRSAPath
                 Write-Verbose "Target EasyRSA path: $targetEasyRSAPath"
@@ -219,6 +239,13 @@ function Install-RemoteServer {
                 if (-not (Start-VPNService)) {
                     throw "VPN service start failed"
                 }
+
+                Write-Verbose "Configuring NAT for internet access..."
+                # Configure NAT for internet access (10.8.0.0/24 = OpenVPN default subnet)
+                if (-not (Enable-VPNNAT -VPNSubnet "10.8.0.0/24" -VPNType "OpenVPN")) { 
+                    Write-Verbose "NAT configuration warning - manual configuration may be needed"
+                }
+                
                 
                 Write-Log "Remote server setup completed successfully" -Level "SUCCESS"
             }

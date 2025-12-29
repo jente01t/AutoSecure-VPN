@@ -325,7 +325,7 @@ function Invoke-OpenVPNServerSetup {
         # Step 3.5: Configure NAT and IP Forwarding for internet access
         Write-Progress -Activity "Server Setup" -Status "Step 3.5 of 9: Configuring NAT and IP Forwarding" -PercentComplete 31
         Write-Host "`n[3.5/9] Configuring NAT and IP Forwarding..." -ForegroundColor Cyan
-        if (-not (Enable-VPNNAT -VPNSubnet "10.8.0.0/24")) { 
+        if (-not (Enable-VPNNAT -VPNSubnet "10.8.0.0/24" -VPNType "OpenVPN")) { 
             Write-Host "  ! NAT configuration warning - manual configuration might be needed" -ForegroundColor Yellow
             Write-Log "NAT configuration warning - manual setup might be needed" -Level "WARNING"
         }
@@ -655,7 +655,7 @@ function Invoke-BatchRemoteClientSetup {
             Write-Host "`n[2/4] WireGuard Server data..." -ForegroundColor Cyan
             
             # Try to retrieve data from an existing client config (local)
-            $wgClientConfigMatch = Get-ChildItem -Path $Script:OutputPath -Filter "wg-client*.conf" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            $wgClientConfigMatch = Get-ChildItem -Path $Script:Settings.OutputPath -Filter "wg-client*.conf" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
             
             $serverEndpoint = $null
             $serverPubKey = $null

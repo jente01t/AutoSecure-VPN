@@ -20,8 +20,23 @@ function Invoke-WireGuardClientSetup {
         
         # Step 3: Import Config / Start Service
         Write-Host "`n[3/3] Importing config..." -ForegroundColor Cyan
-        $configPath = Read-Host "  Drag the .conf file here or type the path"
-        $configPath = $configPath.Trim('"') # Remove quotes
+        $outputPath = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "output"
+        Write-Log "Output path: $outputPath" -Level "INFO"
+        $configPath = ""
+
+        if (Test-Path $outputPath) {
+            $foundFile = Get-ChildItem -Path $outputPath -Filter "*.conf" | Select-Object -First 1
+            if ($foundFile) {
+                $configPath = $foundFile.FullName
+                Write-Log "Found config in output folder: $($foundFile.Name)" -Level "INFO"
+                Write-Host "  ✓ Found config in output folder: $($foundFile.Name)" -ForegroundColor Green
+            }
+        }
+
+        if (-not $configPath) {
+            $configPath = Read-Host " Automatic not found: Drag the .conf file here or type the path"
+            $configPath = $configPath.Trim('"')
+        }
         
         if (-not (Test-Path $configPath)) { throw "File not found: $configPath" }
         
@@ -63,34 +78,30 @@ function Invoke-WireGuardServerSetup {
         if (-not (Set-Firewall -Port $wgPort -Protocol "UDP")) { throw "Firewall configuratie mislukt" }
         Write-Host "  ✓ Firewall geconfigureerd" -ForegroundColor Green
         
-        # Stap 3.5: NAT en IP Forwarding configureren voor internet toegang
-        Write-Host "`n[3.5/7] NAT en IP Forwarding configureren..." -ForegroundColor Cyan
-        if (-not (Enable-VPNNAT -VPNSubnet "$baseSubnet.0/24")) { 
-            Write-Host "  ! NAT configuratie warning - mogelijk handmatige configuratie nodig" -ForegroundColor Yellow
-            Write-Log "NAT configuratie warning - handmatige setup mogelijk nodig" -Level "WARNING"
+        if (-not (Enable-VPNNAT -VPNSubnet "$baseSubnet.0/24" -VPNType "WireGuard")) { 
+            Write-Host "  ! NAT configuration warning - manual check may be required" -ForegroundColor Yellow
+            Write-Log "NAT configuration warning - manual setup may be needed" -Level "WARNING"
         }
         else {
-            Write-Host "  ✓ NAT en IP Forwarding geconfigureerd" -ForegroundColor Green
+            Write-Host "  ✓ NAT and IP Forwarding configured" -ForegroundColor Green
         }
         
-        # Stap 4: Parameters en Keys
-        Write-Host "`n[4/6] Configuratie en Keys genereren..." -ForegroundColor Cyan
+        # Step 4: Parameters and Keys
+        Write-Host "`n[4/6] Generating configuration and keys..." -ForegroundColor Cyan
         $serverWanIP = $Script:Settings.serverWanIP
-        if (-not $serverWanIP -or $serverWanIP -eq "jouw.server.wan.ip.hier") {
-            $serverWanIP = Read-Host "  Geef publieke IP of DNS van deze server op"
+        if (-not $serverWanIP -or $serverWanIP -eq "your.server.wan.ip.here") {
+            $serverWanIP = Read-Host "  Enter public IP or DNS of this server"
         }
         
         $serverKeys = Initialize-WireGuardKeys
         $clientKeys = Initialize-WireGuardKeys
-        Write-Host "  ✓ Keys gegenereerd" -ForegroundColor Green
+        Write-Host "  ✓ Keys generated" -ForegroundColor Green
         
-        # Stap 5: Configuraties maken
-        Write-Host "`n[5/6] Configuraties aanmaken..." -ForegroundColor Cyan
-        
+        # Step 5: Create configurations
+        Write-Host "`n[5/6] Creating configurations..." -ForegroundColor Cyan
+
         # Server config
-        $wgConfigDir = "C:\Program Files\WireGuard\Data\Configurations" 
         if (-not (Test-Path $Script:ConfigPath)) { New-Item -ItemType Directory -Path $Script:ConfigPath -Force | Out-Null }
-        $serverConfigPath = Join-Path $Script:ConfigPath "wg_server.conf"
         
         New-WireGuardServerConfig -ServerKeys $serverKeys -ClientKeys $clientKeys -Port $wgPort -Address "$baseSubnet.1/24" -PeerAddress "$baseSubnet.2/32" -ServerType "Windows" -OutputPath $serverConfigPath | Out-Null
         
@@ -99,28 +110,28 @@ function Invoke-WireGuardServerSetup {
         $clientConfigPath = Join-Path $Script:OutputPath "wg-client.conf"
         $clientConfigContent = New-WireGuardClientConfig -ClientKeys $clientKeys -ServerKeys $serverKeys -ServerAvailableIP $serverWanIP -Port $wgPort -Address "$baseSubnet.2/24" -OutputPath $clientConfigPath
         
-        # QR-code maken
+        # QR-code
         $qrPath = Join-Path $Script:OutputPath "wg-client-qr.png"
         if (New-WireGuardQRCode -ConfigContent $clientConfigContent -OutputPath $qrPath) {
-            Write-Host "  ✓ QR-code aangemaakt: $qrPath" -ForegroundColor Green
+            Write-Host "  ✓ QR-code created: $qrPath" -ForegroundColor Green
         }
         else {
-            Write-Host "  ! QR-code maken mislukt" -ForegroundColor Yellow
+            Write-Host "  ! QR-code generation failed" -ForegroundColor Yellow
         }
         
-        Write-Host "  ✓ Configuraties aangemaakt" -ForegroundColor Green
+        Write-Host "  ✓ Configurations created" -ForegroundColor Green
 
-        # Stap 6: Service starten
-        Write-Host "`n[6/6] WireGuard Service starten..." -ForegroundColor Cyan
-        if (-not (Start-WireGuardService -ConfigPath $serverConfigPath)) { throw "Starten service mislukt" }
-        Write-Host "  ✓ Service gestart" -ForegroundColor Green
+        # Step 6: Start service
+        Write-Host "`n[6/6] Starting WireGuard Service..." -ForegroundColor Cyan
+        if (-not (Start-WireGuardService -ConfigPath $serverConfigPath)) { throw "Failed to start service" }
+        Write-Host "  ✓ Service started" -ForegroundColor Green
         
-        Show-Menu -Mode Success -SuccessTitle "WireGuard Server Setup Voltooid!" -LogFile $script:LogFile -ExtraInfo "Client config: $clientConfigPath`nQR-code: $qrPath" -ExtraMessage "Kopieer het .conf bestand naar de client en importeer het in WireGuard, of scan de QR-code op mobiele apparaten."
+        Show-Menu -Mode Success -SuccessTitle "WireGuard Server Setup Completed!" -LogFile $script:LogFile -ExtraInfo "Client config: $clientConfigPath`nQR-code: $qrPath" -ExtraMessage "Copy the .conf file to the client and import it into WireGuard, or scan the QR-code on mobile devices."
         
     }
     catch {
-        Write-Log "Fout tijdens WireGuard Setup: $($_.Exception.Message)" -Level "ERROR"
-        Show-Menu -Mode Error -SuccessTitle "WireGuard Setup Gefaald!" -LogFile $script:LogFile -ExtraMessage $_
+        Write-Log "Error during WireGuard Setup: $($_.Exception.Message)" -Level "ERROR"
+        Show-Menu -Mode Error -SuccessTitle "WireGuard Setup Failed!" -LogFile $script:LogFile -ExtraMessage $_
     }
 }
 function Invoke-RemoteWireGuardServerSetup {
@@ -179,12 +190,15 @@ function Invoke-RemoteWireGuardServerSetup {
         $serverConfContent = New-WireGuardServerConfig -ServerKeys $serverKeys -ClientKeys $clientKeys -Port $port -Address "$baseSubnet.1/24" -PeerAddress "$baseSubnet.2/32" -ServerType "Windows" -OutputPath $serverConfPath
         
         Write-Verbose "Creating client config..."
-        $clientConfPath = Join-Path $Script:OutputPath "wg-client.conf"
+        $clientConfPath = Join-Path $Script:Settings.OutputPath "wg-client.conf"
         $clientConfigContent = New-WireGuardClientConfig -ClientKeys $clientKeys -ServerKeys $serverKeys -ServerAvailableIP $wanIP -Port $port -Address "$baseSubnet.2/24" -OutputPath $clientConfPath
         
         # QR-code generation
-        $qrPath = Join-Path $Script:OutputPath "wg-client-qr.png"
+        $qrPath = Join-Path $Script:Settings.OutputPath "wg-client-qr.png"
         New-WireGuardQRCode -ConfigContent $clientConfigContent -OutputPath $qrPath
+
+        Write-Verbose "Client Config: $clientConfigContent"
+        Write-Verbose "Server Config: $serverConfContent"
         
         # Step 5: Install Remote
         Write-Progress -Activity "Remote WireGuard Setup" -Status "Step 5 of 6: Performing remote installation" -PercentComplete 66

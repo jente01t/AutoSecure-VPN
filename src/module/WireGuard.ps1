@@ -110,18 +110,37 @@ function Initialize-WireGuardKeys {
     }
     
     try {
-        # Generate private key
-        $privateKey = & $WgPath genkey
-        if (-not $privateKey) { throw "Could not generate private key" }
+        # Create temp files to ensure clean shell interaction and avoid piping encoding issues
+        $tempPrivPath = [System.IO.Path]::GetTempFileName()
+        $tempPubPath = [System.IO.Path]::GetTempFileName()
         
-        # Generate public key from private key
-        # Use input object to send via pipe
-        $publicKey = $privateKey | & $WgPath pubkey
-        if (-not $publicKey) { throw "Could not generate public key" }
-        
-        return @{
-            PrivateKey = $privateKey.Trim()
-            PublicKey  = $publicKey.Trim()
+        try {
+            # Generate private key
+            & $WgPath genkey | Set-Content -Path $tempPrivPath -NoNewline
+            $privateKey = (Get-Content -Path $tempPrivPath -Raw).Trim()
+            
+            if ([string]::IsNullOrWhiteSpace($privateKey)) { throw "Private key generation resulted in empty output" }
+
+            # Generate public key
+            Get-Content -Path $tempPrivPath -Raw | & $WgPath pubkey | Set-Content -Path $tempPubPath -NoNewline
+            $publicKey = (Get-Content -Path $tempPubPath -Raw).Trim()
+
+            if ([string]::IsNullOrWhiteSpace($publicKey)) { throw "Public key generation resulted in empty output" }
+            
+            # Log shortened keys for verification (without leaking full keys)
+            $shortPriv = if ($privateKey.Length -gt 10) { $privateKey.Substring(0, 5) + "..." + $privateKey.Substring($privateKey.Length - 5) } else { "ERROR" }
+            $shortPub = if ($publicKey.Length -gt 10) { $publicKey.Substring(0, 5) + "..." + $publicKey.Substring($publicKey.Length - 5) } else { "ERROR" }
+            
+            Write-Log "WireGuard keys generated: Priv=$shortPriv, Pub=$shortPub" -Level "INFO"
+
+            return @{
+                PrivateKey = $privateKey
+                PublicKey  = $publicKey
+            }
+        }
+        finally {
+            if (Test-Path $tempPrivPath) { Remove-Item $tempPrivPath -Force -ErrorAction SilentlyContinue }
+            if (Test-Path $tempPubPath) { Remove-Item $tempPubPath -Force -ErrorAction SilentlyContinue }
         }
     }
     catch {
@@ -155,8 +174,10 @@ PublicKey = $($ClientKeys.PublicKey)
 AllowedIPs = $PeerAddress
 "@
 
+    Write-Log "Generating server config with Port=$Port, Address=$Address, PeerPublic=$($ClientKeys.PublicKey.Substring(0,5))..." -Level "INFO"
+
     if ($OutputPath) {
-        Set-Content -Path $OutputPath -Value $configContent
+        Set-Content -Path $OutputPath -Value $configContent -Encoding UTF8
         Write-Log "Server config saved in $OutputPath" -Level "INFO"
     }
     
@@ -205,8 +226,10 @@ AllowedIPs = 0.0.0.0/0
 PersistentKeepalive = $($Script:Settings.wireGuardDefaultPersistentKeepalive)
 "@
 
+    Write-Log "Generating client config with Server=$ServerAvailableIP, Port=$Port, Address=$Address, ClientPriv=$($ClientKeys.PrivateKey.Substring(0,5))..." -Level "INFO"
+
     if ($OutputPath) {
-        Set-Content -Path $OutputPath -Value $configContent
+        Set-Content -Path $OutputPath -Value $configContent -Encoding UTF8
         Write-Log "Client config saved in $OutputPath" -Level "INFO"
     }
     
@@ -272,7 +295,7 @@ function Stop-WireGuardService {
     
     try {
         # Stop all WireGuard tunnel services
-        $services = Get-Service | Where-Object { $_.Name -like "WireGuardTunnel*" -and $_.Status -eq "Running" }
+        $services = Get-Service -Name "WireGuardTunnel*" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" }
         foreach ($service in $services) {
             Write-Log "Stopping WireGuard service: $($service.Name)" -Level "INFO"
             Stop-Service -Name $service.Name -Force
@@ -361,6 +384,8 @@ function Install-RemoteWireGuardServer {
     else {
         $remoteTemp = 'C:\Temp'
     }
+
+    $remoteModuleDir = Join-Path $remoteTemp "AutoSecureVPN"
     
     Write-Log "Starting remote WireGuard server installation on $ComputerName..." -Level "INFO"
     Write-Verbose "Connecting to remote machine $ComputerName..."
@@ -369,21 +394,40 @@ function Install-RemoteWireGuardServer {
     Write-Verbose "PSSession established"
     
     try {
-        # 1. Copy module
-        Write-Verbose "Copying module to remote..."
-        Invoke-Command -Session $session -ScriptBlock { param($path) if (-not (Test-Path $path)) { New-Item -ItemType Directory -Path $path -Force } } -ArgumentList $remoteTemp
+        # 1. Prepare remote folders
+        Write-Verbose "Preparing remote folders..."
+        Invoke-Command -Session $session -ScriptBlock { 
+            param($temp, $modDir) 
+            if (-not (Test-Path $temp)) { New-Item -ItemType Directory -Path $temp -Force | Out-Null } 
+            if (Test-Path $modDir) { Remove-Item $modDir -Recurse -Force -ErrorAction SilentlyContinue }
+            New-Item -ItemType Directory -Path $modDir -Force | Out-Null
+        } -ArgumentList $remoteTemp, $remoteModuleDir
         
-        $localModuleDir = $PSScriptRoot
-        # Fallback if PSScriptRoot is not set (e.g., during test)
+        # 2. Get local paths
+        $moduleBase = $null
+        if ($Script:BasePath -and (Test-Path (Join-Path $Script:BasePath 'src\module\AutoSecureVPN.psd1'))) {
+            $moduleBase = Join-Path $Script:BasePath 'src\module'
+            Write-Verbose "Using source module path from Script Scope: $moduleBase"
+        }
+        
+        if (-not $moduleBase -or [string]::IsNullOrWhiteSpace($moduleBase)) {
+            $moduleBase = $PSScriptRoot
+            if (-not $moduleBase -or -not (Test-Path (Join-Path $moduleBase "AutoSecureVPN.psd1"))) {
+                $moduleBase = (Get-Module AutoSecureVPN).ModuleBase
+            }
+        }
+        $localModuleDir = $moduleBase
+        
         if (-not $localModuleDir -or -not (Test-Path (Join-Path $localModuleDir "AutoSecureVPN.psd1"))) {
-            $localModuleDir = (Get-Module AutoSecureVPN).ModuleBase
+            throw "Local module directory not found or invalid: $localModuleDir"
         }
 
-        $remoteModuleDir = Join-Path $remoteTemp "AutoSecureVPN"
-        Copy-Item -Path $localModuleDir -Destination $remoteModuleDir -ToSession $session -Recurse -Force
+        # 3. Copy module (contents)
+        Write-Verbose "Copying module to remote..."
+        Copy-Item -Path "$localModuleDir\*" -Destination $remoteModuleDir -ToSession $session -Recurse -Force
         Write-Verbose "Module directory copied"
         
-        # 2. Execute on remote with output capture
+        # 4. Execute on remote with output capture
         Write-Verbose "Executing installation on remote..."
         $remoteResult = Invoke-Command -Session $session -ScriptBlock {
             param($moduleDirPath, $configContent, $configDir, $port, $vpnSubnet, $settings)
@@ -399,10 +443,10 @@ function Install-RemoteWireGuardServer {
                 
                 Set-ModuleSettings -Settings $settings -BasePath "C:\Temp"
                 
-                # Override Write-Log to capture output
+                # Override Write-Log to capture output and stream critical info
                 $script:remoteLog = @()
                 function global:Write-Log { 
-                    param($Message, $Level) 
+                    param($Message, $Level = "INFO") 
                     $script:remoteLog += "[$Level] $Message"
                 }
                 
@@ -414,16 +458,7 @@ function Install-RemoteWireGuardServer {
                 }
                 $log += "OK: WireGuard installed"
                 
-                # 2. Configure NAT (this also calls Enable-IPForwarding)
-                $log += "Configuring NAT for internet access..."
-                $natResult = Enable-VPNNAT -VPNSubnet $vpnSubnet
-                $log += $script:remoteLog  # Add NAT logs
-                if (-not $natResult) { 
-                    $log += "WARNING: NAT configuration might not be complete"
-                }
-                else {
-                    $log += "OK: NAT configured"
-                }
+
                 
                 # 3. Firewall
                 $log += "Configuring firewall (UDP $port)..."
@@ -449,6 +484,17 @@ function Install-RemoteWireGuardServer {
                     throw "Remote Service start failed" 
                 }
                 $log += "OK: Service started"
+
+                # 2. Configure NAT (this also calls Enable-IPForwarding)
+                $log += "Configuring NAT for internet access..."
+                $natResult = Enable-VPNNAT -VPNSubnet $vpnSubnet -VPNType "WireGuard"
+                $log += $script:remoteLog  # Add NAT logs
+                if (-not $natResult) { 
+                    $log += "WARNING: NAT configuration might not be complete"
+                }
+                else {
+                    $log += "OK: NAT configured"
+                }
                 
                 $log += "=== Remote Setup Completed ==="
                 
@@ -468,24 +514,13 @@ function Install-RemoteWireGuardServer {
             Remove-Item $moduleDirPath -Recurse -Force
         } -ArgumentList $remoteModuleDir, $ServerConfigContent, $RemoteConfigPath, $Port, $vpnSubnet, $Script:Settings
         
-        # Show remote output
-        if ($remoteResult.Log) {
-            Write-Host "`n--- Remote Server Output ---" -ForegroundColor Cyan
+        # Show remote output ONLY IF failed (to see full error trace) or if streaming was totally missed
+        if (-not $remoteResult.Success -and $remoteResult.Log) {
+            Write-Host "`n--- Remote Server Error Log ---" -ForegroundColor Red
             foreach ($line in $remoteResult.Log) {
-                if ($line -like "*ERROR*") {
-                    Write-Host "  $line" -ForegroundColor Red
-                }
-                elseif ($line -like "*WARNING*") {
-                    Write-Host "  $line" -ForegroundColor Yellow
-                }
-                elseif ($line -like "*OK*") {
-                    Write-Host "  $line" -ForegroundColor Green
-                }
-                else {
-                    Write-Host "  $line" -ForegroundColor Gray
-                }
+                Write-Host "  $line" -ForegroundColor Gray
             }
-            Write-Host "----------------------------`n" -ForegroundColor Cyan
+            Write-Host "----------------------------`n" -ForegroundColor Red
         }
         
         if (-not $remoteResult.Success) {
@@ -565,7 +600,7 @@ function Install-RemoteWireGuardClient {
             # Save config
             if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
             $clientConfigPath = Join-Path $configDir "wg-client.conf"
-            Set-Content -Path $clientConfigPath -Value $configContent
+            Set-Content -Path $clientConfigPath -Value $configContent -Encoding UTF8
             
             Write-Verbose "Starting service..."
             # Start service
