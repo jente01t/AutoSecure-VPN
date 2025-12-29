@@ -1471,6 +1471,9 @@ function Install-RemoteClient {
             # Stop on errors from the start
             $ErrorActionPreference = 'Stop'
             
+            # Set execution policy to allow script execution
+            Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process -Force
+            
             # Load module manifest
             try {
                 $manifestPath = Join-Path $moduleDirPath "AutoSecureVPN.psd1"
@@ -1556,8 +1559,11 @@ function Install-RemoteClient {
                 Invoke-Command -Session $rollbackSession -ScriptBlock {
                     param($settings, $modulePath)
                     try {
-                        $moduleContent = Get-Content -Path $modulePath -Raw
-                        Invoke-Expression $moduleContent
+                        # Set execution policy to allow script execution
+                        Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process -Force
+                        
+                        $manifestPath = Join-Path $modulePath "AutoSecureVPN.psd1"
+                        Import-Module $manifestPath -Force
                     }
                     catch {
                         throw "Failed to load module: $_"
@@ -1570,7 +1576,7 @@ function Install-RemoteClient {
                     $Script:Settings = $settings
                     $Script:BasePath = "C:\Temp"
                     Invoke-Rollback -SetupType "Client"
-                } -ArgumentList $Script:Settings, $remoteModule
+                } -ArgumentList $Script:Settings, $remoteModuleDir
                 Remove-PSSession $rollbackSession
             }
         }
@@ -1646,7 +1652,7 @@ function Invoke-BatchRemoteClientInstall {
             [string]$Name,
             [string]$IP,
             [string]$Username,
-            [System.Security.SecureString]$Password
+            [string]$Password
         )
         $client = $_
         $name = $client.Name

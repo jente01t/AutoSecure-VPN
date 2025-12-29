@@ -208,4 +208,109 @@ InModuleScope AutoSecureVPN {
             $result | Should -Contain "ERROR: client1 (192.168.1.1) - Installation failed"
         }
     }
+
+    Describe "Show-Menu" {
+        It "Displays menu successfully in Menu mode" {
+            Mock Clear-Host { }
+            Mock Write-Host { }
+            Mock Read-Host { return "1" }
+            Mock Write-Log { }
+            
+            $result = Show-Menu -Mode Menu -Title "Test Menu" -Options @("Option 1", "Option 2")
+            
+            $result | Should -Be 1
+            Should -Invoke Write-Host
+        }
+        
+        It "Displays success message in Success mode" {
+            Mock Clear-Host { }
+            Mock Write-Host { }
+            Mock Write-Log { }
+            
+            { Show-Menu -Mode Success -SuccessTitle "Test Success" -LogFile "test.log" } | Should -Not -Throw
+            
+            Should -Invoke Write-Host
+        }
+        
+        It "Returns null when NoPrompt is specified" {
+            Mock Clear-Host { }
+            Mock Write-Host { }
+            Mock Write-Log { }
+            
+            $result = Show-Menu -Mode Menu -Title "Test" -Options @("Option 1") -NoPrompt
+            
+            $result | Should -BeNullOrEmpty
+        }
+    }
+
+    Describe "Wait-Input" {
+        It "Waits for user input" {
+            Mock Read-Host { return "test input" }
+            Mock Out-Null { }
+            Mock Write-Log { }
+            
+            { Wait-Input -Message "Test" } | Should -Not -Throw
+            
+            Assert-MockCalled Read-Host -Times 1 -Exactly
+        }
+    }
+
+    Describe "Set-ModuleSettings" {
+        It "Sets module settings successfully" {
+            $newSettings = @{
+                port = 1194
+                protocol = "UDP"
+            }
+            
+            Set-ModuleSettings -Settings $newSettings -BasePath "C:\Test"
+            
+            $Script:Settings.port | Should -Be 1194
+            $Script:Settings.protocol | Should -Be "UDP"
+            $Script:BasePath | Should -Be "C:\Test"
+        }
+    }
+
+    Describe "Enable-VPNNAT" {
+        It "Configures NAT successfully" {
+            Mock Enable-VPNNAT { return $true }
+            
+            $result = Enable-VPNNAT -VPNSubnet "10.8.0.0/24"
+            $result | Should -Be $true
+            
+            Should -Invoke Enable-VPNNAT
+        }
+        
+        It "Returns false on failure" {
+            Mock Enable-VPNNAT { return $false }
+            
+            $result = Enable-VPNNAT -VPNSubnet "10.8.0.0/24"
+            $result | Should -Be $false
+        }
+    }
+
+    Describe "Enable-IPForwarding" {
+        It "Enables IP forwarding successfully" {
+            Mock Get-ItemProperty { return @{ IPEnableRouter = 0 } }
+            Mock Set-ItemProperty { }
+            Mock Get-Service { return @{ Status = "Stopped" } }
+            Mock Set-Service { }
+            Mock Start-Service { }
+            Mock Write-Log { }
+            
+            $result = Enable-IPForwarding
+            $result | Should -Be $true
+            
+            Should -Invoke Set-ItemProperty
+            Should -Invoke Start-Service
+        }
+        
+        It "Returns true if already enabled" {
+            Mock Get-ItemProperty { return @{ IPEnableRouter = 1 } }
+            Mock Set-ItemProperty { }
+            Mock Write-Log { }
+            
+            $result = Enable-IPForwarding
+            $result | Should -Be $true
+        }
+    }
 }

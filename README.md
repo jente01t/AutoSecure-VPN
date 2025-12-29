@@ -25,7 +25,7 @@ A comprehensive PowerShell automation framework for **OpenVPN** and **WireGuard*
 
 ### Remote Requirements
 - PowerShell Remoting enabled on target machines (`Enable-PSRemoting`).
-- Execution Policy set to RemoteSigned or Unrestricted on target machines.
+- Execution Policy set to Unrestricted on target machines.
 - Administrator credentials for remote systems.
 - Network connectivity to remote hosts.
 

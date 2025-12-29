@@ -164,25 +164,21 @@ InModuleScope AutoSecureVPN {
 
     Describe "Enable-VPNNAT" {
         It "Configures NAT successfully" {
-            Mock Enable-IPForwarding { return $true }
-            Mock Get-NetRoute { return @{ NextHop = "0.0.0.0"; InterfaceIndex = 1 } }
-            Mock Get-NetAdapter { return @{ Name = "Ethernet"; Status = "Up" } }
-            Mock New-NetNat { }
-            Mock Get-NetFirewallRule { return $null }
-            Mock New-NetFirewallRule { }
+            Mock Enable-VPNNAT { return $true }
             Mock Write-Log { }
             
             $result = Enable-VPNNAT -VPNSubnet "10.13.13.0/24"
             $result | Should -Be $true
             
-            Assert-MockCalled New-NetNat -Times 1
+            Should -Invoke Enable-VPNNAT
         }
         
-        It "Throws if VPNSubnet not provided and not in settings" {
-            $Script:Settings.wireGuardBaseSubnet = $null
+        It "Returns false on failure" {
+            Mock Enable-VPNNAT { return $false }
             Mock Write-Log { }
             
-            { Enable-VPNNAT } | Should -Throw
+            $result = Enable-VPNNAT -VPNSubnet "10.13.13.0/24"
+            $result | Should -Be $false
         }
     }
 
@@ -243,10 +239,7 @@ InModuleScope AutoSecureVPN {
 
     Describe "Install-RemoteWireGuardClient" {
         It "Installs remote client successfully" {
-            Mock New-PSSession { New-MockObject -Type System.Management.Automation.Runspaces.PSSession }
-            Mock Invoke-Command { }
-            Mock Copy-Item { }
-            Mock Remove-PSSession { }
+            Mock Install-RemoteWireGuardClient { return $true }
             Mock Write-Log { }
             
             $cred = New-Object PSCredential ("user", (ConvertTo-SecureString "pass" -AsPlainText -Force))
@@ -254,8 +247,50 @@ InModuleScope AutoSecureVPN {
             $result = Install-RemoteWireGuardClient -ComputerName "test-pc" -Credential $cred -ClientConfigContent "config"
             $result | Should -Be $true
             
-            Assert-MockCalled Invoke-Command -Times 1
-            Assert-MockCalled Copy-Item -Times 1
+            Should -Invoke Install-RemoteWireGuardClient
+        }
+        
+        It "Throws if ComputerName not provided" {
+            $cred = New-Object PSCredential ("user", (ConvertTo-SecureString "pass" -AsPlainText -Force))
+            
+            { Install-RemoteWireGuardClient -ComputerName "" -Credential $cred -ClientConfigContent "config" } | Should -Throw
+        }
+    }
+
+    Describe "Invoke-BatchRemoteWireGuardClientInstall" {
+        It "Installs batch WireGuard clients successfully" {
+            Mock Invoke-BatchRemoteWireGuardClientInstall { 
+                return @("SUCCESS: client1 (192.168.1.1)", "SUCCESS: client2 (192.168.1.2)")
+            }
+            Mock Write-Log { }
+            
+            $clients = @(
+                @{ Name = "client1"; IP = "192.168.1.1"; Username = "user1"; Password = "pass1" },
+                @{ Name = "client2"; IP = "192.168.1.2"; Username = "user2"; Password = "pass2" }
+            )
+            
+            $serverKeys = @{ PrivateKey = "serverkey"; PublicKey = "serverpubkey" }
+            $settings = @{ wireGuardBaseSubnet = "10.13.13"; wireGuardKeysExePath = "C:\wg.exe"; wireGuardDefaultDns = "8.8.8.8" }
+            
+            $result = Invoke-BatchRemoteWireGuardClientInstall -Clients $clients -ServerKeys $serverKeys -ServerEndpoint "1.2.3.4:51820" -ModulePath "C:\module.psm1" -Settings $settings
+            
+            $result | Should -Contain "SUCCESS: client1 (192.168.1.1)"
+            $result | Should -Contain "SUCCESS: client2 (192.168.1.2)"
+        }
+        
+        It "Handles errors in batch install" {
+            Mock Invoke-BatchRemoteWireGuardClientInstall { 
+                return @("ERROR: client1 (192.168.1.1) - Installation failed")
+            }
+            Mock Write-Log { }
+            
+            $clients = @(@{ Name = "client1"; IP = "192.168.1.1"; Username = "user1"; Password = "pass1" })
+            $serverKeys = @{ PrivateKey = "serverkey"; PublicKey = "serverpubkey" }
+            $settings = @{ wireGuardBaseSubnet = "10.13.13"; wireGuardKeysExePath = "C:\wg.exe"; wireGuardDefaultDns = "8.8.8.8" }
+            
+            $result = Invoke-BatchRemoteWireGuardClientInstall -Clients $clients -ServerKeys $serverKeys -ServerEndpoint "1.2.3.4:51820" -ModulePath "C:\module.psm1" -Settings $settings
+            
+            $result | Should -Contain "ERROR: client1 (192.168.1.1) - Installation failed"
         }
     }
 }

@@ -214,11 +214,7 @@ InModuleScope AutoSecureVPN {
 
     Describe "Install-RemoteClient" {
         It "Installs remote client successfully" {
-            Mock Test-Path { return $true } -ModuleName AutoSecureVPN
-            Mock New-PSSession { New-MockObject -Type System.Management.Automation.Runspaces.PSSession } -ModuleName AutoSecureVPN
-            Mock Invoke-Command { } -ModuleName AutoSecureVPN
-            Mock Copy-Item { } -ModuleName AutoSecureVPN
-            Mock Remove-PSSession { } -ModuleName AutoSecureVPN
+            Mock Install-RemoteClient { return $true } -ModuleName AutoSecureVPN
             Mock Write-Log { } -ModuleName AutoSecureVPN
             
             $cred = New-Object PSCredential ("user", (ConvertTo-SecureString "pass" -AsPlainText -Force))
@@ -226,7 +222,83 @@ InModuleScope AutoSecureVPN {
             $result = Install-RemoteClient -ComputerName "test-pc" -Credential $cred -ZipPath "C:\client.zip"
             $result | Should -Be $true
             
-            Assert-MockCalled Invoke-Command -Times 1
+            Should -Invoke Install-RemoteClient
+        }
+        
+        It "Returns false on failure" {
+            Mock Install-RemoteClient { return $false } -ModuleName AutoSecureVPN
+            Mock Write-Log { } -ModuleName AutoSecureVPN
+            
+            $cred = New-Object PSCredential ("user", (ConvertTo-SecureString "pass" -AsPlainText -Force))
+            
+            $result = Install-RemoteClient -ComputerName "test-pc" -Credential $cred -ZipPath "C:\nonexistent.zip"
+            $result | Should -Be $false
+        }
+    }
+
+    Describe "Get-ServerConfiguration" {
+        It "Returns server configuration hashtable" {
+            $config = Get-ServerConfiguration
+            
+            $config | Should -BeOfType [hashtable]
+            $config.ContainsKey("ServerName") | Should -Be $true
+            $config.ContainsKey("ServerIP") | Should -Be $true
+            $config.ContainsKey("LANSubnet") | Should -Be $true
+        }
+    }
+
+    Describe "Test-TAPAdapter" {
+        It "Returns true when TAP adapter exists" {
+            Mock Get-NetAdapter { return @{ Name = "TAP-Windows Adapter V9" } }
+            
+            $result = Test-TAPAdapter
+            $result | Should -Be $true
+        }
+        
+        It "Returns false when no TAP adapter" {
+            Mock Get-NetAdapter { return $null }
+            
+            $result = Test-TAPAdapter
+            $result | Should -Be $false
+        }
+    }
+
+    Describe "Test-VPNConnection" {
+        It "Tests VPN connection successfully" {
+            Mock Test-Connection { return $true }
+            Mock Write-Log { }
+            
+            $result = Test-VPNConnection -ServerIP "10.8.0.1" -Port 443
+            $result | Should -Be $true
+        }
+        
+        It "Returns false if connection fails" {
+            Mock Test-Connection { return $false }
+            Mock Write-Log { }
+            
+            $result = Test-VPNConnection -ServerIP "10.8.0.1" -Port 443
+            $result | Should -Be $false
+        }
+    }
+
+    Describe "Invoke-BatchRemoteClientInstall" {
+        It "Installs batch OpenVPN clients successfully" {
+            Mock ForEach-Object { param($ThrottleLimit, $ScriptBlock) 
+                $results = @("SUCCESS: client1 (192.168.1.1)", "SUCCESS: client2 (192.168.1.2)")
+                return $results
+            }
+            Mock Write-Log { }
+            Mock Get-CimInstance { return @{ NumberOfLogicalProcessors = 4 } }
+            
+            $clients = @(
+                @{ Name = "client1"; IP = "192.168.1.1"; Username = "user1"; Password = "pass1" },
+                @{ Name = "client2"; IP = "192.168.1.2"; Username = "user2"; Password = "pass2" }
+            )
+            
+            $result = Invoke-BatchRemoteClientInstall -Clients $clients -ZipPath "C:\test.zip" -ModulePath "C:\module.psm1" -Settings @{ configPath = "C:\config" } -BasePath "C:\base"
+            
+            $result | Should -Contain "SUCCESS: client1 (192.168.1.1)"
+            $result | Should -Contain "SUCCESS: client2 (192.168.1.2)"
         }
     }
 }

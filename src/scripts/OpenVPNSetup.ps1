@@ -171,8 +171,7 @@ function Invoke-RemoteOpenVPNClientSetup {
         }
         if ($trustedHosts -notlike "*$computerName*" -and $trustedHosts -ne "*") {
             Write-Host "  Remote computer not in TrustedHosts. Adding..." -ForegroundColor Yellow
-            $newTrustedHosts = if ($trustedHosts) { "$trustedHosts,$computerName" } else { $computerName }
-            Set-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client -Name TrustedHosts -Value $newTrustedHosts
+            Set-Item WSMan:\localhost\client\TrustedHosts -Value $computerName -Concatenate -Force
             Restart-Service winrm -Force
             Write-Host "  ✓ $computerName added to TrustedHosts and WinRM restarted" -ForegroundColor Green
             Write-Verbose "TrustedHosts updated and WinRM restarted"
@@ -222,7 +221,7 @@ function Invoke-RemoteOpenVPNClientSetup {
         Write-Host "`n[5/5] Client configuration file..." -ForegroundColor Cyan
         # Determine default client name (multiple settings keys possible)
         $clientDefaultName = if ($Script:Settings.ContainsKey('clientName') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.clientName)) { $Script:Settings.clientName } else { 'client' }
-        $defaultZipPath = Join-Path $Script:OutputPath "vpn-client-$clientDefaultName.zip"
+        $defaultZipPath = Join-Path $Script:Settings.OutputPath "vpn-client-$clientDefaultName.zip"
         if (Test-Path $defaultZipPath) {
             $zipPath = $defaultZipPath
             Write-Host "  ✓ Default client ZIP file found: $zipPath" -ForegroundColor Green
@@ -322,20 +321,9 @@ function Invoke-OpenVPNServerSetup {
         Write-Verbose "Firewall rules successfully added"
         Write-Log "Firewall rules added" -Level "INFO"
         
-        # Step 3.5: Configure NAT and IP Forwarding for internet access
-        Write-Progress -Activity "Server Setup" -Status "Step 3.5 of 9: Configuring NAT and IP Forwarding" -PercentComplete 31
-        Write-Host "`n[3.5/9] Configuring NAT and IP Forwarding..." -ForegroundColor Cyan
-        if (-not (Enable-VPNNAT -VPNSubnet "10.8.0.0/24" -VPNType "OpenVPN")) { 
-            Write-Host "  ! NAT configuration warning - manual configuration might be needed" -ForegroundColor Yellow
-            Write-Log "NAT configuration warning - manual setup might be needed" -Level "WARNING"
-        }
-        else {
-            Write-Host "  ✓ NAT and IP Forwarding configured" -ForegroundColor Green
-        }
-        
         # Step 4: Collect user input
-        Write-Progress -Activity "Server Setup" -Status "Step 4 of 9: Collecting server configuration parameters" -PercentComplete 37.5
-        Write-Host "`n[4/9] Server configuration parameters..." -ForegroundColor Cyan
+        Write-Progress -Activity "Server Setup" -Status "Step 4 of 8: Collecting server configuration parameters" -PercentComplete 37.5
+        Write-Host "`n[4/8] Server configuration parameters..." -ForegroundColor Cyan
         $serverConfig = Get-ServerConfiguration
         Write-Verbose "Server configuration parameters collected: $($serverConfig | ConvertTo-Json)"
         Write-Log "Server configuration parameters collected" -Level "INFO"
@@ -356,7 +344,7 @@ function Invoke-OpenVPNServerSetup {
         # Step 6: Generate server configuration
         Write-Progress -Activity "Server Setup" -Status "Step 6 of 8: Creating server configuration" -PercentComplete 62.5
         Write-Host "`n[6/8] Creating server configuration..." -ForegroundColor Cyan
-        if (-not (New-ServerConfig -Config $serverConfig -ConfigPath $script:ConfigPath)) {
+        if (-not (New-ServerConfig -Config $serverConfig)) {
             throw "Server configuration generation failed"
         }
         Write-Host "  ✓ Server configuration created" -ForegroundColor Green
@@ -364,7 +352,7 @@ function Invoke-OpenVPNServerSetup {
         Write-Log "Server configuration created" -Level "INFO"
         
         # Step 7: Start OpenVPN service
-        Write-Progress -Activity "Server Setup" -Status "Step 7 of 8: Starting OpenVPN service" -PercentComplete 75
+        Write-Progress -Activity "Server Setup" -Status "Step 7 of 8: Starting OpenVPN service" -PercentComplete 70
         Write-Host "`n[7/8] Starting OpenVPN service..." -ForegroundColor Cyan
         if (-not (Start-VPNService)) {
             throw "Starting OpenVPN service failed"
@@ -372,6 +360,38 @@ function Invoke-OpenVPNServerSetup {
         Write-Host "  ✓ OpenVPN service active" -ForegroundColor Green
         Write-Verbose "OpenVPN service successfully started"
         Write-Log "OpenVPN service active" -Level "INFO"
+        
+        # Step 7.5: Start OpenVPN via GUI
+        Write-Progress -Activity "Server Setup" -Status "Step 7.5 of 8: Starting OpenVPN GUI with server config" -PercentComplete 75
+        Write-Host "`n[7.5/8] Starting OpenVPN GUI with server config..." -ForegroundColor Cyan
+        $serverConfigFile = Join-Path $Script:Settings.configPath "server.ovpn"
+        if (-not (Start-VPNConnection -ConfigFile $serverConfigFile)) {
+            Write-Host "  ! OpenVPN GUI start warning - manual start might be needed" -ForegroundColor Yellow
+            Write-Log "OpenVPN GUI start warning" -Level "WARNING"
+        }
+        else {
+            Write-Host "  ✓ OpenVPN GUI started with server config" -ForegroundColor Green
+            Write-Verbose "OpenVPN GUI successfully started"
+            Write-Log "OpenVPN GUI started" -Level "INFO"
+        }
+        
+        # Wait for TAP adapter to become active
+        Write-Host "`n[*] Waiting for TAP adapter to initialize..." -ForegroundColor Cyan
+        Start-Sleep -Seconds 10
+        
+        # Step 7.75: Configure ICS for internet access
+        Write-Progress -Activity "Server Setup" -Status "Step 7.75 of 8: Configuring ICS for internet access" -PercentComplete 80
+        Write-Host "`n[7.75/8] Configuring ICS (Internet Connection Sharing)..." -ForegroundColor Cyan
+        # Configuring NAT for internet access (10.8.0.0/24 = OpenVPN default subnet)
+        if (-not (Enable-VPNNAT -VPNSubnet "10.8.0.0/24")) { 
+            Write-Host "  ! ICS configuration warning - manual configuration might be needed" -ForegroundColor Yellow
+            Write-Log "ICS configuration warning - manual setup might be needed" -Level "WARNING"
+        }
+        else {
+            Write-Host "  ✓ ICS configured for VPN internet access" -ForegroundColor Green
+            Write-Verbose "ICS successfully configured"
+            Write-Log "ICS configured" -Level "INFO"
+        }
         
         # Step 8: Create client package
         Write-Progress -Activity "Server Setup" -Status "Step 8 of 8: Creating client configuration package" -PercentComplete 87.5
@@ -632,7 +652,7 @@ function Invoke-BatchRemoteClientSetup {
             # ... OpenVPN Existing Logic ...
             Write-Host "`n[2/4] Selecting client ZIP file..." -ForegroundColor Cyan
             $clientDefaultName = if ($Script:Settings.ContainsKey('clientName')) { $Script:Settings.clientName } else { 'client' }
-            $defaultZipPath = Join-Path $Script:OutputPath "vpn-client-$clientDefaultName.zip"
+            $defaultZipPath = Join-Path $Script:Settings.OutputPath "vpn-client-$clientDefaultName.zip"
              
             if (Test-Path $defaultZipPath) {
                 Write-Host "  Default found: $defaultZipPath"
@@ -646,6 +666,9 @@ function Invoke-BatchRemoteClientSetup {
             Write-Host "`n[3/4] Starting Batch OpenVPN Setup..." -ForegroundColor Cyan
             $cpuCores = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
             $throttleLimit = [math]::Max(1, $cpuCores - 1)
+            
+            # Set module path for batch install
+            $ModulePath = Join-Path $PSScriptRoot "../module/AutoSecureVPN.psd1"
              
             $results = Invoke-BatchRemoteClientInstall -Clients $clients -ZipPath $zipPath -ModulePath $ModulePath -Settings $Script:Settings -BasePath $Script:BasePath -ThrottleLimit $throttleLimit
              

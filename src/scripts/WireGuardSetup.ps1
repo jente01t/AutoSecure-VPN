@@ -74,20 +74,12 @@ function Invoke-WireGuardServerSetup {
         $wgPort = if ($Script:Settings.wireGuardPort) { $Script:Settings.wireGuardPort } else { 51820 }
         $baseSubnet = if ($Script:Settings.wireGuardBaseSubnet) { $Script:Settings.wireGuardBaseSubnet } else { "10.13.13" }
 
-        Write-Host "`n[3/7] Firewall configureren (UDP $wgPort)..." -ForegroundColor Cyan
+        Write-Host "`n[3/6] Firewall configureren (UDP $wgPort)..." -ForegroundColor Cyan
         if (-not (Set-Firewall -Port $wgPort -Protocol "UDP")) { throw "Firewall configuratie mislukt" }
         Write-Host "  ✓ Firewall geconfigureerd" -ForegroundColor Green
         
-        if (-not (Enable-VPNNAT -VPNSubnet "$baseSubnet.0/24" -VPNType "WireGuard")) { 
-            Write-Host "  ! NAT configuration warning - manual check may be required" -ForegroundColor Yellow
-            Write-Log "NAT configuration warning - manual setup may be needed" -Level "WARNING"
-        }
-        else {
-            Write-Host "  ✓ NAT and IP Forwarding configured" -ForegroundColor Green
-        }
-        
-        # Step 4: Parameters and Keys
-        Write-Host "`n[4/6] Generating configuration and keys..." -ForegroundColor Cyan
+        # Stap 4: Parameters en Keys
+        Write-Host "`n[4/6] Configuratie en Keys genereren..." -ForegroundColor Cyan
         $serverWanIP = $Script:Settings.serverWanIP
         if (-not $serverWanIP -or $serverWanIP -eq "your.server.wan.ip.here") {
             $serverWanIP = Read-Host "  Enter public IP or DNS of this server"
@@ -97,21 +89,38 @@ function Invoke-WireGuardServerSetup {
         $clientKeys = Initialize-WireGuardKeys
         Write-Host "  ✓ Keys generated" -ForegroundColor Green
         
-        # Step 5: Create configurations
-        Write-Host "`n[5/6] Creating configurations..." -ForegroundColor Cyan
-
-        # Server config
-        if (-not (Test-Path $Script:ConfigPath)) { New-Item -ItemType Directory -Path $Script:ConfigPath -Force | Out-Null }
+        # Stop existing WireGuard services before creating new config
+        Write-Host "  Stopping existing WireGuard tunnels..." -ForegroundColor Gray
+        Stop-WireGuardService | Out-Null
+        
+        # Server config directory
+        $wgConfigDir = "C:\Program Files\WireGuard\Data\Configurations" 
+        if (-not (Test-Path $wgConfigDir)) { New-Item -ItemType Directory -Path $wgConfigDir -Force | Out-Null }
+        $serverConfigPath = Join-Path $wgConfigDir "wg_server.conf"
+        
+        # Remove existing config file if it exists
+        if (Test-Path $serverConfigPath) {
+            Remove-Item $serverConfigPath -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Milliseconds 500  # Wait for file system to release
+        }
         
         New-WireGuardServerConfig -ServerKeys $serverKeys -ClientKeys $clientKeys -Port $wgPort -Address "$baseSubnet.1/24" -PeerAddress "$baseSubnet.2/32" -ServerType "Windows" -OutputPath $serverConfigPath | Out-Null
         
-        # Client config
-        if (-not (Test-Path $Script:OutputPath)) { New-Item -ItemType Directory -Path $Script:OutputPath -Force | Out-Null }
-        $clientConfigPath = Join-Path $Script:OutputPath "wg-client.conf"
+        # Verify server config was created
+        if (-not (Test-Path $serverConfigPath)) {
+            throw "Server config file was not created at $serverConfigPath"
+        }
+        Write-Log "Server config verified at: $serverConfigPath" -Level "INFO"
+        
+        # Client config directory
+        $outputDir = Join-Path $PSScriptRoot "..\..\output"
+        $outputDir = [System.IO.Path]::GetFullPath($outputDir)
+        if (-not (Test-Path $outputDir)) { New-Item -ItemType Directory -Path $outputDir -Force | Out-Null }
+        $clientConfigPath = Join-Path $outputDir "wg-client.conf"
         $clientConfigContent = New-WireGuardClientConfig -ClientKeys $clientKeys -ServerKeys $serverKeys -ServerAvailableIP $serverWanIP -Port $wgPort -Address "$baseSubnet.2/24" -OutputPath $clientConfigPath
         
-        # QR-code
-        $qrPath = Join-Path $Script:OutputPath "wg-client-qr.png"
+        # QR-code maken
+        $qrPath = Join-Path $outputDir "wg-client-qr.png"
         if (New-WireGuardQRCode -ConfigContent $clientConfigContent -OutputPath $qrPath) {
             Write-Host "  ✓ QR-code created: $qrPath" -ForegroundColor Green
         }
@@ -126,7 +135,18 @@ function Invoke-WireGuardServerSetup {
         if (-not (Start-WireGuardService -ConfigPath $serverConfigPath)) { throw "Failed to start service" }
         Write-Host "  ✓ Service started" -ForegroundColor Green
         
-        Show-Menu -Mode Success -SuccessTitle "WireGuard Server Setup Completed!" -LogFile $script:LogFile -ExtraInfo "Client config: $clientConfigPath`nQR-code: $qrPath" -ExtraMessage "Copy the .conf file to the client and import it into WireGuard, or scan the QR-code on mobile devices."
+        # Stap 7: NAT en IP Forwarding configureren (na service start, wanneer adapter bestaat)
+        Write-Host "`n[7/7] NAT en IP Forwarding configureren..." -ForegroundColor Cyan
+        Start-Sleep -Seconds 2  # Wacht tot adapter beschikbaar is
+        if (-not (Enable-VPNNAT -VPNSubnet "$baseSubnet.0/24")) { 
+            Write-Host "  ! NAT configuratie warning - mogelijk handmatige configuratie nodig" -ForegroundColor Yellow
+            Write-Log "NAT configuratie warning - handmatige setup mogelijk nodig" -Level "WARNING"
+        }
+        else {
+            Write-Host "  ✓ NAT en IP Forwarding geconfigureerd" -ForegroundColor Green
+        }
+        
+        Show-Menu -Mode Success -SuccessTitle "WireGuard Server Setup Voltooid!" -LogFile $script:LogFile -ExtraInfo "Client config: $clientConfigPath`nQR-code: $qrPath" -ExtraMessage "Kopieer het .conf bestand naar de client en importeer het in WireGuard, of scan de QR-code op mobiele apparaten."
         
     }
     catch {
@@ -238,15 +258,31 @@ function Invoke-RemoteWireGuardClientSetup {
         
         $cred = Get-Credential -Message "Admin Credentials for $computerName"
         
-        Write-Verbose "Requesting path to .conf file..."
-        $confPath = Read-Host "Path to .conf file"
-        Write-Verbose "Path entered: $confPath"
-        if (-not (Test-Path $confPath)) { throw "File not found: $confPath" }
+        Write-Host "`nImporting config..." -ForegroundColor Cyan
+        $outputPath = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "output"
+        Write-Log "Output path: $outputPath" -Level "INFO"
+        $confPath = ""
+
+        if (Test-Path $outputPath) {
+            $foundFile = Get-ChildItem -Path $outputPath -Filter "*.conf" | Select-Object -First 1
+            if ($foundFile) {
+            $confPath = $foundFile.FullName
+            Write-Log "Found config in output folder: $($foundFile.Name)" -Level "INFO"
+            Write-Host "  ✓ Found config in output folder: $($foundFile.Name)" -ForegroundColor Green
+            }
+        }
+
+        if (-not $confPath) {
+            $confPath = Read-Host " Automatic not found: Drag the .conf file here or type the path"
+            $confPath = $confPath.Trim('"')
+        }
         
+        if (-not (Test-Path $confPath)) { throw "File not found: $confPath" }
         Write-Verbose "Reading config content..."
         $content = Get-Content $confPath -Raw
         Write-Verbose "Config content read, length: $($content.Length)"
         
+        Write-Host "`nStarting remote WireGuard client installation on $computerName..." -ForegroundColor Cyan
         Write-Verbose "Starting remote client installation..."
         if (Install-RemoteWireGuardClient -ComputerName $computerName -Credential $cred -ClientConfigContent $content) {
             Show-Menu -Mode Success -SuccessTitle "Remote WireGuard Client Setup Completed"

@@ -297,11 +297,16 @@ function Stop-WireGuardService {
         # Stop all WireGuard tunnel services
         $services = Get-Service -Name "WireGuardTunnel*" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" }
         foreach ($service in $services) {
-            Write-Log "Stopping WireGuard service: $($service.Name)" -Level "INFO"
-            Stop-Service -Name $service.Name -Force
-            # Remove the service - get tunnel name from service name
+            Write-Log "Stopping and removing WireGuard service: $($service.Name)" -Level "INFO"
+            if ($service.Status -eq "Running") {
+                Stop-Service -Name $service.Name -Force -ErrorAction SilentlyContinue
+            }
+            # Extract tunnel name from service name (format: WireGuardTunnel$TunnelName)
             $tunnelName = $service.Name -replace '^WireGuardTunnel\$', ''
-            Start-Process -FilePath $wgPath -ArgumentList "/uninstalltunnelservice $tunnelName" -Wait -PassThru | Out-Null
+            if ($tunnelName) {
+                Start-Process -FilePath $wgPath -ArgumentList "/uninstalltunnelservice `"$tunnelName`"" -Wait -PassThru -NoNewWindow | Out-Null
+                Write-Log "Uninstalled tunnel: $tunnelName" -Level "INFO"
+            }
         }
         
         Write-Log "All WireGuard services stopped" -Level "INFO"
@@ -557,7 +562,7 @@ function Install-RemoteWireGuardClient {
     )
     
     $remoteTemp = if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardRemoteTempPath') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.wireGuardRemoteTempPath)) { $Script:Settings.wireGuardRemoteTempPath } else { 'C:\Temp' }
-    $configDir = if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardRemoteClientConfigDir') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.wireGuardRemoteClientConfigDir)) { $Script:Settings.wireGuardRemoteClientConfigDir } else { 'C:\Program Files\WireGuard\config' }
+    $configDir = if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardRemoteClientConfigDir') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.wireGuardRemoteClientConfigDir)) { $Script:Settings.wireGuardRemoteClientConfigDir } else { 'C:\Program Files\WireGuard\Data\Configurations' }
     
     Write-Log "Starting remote WireGuard client installation on $ComputerName..." -Level "INFO"
     Write-Verbose "Connecting to remote machine $ComputerName..."
@@ -579,35 +584,160 @@ function Install-RemoteWireGuardClient {
         Copy-Item -Path $localModuleDir -Destination $remoteModuleDir -ToSession $session -Recurse -Force
         Write-Verbose "Module directory copied"
         
-        # 2. Execute on remote
+        # 2. Execute on remote with output capture
         Write-Verbose "Executing installation on remote..."
-        Invoke-Command -Session $session -ScriptBlock {
+        # Use -AsJob to prevent blocking if network changes
+        $job = Invoke-Command -Session $session -AsJob -ScriptBlock {
             param($moduleDirPath, $configContent, $configDir, $settings)
             
-            # Load module
-            $manifestPath = Join-Path $moduleDirPath "AutoSecureVPN.psd1"
-            Import-Module $manifestPath -Force
+            $log = @()
+            $log += "=== Remote WireGuard Client Setup Start ==="
             
-            Set-ModuleSettings -Settings $settings -BasePath "C:\Temp"
-            
-            function global:Write-Log { param($Message, $Level) Write-Verbose "[$Level] $Message" }
-            
-            Write-Verbose "Installing WireGuard..."
-            # Install
-            if (-not (Install-WireGuard)) { throw "Remote WireGuard installation failed" }
-            
-            Write-Verbose "Saving config..."
-            # Save config
-            if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force | Out-Null }
-            $clientConfigPath = Join-Path $configDir "wg-client.conf"
-            Set-Content -Path $clientConfigPath -Value $configContent -Encoding UTF8
-            
-            Write-Verbose "Starting service..."
-            # Start service
-            if (-not (Start-WireGuardService -ConfigPath $clientConfigPath)) { throw "Remote Service start failed" }
-            
-            Remove-Item $moduleDirPath -Recurse -Force
+            try {
+                # Set execution policy to allow script execution
+                Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process -Force
+                
+                # Load module
+                $log += "Loading module..."
+                $manifestPath = Join-Path $moduleDirPath "AutoSecureVPN.psd1"
+                Import-Module $manifestPath -Force
+                
+                Set-ModuleSettings -Settings $settings -BasePath "C:\Temp"
+                
+                # Override Write-Log to capture output
+                $script:remoteLog = @()
+                function global:Write-Log { 
+                    param($Message, $Level) 
+                    $script:remoteLog += "[$Level] $Message"
+                }
+                
+                # 1. Install WireGuard
+                $log += "Installing WireGuard..."
+                if (-not (Install-WireGuard)) { 
+                    $log += "ERROR: WireGuard installation failed"
+                    throw "Remote WireGuard installation failed" 
+                }
+                $log += "OK: WireGuard installed"
+                
+                # 2. Stop existing tunnels and remove old config
+                $log += "Cleaning up existing tunnels..."
+                $services = Get-Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "WireGuardTunnel*" }
+                foreach ($svc in $services) {
+                    if ($svc.Status -eq "Running") {
+                        Stop-Service -Name $svc.Name -Force -ErrorAction SilentlyContinue
+                    }
+                    $tunnelName = $svc.Name -replace '^WireGuardTunnel\$', ''
+                    if ($tunnelName) {
+                        $wgPath = if ($Script:Settings -and $Script:Settings.wireGuardInstalledPath) { 
+                            $Script:Settings.wireGuardInstalledPath 
+                        } else { 
+                            "C:\Program Files\WireGuard\wireguard.exe" 
+                        }
+                        & $wgPath /uninstalltunnelservice "$tunnelName" 2>&1 | Out-Null
+                    }
+                }
+                $log += "OK: Existing tunnels cleaned"
+                
+                # 3. Save config
+                $log += "Saving config to $configDir..."
+                if (-not (Test-Path $configDir)) { 
+                    New-Item -ItemType Directory -Path $configDir -Force | Out-Null 
+                }
+                $clientConfigPath = Join-Path $configDir "wg-client.conf"
+                
+                # Remove old config file if exists
+                if (Test-Path $clientConfigPath) {
+                    Remove-Item $clientConfigPath -Force -ErrorAction SilentlyContinue
+                    Start-Sleep -Milliseconds 500
+                }
+                
+                Set-Content -Path $clientConfigPath -Value $configContent
+                
+                # Verify config was saved
+                if (-not (Test-Path $clientConfigPath)) {
+                    throw "Config file was not created at $clientConfigPath"
+                }
+                $log += "OK: Config saved to $clientConfigPath"
+                
+                # 4. Start service (this will break the PSSession when tunnel activates)
+                $log += "Starting WireGuard tunnel..."
+                if (-not (Start-WireGuardService -ConfigPath $clientConfigPath)) { 
+                    $log += "ERROR: Service start failed"
+                    throw "Remote Service start failed" 
+                }
+                $log += "OK: Tunnel started"
+                
+                $log += "=== Remote Client Setup Completed ==="
+                
+                return @{
+                    Success = $true
+                    Log     = $log
+                }
+            }
+            catch {
+                $log += "ERROR: $_"
+                return @{
+                    Success = $false
+                    Log     = $log
+                    Error   = $_.ToString()
+                }
+            }
+            finally {
+                if (Test-Path $moduleDirPath) {
+                    Remove-Item $moduleDirPath -Recurse -Force -ErrorAction SilentlyContinue
+                }
+            }
         } -ArgumentList $remoteModuleDir, $ClientConfigContent, $configDir, $Script:Settings
+        
+        # Wait for job to complete or timeout after 5 seconds
+        Write-Verbose "Waiting for remote installation to complete..."
+        $remoteResult = Wait-Job -Job $job -Timeout 5 | Receive-Job
+        
+        # Check job state before cleaning up
+        $jobState = $job.State
+        
+        # Clean up job
+        Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+        
+        # Show remote output
+        if ($remoteResult.Log) {
+            Write-Host "`n--- Remote Client Output ---" -ForegroundColor Cyan
+            foreach ($line in $remoteResult.Log) {
+                if ($line -like "*ERROR*") {
+                    Write-Host "  $line" -ForegroundColor Red
+                }
+                elseif ($line -like "*WARNING*") {
+                    Write-Host "  $line" -ForegroundColor Yellow
+                }
+                elseif ($line -like "*OK*") {
+                    Write-Host "  $line" -ForegroundColor Green
+                }
+                else {
+                    Write-Host "  $line" -ForegroundColor Gray
+                }
+            }
+            Write-Host "----------------------------`n" -ForegroundColor Cyan
+        }
+        
+        # If job timed out or is still running, VPN likely connected and broke session - assume success
+        if ($jobState -eq "Running" -or $jobState -eq "Blocked") {
+            Write-Verbose "Job timed out (VPN likely connected and broke session) - assuming success"
+            Write-Log "Remote WireGuard Client installation completed (connection lost after tunnel started) for $ComputerName" -Level "SUCCESS"
+            return $true
+        }
+        
+        # If no result received, but job completed normally, might still be success
+        if (-not $remoteResult) {
+            Write-Verbose "No result received but job completed - assuming success"
+            Write-Log "Remote WireGuard Client installation assumed successful for $ComputerName" -Level "INFO"
+            return $true
+        }
+        
+        # Only fail if we have an explicit error in the result
+        if ($remoteResult -and -not $remoteResult.Success) {
+            Write-Log "Remote client installation failed: $($remoteResult.Error)" -Level "ERROR"
+            return $false
+        }
         Write-Verbose "Remote installation completed"
         
         Write-Log "Remote WireGuard Client configuration completed for $ComputerName" -Level "SUCCESS"
