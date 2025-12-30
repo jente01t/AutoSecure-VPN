@@ -70,43 +70,41 @@ function Start-VPNSetup {
     if ($Script:Settings.Count -eq 0) {
         try {
             $configDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'config'
-            # Load stable settings first (defaults from module directory)
+            
+            # Check for Stable.psd1 existence
             $stableConfigPath = Join-Path $configDir 'Stable.psd1'
-            if (Test-Path $stableConfigPath) {
-                # Import the PSD1 data file safely
-                $stableSettings = Import-PowerShellDataFile -Path $stableConfigPath -ErrorAction Stop
-                if ($stableSettings) { $Script:Settings = $stableSettings.Clone() }
-            }
-            else {
-                # Check if example file exists and provide helpful message if configuration is missing
+            if (-not (Test-Path $stableConfigPath)) {
+                Write-Host "Configuration file 'Stable.psd1' not found." -ForegroundColor Red
                 $examplePath = Join-Path $configDir 'Stable.psd1.example'
                 if (Test-Path $examplePath) {
-                    Write-Host "Configuration file 'Stable.psd1' not found." -ForegroundColor Yellow
                     Write-Host "Please copy 'Stable.psd1.example' to 'Stable.psd1' and customize it." -ForegroundColor Yellow
-                    Write-Host "Location: $configDir" -ForegroundColor Cyan
-                    exit 1
                 }
+                Write-Host "Location: $configDir" -ForegroundColor Cyan
+                return
+            }
+            
+            # Load stable settings first (defaults from module directory)
+            $stableSettings = Import-PowerShellDataFile -Path $stableConfigPath -ErrorAction Stop
+            if ($stableSettings) { $Script:Settings = $stableSettings.Clone() }
+            
+            # Check for Variable.psd1 existence
+            $variableConfigPath = Join-Path $configDir 'Variable.psd1'
+            if (-not (Test-Path $variableConfigPath)) {
+                Write-Host "Configuration file 'Variable.psd1' not found." -ForegroundColor Red
+                $examplePath = Join-Path $configDir 'Variable.psd1.example'
+                if (Test-Path $examplePath) {
+                    Write-Host "Please copy 'Variable.psd1.example' to 'Variable.psd1' and customize it." -ForegroundColor Yellow
+                }
+                Write-Host "Location: $configDir" -ForegroundColor Cyan
+                return
             }
             
             # Load variable settings and merge (variable overrides stable defaults)
-            $variableConfigPath = Join-Path $configDir 'Variable.psd1'
-            if (Test-Path $variableConfigPath) {
-                $variableSettings = Import-PowerShellDataFile -Path $variableConfigPath -ErrorAction Stop
-                if ($variableSettings) {
-                    # Loop through variable settings and update the main Settings hashtable
-                    foreach ($key in $variableSettings.Keys) {
-                        $Script:Settings[$key] = $variableSettings[$key]
-                    }
-                }
-            }
-            else {
-                # Check if example file exists and provide helpful message for the variable config
-                $examplePath = Join-Path $configDir 'Variable.psd1.example'
-                if (Test-Path $examplePath) {
-                    Write-Host "Configuration file 'Variable.psd1' not found." -ForegroundColor Yellow
-                    Write-Host "Please copy 'Variable.psd1.example' to 'Variable.psd1' and customize it." -ForegroundColor Yellow
-                    Write-Host "Location: $configDir" -ForegroundColor Cyan
-                    exit 1
+            $variableSettings = Import-PowerShellDataFile -Path $variableConfigPath -ErrorAction Stop
+            if ($variableSettings) {
+                # Loop through variable settings and update the main Settings hashtable
+                foreach ($key in $variableSettings.Keys) {
+                    $Script:Settings[$key] = $variableSettings[$key]
                 }
             }
         }
