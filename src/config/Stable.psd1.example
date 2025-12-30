@@ -1,55 +1,54 @@
 @{
-	# OpenVPN Installatie Instellingen
-	openVpnVersion = '' # Versie van OpenVPN om te installeren; leeg voor laatste stabiele versie
-	installerPath  = 'C:\Temp\openvpn-install.msi' # Pad waar de OpenVPN installer wordt gedownload en opgeslagen
-	installedPath  = 'C:\Program Files\OpenVPN' # Installatiepad van OpenVPN
-	openVPNExePath = 'C:\Program Files\OpenVPN\bin\openvpn.exe' # Pad naar het OpenVPN executable bestand
-	openVPNGuiPath = 'C:\Program Files\OpenVPN\bin\openvpn-gui.exe' # Pad naar het OpenVPN GUI executable bestand
+	# OpenVPN Installation Settings
+	openVpnVersion = '' # Version of OpenVPN to install; empty for latest stable version
+	installerPath  = 'C:\Temp\openvpn-install.msi' # Path where the OpenVPN installer is downloaded and saved
+	installedPath  = 'C:\Program Files\OpenVPN' # Installation path of OpenVPN
+	openVPNExePath = 'C:\Program Files\OpenVPN\bin\openvpn.exe' # Path to the OpenVPN executable file
+	openVPNGuiPath = 'C:\Program Files\OpenVPN\bin\openvpn-gui.exe' # Path to the OpenVPN GUI executable file
 
-	# EasyRSA Certificaat Instellingen
-	easyRSAVersion = '' # Versie van EasyRSA om te gebruiken; leeg voor laatste stabiele versie
-	easyRSAPath    = 'C:\Program Files\OpenVPN\easy-rsa' # Pad naar de EasyRSA directory
-	easyRSAKeySize = 2048 # Grootte van de RSA sleutels in bits
-	easyRSACAExpire = 3650 # Vervaldatum van de Certificate Authority in dagen
-	easyRSACertExpire = 3650 # Vervaldatum van client certificaten in dagen
-	easyRSACRLDays = 180 # Dagen voordat de Certificate Revocation List wordt vernieuwd
-	easyRSAAlgo = 'rsa' # Encryptie algoritme (rsa of ec)
-	easyRSABatch = '1' # Batch modus voor EasyRSA (1 voor ja, 0 voor nee)
-	easyRSAReqCN = 'vpn-server' # Common Name voor de server certificaat aanvraag
+	# EasyRSA Certificate Settings
+	easyRSAVersion = '' # Version of EasyRSA to use; empty for latest stable version
+	easyRSAPath    = 'C:\Program Files\OpenVPN\easy-rsa' # Path to the EasyRSA directory
+	easyRSAKeySize = 2048 # Size of the RSA keys in bits
+	easyRSACAExpire = 3650 # Expiration date of the Certificate Authority in days
+	easyRSACertExpire = 3650 # Expiration date of client certificates in days
+	easyRSACRLDays = 180 # Days before the Certificate Revocation List is renewed
+	easyRSAAlgo = 'rsa' # Encryption algorithm (rsa or ec)
+	easyRSABatch = '1' # Batch mode for EasyRSA (1 for yes, 0 for no)
+	easyRSAReqCN = 'vpn-server' # Common Name for the server certificate request
 
-	# Paden en Configuratie
-	configPath     = 'C:\Program Files\OpenVPN\config' # Lokale pad naar OpenVPN configuratie bestanden
-	remoteConfigPath = 'C:\Program Files\OpenVPN\config' # Remote pad naar OpenVPN configuratie bestanden
-	logsPath       = 'logs' # Relatief pad naar de logs directory
-	outputPath     = 'output' # Relatief pad naar de output directory
-	certPath       = 'cert' # Relatief pad naar de certificaten directory
-	tempPath = 'C:\Temp' # Pad naar tijdelijke bestanden
+	# Paths and Configuration
+	configPath     = 'C:\Program Files\OpenVPN\config' # Local path to OpenVPN configuration files
+	remoteConfigPath = 'C:\Program Files\OpenVPN\config' # Remote path to OpenVPN configuration files
+	logsPath       = 'logs' # Relative path to the logs directory
+	outputPath     = 'output' # Relative path to the output directory
+	certPath       = 'cert' # Relative path to the certificates directory
+	tempPath = 'C:\Temp' # Path to temporary files
 
-	# Logging Instellingen
-	logFileName    = 'vpn-setup.log' # Naam van het log bestand
-	logTimestampFormat = 'yyyy-MM-dd HH:mm:ss' # Formaat voor timestamps in logs
-	transcriptFileName = 'transcript.log' # Naam van het transcript bestand
+	# Logging Settings
+	logFileName    = 'vpn-setup.log' # Name of the log file
+	logTimestampFormat = 'yyyy-MM-dd HH:mm:ss' # Format for timestamps in logs
 
-	# Remote en TrustedHosts
-	trustedHostsDefault = '*' # Standaard trusted hosts voor PowerShell remoting
+	# Remote and TrustedHosts
+	trustedHostsDefault = '*' # Default trusted hosts for PowerShell remoting
 
 	# WireGuard Settings
-	wireGuardInstallPath = 'C:\Program Files\WireGuard' # Installatiepad van WireGuard
-	wireGuardConfigPath  = 'C:\Program Files\WireGuard\Data\Configurations' # Pad naar WireGuard configuratie bestanden
-	wireGuardInterface   = 'wg0' # Naam van de WireGuard interface
+	wireGuardInstallPath = 'C:\Program Files\WireGuard' # Installation path of WireGuard
+	wireGuardConfigPath  = 'C:\Program Files\WireGuard\Data\Configurations' # Path to WireGuard configuration files
+	wireGuardInterface   = 'wg0' # Name of the WireGuard interface
 
-	# WireGuard Installatie Instellingen
-	wireGuardInstallerUrlFallback = 'https://download.wireguard.com/windows-client/wireguard-amd64-0.5.3.msi' # Fallback URL voor WireGuard installer
-	wireGuardVersionCheckUrl = 'https://download.wireguard.com/windows-client/' # URL om WireGuard versie te controleren
-	wireGuardVersionRegex = 'href="(wireguard-amd64-([\d.]+)\.msi)"' # Regex om versie uit HTML te extraheren
-	wireGuardInstalledPath = 'C:\Program Files\WireGuard\wireguard.exe' # Pad naar WireGuard executable
-	wireGuardKeysExePath = 'C:\Program Files\WireGuard\wg.exe' # Pad naar WireGuard wg.exe voor sleutelbeheer
-	wireGuardInstallerArguments = '/i "{0}" /qn DO_NOT_LAUNCH=1 /norestart' # Argumenten voor stille installatie
+	# WireGuard Installation Settings
+	wireGuardInstallerUrlFallback = 'https://download.wireguard.com/windows-client/wireguard-amd64-0.5.3.msi' # Fallback URL for WireGuard installer
+	wireGuardVersionCheckUrl = 'https://download.wireguard.com/windows-client/' # URL to check WireGuard version
+	wireGuardVersionRegex = 'href="(wireguard-amd64-([\d.]+)\.msi)"' # Regex to extract version from HTML
+	wireGuardInstalledPath = 'C:\Program Files\WireGuard\wireguard.exe' # Path to WireGuard executable
+	wireGuardKeysExePath = 'C:\Program Files\WireGuard\wg.exe' # Path to WireGuard wg.exe for key management
+	wireGuardInstallerArguments = '/i "{0}" /qn DO_NOT_LAUNCH=1 /norestart' # Arguments for silent installation
 
-	# WireGuard Standaard Instellingen
-	wireGuardDefaultPersistentKeepalive = 25 # Standaard persistent keepalive interval in seconden
-	wireGuardRemoteTempPath = 'C:\Temp' # Remote pad naar tijdelijke bestanden voor WireGuard
-	wireGuardServerConfigDir = 'C:\Program Files\WireGuard\Data\Configurations' # Directory voor server configuraties
-	wireGuardRemoteServerConfigDir = 'C:\WireGuard' # Remote directory voor server configuraties
-	wireGuardRemoteClientConfigDir = 'C:\WireGuardConfigs' # Remote directory voor client configuraties
+	# WireGuard Default Settings
+	wireGuardDefaultPersistentKeepalive = 25 # Default persistent keepalive interval in seconds
+	wireGuardRemoteTempPath = 'C:\Temp' # Remote path to temporary files for WireGuard
+	wireGuardServerConfigDir = 'C:\Program Files\WireGuard\Data\Configurations' # Directory for server configurations
+	wireGuardRemoteServerConfigDir = 'C:\WireGuard' # Remote directory for server configurations
+	wireGuardRemoteClientConfigDir = 'C:\WireGuardConfigs' # Remote directory for client configurations
 }

@@ -1,30 +1,30 @@
 @{
-	# Gebruikersspecifieke instellingen die vaak aangepast worden (Voorbeeld configuratie - kopieer naar Variable.psd1 en pas aan)
+	# User-specific settings that are often adjusted (Example configuration - copy to Variable.psd1 and adjust)
 
-	# VPN config (Voorbeeld)
-	port = 443 # Poort voor VPN verbinding
-	protocol = 'TCP' # Protocol voor VPN (TCP of UDP)
-	vpnSubnet = '10.8.0.0' # Subnet voor VPN netwerk
-	vpnMask = '255.255.255.0' # Subnet mask voor VPN netwerk
-	testIP = '10.8.0.1' # Test IP adres binnen VPN subnet
-	dns1 = '8.8.8.8' # Primaire DNS server
-	dns2 = '8.8.4.4' # Secundaire DNS server
+	# VPN config (Example)
+	port = 443 # Port for VPN connection
+	protocol = 'TCP' # Protocol for VPN (TCP or UDP)
+	vpnSubnet = '10.8.0.0' # Subnet for VPN network
+	vpnMask = '255.255.255.0' # Subnet mask for VPN network
+	testIP = '10.8.0.1' # Test IP address within VPN subnet
+	dns1 = '8.8.8.8' # Primary DNS server
+	dns2 = '8.8.4.4' # Secondary DNS server
 	
 	# WireGuard config
-	wireGuardDefaultDns = '8.8.8.8' # Standaard DNS voor WireGuard
-	wireGuardPort       = 51820 # Poort voor WireGuard
-	wireGuardBaseSubnet = '10.13.13' # Basis subnet voor WireGuard
+	wireGuardDefaultDns = '8.8.8.8' # Default DNS for WireGuard
+	wireGuardPort       = 51820 # Port for WireGuard
+	wireGuardBaseSubnet = '10.13.13' # Base subnet for WireGuard
 	
-	# Server configuratie (stel vooraf in om vragen te vermijden - voorbeeld)
-	serverName = 'vpn-server'  # Verplicht: Naam van de VPN server
-	serverIP = 'jouw.server.ip.hier'  # Verplicht: LAN IP van de server
-	serverWanIP = 'jouw.wan.ip.hier'  # Verplicht: WAN IP of DDNS van de server
-	lanSubnet = '192.168.1.0' # Verplicht: LAN subnet van het netwerk achter de VPN server
-	lanMask = '255.255.255.0' # Verplicht: Subnet mask van het LAN netwerk
-	noPass = $true  # Of certificaten zonder wachtwoord gemaakt moeten worden
-	remoteClientIP = "jouw.client.ip.hier" # Verplicht: IP van de client
+	# Server configuration (preset to avoid prompts - example)
+	serverName = 'vpn-server'  # Mandatory: Name of the VPN server
+	serverIP = 'your.server.ip.here'  # Mandatory: LAN IP of the server
+	serverWanIP = 'your.wan.ip.here'  # Mandatory: WAN IP or DDNS of the server
+	lanSubnet = '192.168.1.0' # Mandatory: LAN subnet of the network behind the VPN server
+	lanMask = '255.255.255.0' # Mandatory: Subnet mask of the LAN network
+	noPass = $true  # Whether certificates should be created without a password
+	remoteClientIP = "your.client.ip.here" # Mandatory: IP of the client
 
-	# client configuratie (Voorbeeld)
-	clientName = 'client1'  # Verplicht: Naam van de VPN client
-	clientCSVPath = "output\test_clients.csv" # Pad naar CSV bestand met extra clients
+	# client configuration (Example)
+	clientName = 'client1'  # Mandatory: Name of the VPN client
+	clientCSVPath = "output\test_clients.csv" # Path to CSV file with extra clients
 }
