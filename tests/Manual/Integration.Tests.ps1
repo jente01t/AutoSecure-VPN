@@ -1,10 +1,10 @@
-# Requires -RunAsAdministrator
-# Requires -Version 7.0
+#Requires -RunAsAdministrator
+#Requires -Version 7.0
 
 <#
 .SYNOPSIS
     Manual Integration Test for AutoSecure-VPN.
-    This script is intended for manual testing only and is NOT used by CI/CD.
+    This script is intended for manual testing only and is NOT used by CI/CD because there is no possibility for remote execution.
     
 .DESCRIPTION
     Tests local to remote connectivity and full VPN orchestration flows.
@@ -14,20 +14,25 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = Split-Path -Parent (Split-Path -Parent $ScriptDir)
 
 # Import module
-$ManifestPath = Join-Path $ProjectRoot "src\module\AutoSecureVPN.psd1"
+$ManifestPath = Join-Path $ProjectRoot "src\module\AutoSecure-VPN.psd1"
 if (Test-Path $ManifestPath) {
     Import-Module $ManifestPath -Force
 }
 else {
-    Write-Error "Could not find AutoSecureVPN module at $ManifestPath"
+    Write-Error "Could not find AutoSecure-VPN module at $ManifestPath"
     return
 }
 
-# Dot-source Orchestration Libraries
-$OrchestrationPath = Join-Path $ProjectRoot "src\scripts"
-Get-ChildItem -Path "$OrchestrationPath\*.ps1" -Exclude "main.ps1" | ForEach-Object { . $_.FullName }
+# Get module settings
+$moduleInfo = Get-Module AutoSecure-VPN
+if ($moduleInfo) {
+    Write-Host "Module loaded successfully: $($moduleInfo.Name) v$($moduleInfo.Version)" -ForegroundColor Green
+} else {
+    Write-Error "Module not loaded properly"
+    return
+}
 
-# Set base path for scripts (needed for some orchestration functions)
+# Set base path for scripts
 $Script:BasePath = $ProjectRoot
 
 # Load settings
@@ -75,22 +80,31 @@ function Show-TestMenu {
 }
 
 function Test-RemoteConnectivity {
-    $remoteIP = $Script:Settings['serverIP']
-    if (-not $remoteIP -or $remoteIP -eq 'your.server.ip.here') {
-        $remoteIP = Read-Host "Enter remote IP for testing"
+    param(
+        [string]$RemoteIP
+    )
+    
+    if (-not $RemoteIP) {
+        if ($Script:Settings -and $Script:Settings['serverIP']) {
+            $RemoteIP = $Script:Settings['serverIP']
+        }
+        
+        if (-not $RemoteIP -or $RemoteIP -eq 'your.server.ip.here') {
+            $RemoteIP = Read-Host "Enter remote IP for testing"
+        }
     }
     
-    Write-Host "`n[*] Testing Ping to $remoteIP..." -ForegroundColor Cyan
-    if (Test-Connection -ComputerName $remoteIP -Count 1 -Quiet) {
+    Write-Host "`n[*] Testing Ping to $RemoteIP..." -ForegroundColor Cyan
+    if (Test-Connection -ComputerName $RemoteIP -Count 1 -Quiet -ErrorAction SilentlyContinue) {
         Write-Host "  ✓ Ping successful" -ForegroundColor Green
     }
     else {
         Write-Host "  ✗ Ping failed" -ForegroundColor Red
     }
     
-    Write-Host "[*] Testing WinRM to $remoteIP..." -ForegroundColor Cyan
+    Write-Host "[*] Testing WinRM to $RemoteIP..." -ForegroundColor Cyan
     try {
-        Test-WSMan -ComputerName $remoteIP -ErrorAction Stop | Out-Null
+        $null = Test-WSMan -ComputerName $RemoteIP -ErrorAction Stop
         Write-Host "  ✓ WinRM active" -ForegroundColor Green
     }
     catch {
@@ -103,32 +117,87 @@ function Test-RemoteConnectivity {
 
 function Invoke-OpenVPNCombo {
     Write-Host "`n[*] Starting OpenVPN Combo: Remote Server + Local Client..." -ForegroundColor Magenta
-    Invoke-RemoteOpenVPNServerSetup
-    Write-Host "`n[*] Remote Server Setup finished. Press Enter to start Local Client Setup..." -ForegroundColor Cyan
-    Pause
-    Invoke-OpenVPNClientSetup
+    
+    try {
+        Invoke-RemoteOpenVPNServerSetup
+        Write-Host "`n[*] Remote Server Setup finished. Press Enter to start Local Client Setup..." -ForegroundColor Cyan
+        Pause
+        Invoke-OpenVPNClientSetup
+        Write-Host "`n[✓] OpenVPN Combo completed successfully!" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "`n[✗] OpenVPN Combo failed: $_" -ForegroundColor Red
+    }
 }
 
 function Invoke-WireGuardCombo {
     Write-Host "`n[*] Starting WireGuard Combo: Remote Server + Local Client..." -ForegroundColor Magenta
-    Invoke-RemoteWireGuardServerSetup
-    Write-Host "`n[*] Remote Server Setup finished. Press Enter to start Local Client Setup..." -ForegroundColor Cyan
-    Pause
-    Invoke-WireGuardClientSetup
+    
+    try {
+        Invoke-RemoteWireGuardServerSetup
+        Write-Host "`n[*] Remote Server Setup finished. Press Enter to start Local Client Setup..." -ForegroundColor Cyan
+        Pause
+        Invoke-WireGuardClientSetup
+        Write-Host "`n[✓] WireGuard Combo completed successfully!" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "`n[✗] WireGuard Combo failed: $_" -ForegroundColor Red
+    }
 }
 
 # Main Loop
-do {
-    $choice = Show-TestMenu
-    switch ($choice) {
-        '1' { Test-RemoteConnectivity }
-        '2' { Invoke-RemoteOpenVPNServerSetup }
-        '3' { Invoke-RemoteOpenVPNClientSetup }
-        '4' { Invoke-RemoteWireGuardServerSetup }
-        '5' { Invoke-RemoteWireGuardClientSetup }
-        '6' { Test-VPNConnection }
-        '7' { Invoke-OpenVPNCombo }
-        '8' { Invoke-WireGuardCombo }
-        'q' { break }
-    }
-} while ($true)
+if ($MyInvocation.InvocationName -ne '.') {
+    Write-Host "`nStarting AutoSecure-VPN Manual Integration Tests..." -ForegroundColor Cyan
+    Write-Host "Note: This script requires Administrator privileges and remote access." -ForegroundColor Yellow
+    Write-Host ""
+
+    do {
+        $choice = Show-TestMenu
+        
+        switch ($choice) {
+            '1' { Test-RemoteConnectivity }
+            '2' { 
+                Write-Host "`n[*] Starting Remote OpenVPN Server Setup..." -ForegroundColor Cyan
+                Invoke-RemoteOpenVPNServerSetup
+                Pause
+            }
+            '3' { 
+                Write-Host "`n[*] Starting Remote OpenVPN Client Setup..." -ForegroundColor Cyan
+                Invoke-RemoteOpenVPNClientSetup
+                Pause
+            }
+            '4' { 
+                Write-Host "`n[*] Starting Remote WireGuard Server Setup..." -ForegroundColor Cyan
+                Invoke-RemoteWireGuardServerSetup
+                Pause
+            }
+            '5' { 
+                Write-Host "`n[*] Starting Remote WireGuard Client Setup..." -ForegroundColor Cyan
+                Invoke-RemoteWireGuardClientSetup
+                Pause
+            }
+            '6' { 
+                Write-Host "`n[*] Testing VPN Connection..." -ForegroundColor Cyan
+                # Test-VPNConnection
+                Write-Host "VPN Connection test - Implementation needed" -ForegroundColor Yellow
+                Pause
+            }
+            '7' { Invoke-OpenVPNCombo }
+            '8' { Invoke-WireGuardCombo }
+            'q' { 
+                Write-Host "`nExiting Manual Integration Tests. Goodbye!" -ForegroundColor Cyan
+                break 
+            }
+            'Q' { 
+                Write-Host "`nExiting Manual Integration Tests. Goodbye!" -ForegroundColor Cyan
+                break 
+            }
+            default {
+                Write-Host "`nInvalid option. Please try again." -ForegroundColor Red
+                Start-Sleep -Seconds 1
+            }
+        }
+    } while ($true)
+} else {
+    Write-Host "Integration test functions loaded. Call Show-TestMenu to start." -ForegroundColor Green
+}

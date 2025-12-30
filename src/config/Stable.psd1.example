@@ -28,7 +28,6 @@
 	# Logging Settings
 	logFileName    = 'vpn-setup.log' # Name of the log file
 	logTimestampFormat = 'yyyy-MM-dd HH:mm:ss' # Format for timestamps in logs
-	transcriptFileName = 'transcript.log' # Name of the transcript file
 
 	# Remote and TrustedHosts
 	trustedHostsDefault = '*' # Default trusted hosts for PowerShell remoting
