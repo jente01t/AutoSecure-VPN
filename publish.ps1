@@ -16,13 +16,27 @@ if (-not (Test-Path $ManifestPath)) { Throw 'Module manifest not found at expect
 if ($AutoIncrement) {
     Write-Host "Auto-incrementing version..." -ForegroundColor Yellow
 
-    # Read current version from manifest
-    $manifestContent = Get-Content -Path $ManifestPath -Raw
-    $versionMatch = [regex]::Match($manifestContent, "ModuleVersion\s*=\s*'([^']+)'")
-    if ($versionMatch.Success) {
-        $currentVersion = $versionMatch.Groups[1].Value
-        Write-Host "Current version: $currentVersion" -ForegroundColor Cyan
+    # Get the latest version from PowerShell Gallery
+    try {
+        $latestModule = Find-Module -Name 'AutoSecure-VPN' -Repository 'PSGallery' -ErrorAction Stop
+        $currentVersion = $latestModule.Version.ToString()
+        Write-Host "Latest version in gallery: $currentVersion" -ForegroundColor Cyan
+    }
+    catch {
+        Write-Warning "Could not find module in gallery. Using local manifest version."
+        # Fallback to local manifest
+        $manifestContent = Get-Content -Path $ManifestPath -Raw
+        $versionMatch = [regex]::Match($manifestContent, "ModuleVersion\s*=\s*'([^']+)'")
+        if ($versionMatch.Success) {
+            $currentVersion = $versionMatch.Groups[1].Value
+            Write-Host "Current local version: $currentVersion" -ForegroundColor Cyan
+        } else {
+            Write-Warning "Could not find ModuleVersion in manifest. Skipping auto-increment."
+            $AutoIncrement = $false
+        }
+    }
 
+    if ($AutoIncrement) {
         # Parse version (assuming semantic versioning: major.minor.patch)
         $versionParts = $currentVersion -split '\.'
         if ($versionParts.Length -eq 3) {
@@ -37,15 +51,16 @@ if ($AutoIncrement) {
             Write-Host "New version: $newVersion" -ForegroundColor Green
 
             # Update manifest
+            $manifestContent = Get-Content -Path $ManifestPath -Raw
             $newManifestContent = $manifestContent -replace "ModuleVersion\s*=\s*'[^']*'", "ModuleVersion     = '$newVersion'"
             Set-Content -Path $ManifestPath -Value $newManifestContent -Encoding UTF8
         } else {
             Write-Warning "Could not parse version '$currentVersion' as semantic version (major.minor.patch). Skipping auto-increment."
         }
-    } else {
-        Write-Warning "Could not find ModuleVersion in manifest. Skipping auto-increment."
     }
+
 }
+
 
 Write-Host "Publishing AutoSecure-VPN from $ModulePath..." -ForegroundColor Cyan
 
