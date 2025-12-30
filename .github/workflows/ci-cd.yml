@@ -6,6 +6,10 @@ on:
       - dev
       - main
 
+permissions:
+  contents: write
+  packages: write
+
 jobs:
   unit-test:
     runs-on: windows-latest
