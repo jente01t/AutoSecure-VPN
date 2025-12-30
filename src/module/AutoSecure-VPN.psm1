@@ -1,19 +1,23 @@
+#regio Module Header
+# Disclaimer: Function comments and inline comments are generated with Copilot.  
+
+
 #region Module Header
 <#
 .SYNOPSIS
-    AutoSecure-VPN Module - Geautomatiseerde VPN setup voor OpenVPN en WireGuard
+    AutoSecure-VPN Module - Automated VPN setup for OpenVPN and WireGuard.
 
 .DESCRIPTION
-    Deze module biedt complete geautomatiseerde setup voor VPN server en client configuraties.
-    Ondersteunt zowel OpenVPN als WireGuard protocollen.
-    Kan lokaal en remote installaties uitvoeren.
+    This module provides a complete automated setup for VPN server and client configurations.
+    It supports both OpenVPN and WireGuard protocols.
+    It can perform local and remote installations using PowerShell Remoting.
 
 .NOTES
-    Naam:        AutoSecure-VPN.psm1
-    Auteur:      Jente
-    Versie:      1.0
-    Datum:       December 2025
-    Requires:    PowerShell 5.1+
+    Name:        AutoSecure-VPN.psm1
+    Author:      Jente
+    Version:     1.0
+    Date:        December 2025
+    Requires:    PowerShell 7.0+
 #>
 
 #Requires -Version 7.0
@@ -25,20 +29,28 @@ param()
 
 
 
-# Set base path
-# When module is installed via Install-Module, use user's Documents folder for logs/output
-# When running from development folder, use project root
+# Set base path logic
+# When module is installed via Install-Module, use user's Documents folder for logs/output to avoid permission issues.
+# When running from development folder (e.g. git clone), use the project root.
 if ($PSScriptRoot -match 'Documents\\PowerShell\\Modules|Program Files\\WindowsPowerShell\\Modules') {
-    # Module is installed - use user's Documents folder
+    # Module is installed in a standard library location - use user's Documents folder
     $Script:BasePath = [Environment]::GetFolderPath('MyDocuments')
-} else {
-    # Module is in development - use project root
+}
+else {
+    # Module is in development/source mode - use the project root (parent of the module folder)
     $Script:BasePath = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 }
 
 
-
-# CoreSetup.ps1
+#region Core / Menu System
+# =================================================================================================
+# REGION: Core / Menu System
+# =================================================================================================
+# This section contains the main entry points and menu logic for the AutoSecure-VPN module.
+# It handles the initial user selection for Server/Client modes, protocol selection (OpenVPN/WireGuard),
+# and the choice between Local and Remote deployment strategies.
+# Key Functions: Start-VPNSetup, Select-ServerMode, Select-ClientMode, Select-VPNProtocol.
+# =================================================================================================
 
 function Start-VPNSetup {
     <#
@@ -47,21 +59,25 @@ function Start-VPNSetup {
 
     .DESCRIPTION
         This function shows a menu with options for server or client setup selection.
+        It initializes the configuration settings by loading .psd1 files before displaying the menu.
 
     .EXAMPLE
         Start-VPNSetup
     #>
     
     # Load settings here so messages are visible before menu clears console
+    # Check if the global Settings hashtable is empty
     if ($Script:Settings.Count -eq 0) {
         try {
-            # Load stable settings first (from module directory)
+            # Load stable settings first (defaults from module directory)
             $stableConfigPath = Join-Path $PSScriptRoot 'Stable.psd1'
             if (Test-Path $stableConfigPath) {
+                # Import the PSD1 data file safely
                 $stableSettings = Import-PowerShellDataFile -Path $stableConfigPath -ErrorAction Stop
                 if ($stableSettings) { $Script:Settings = $stableSettings.Clone() }
-            } else {
-                # Check if example file exists and provide helpful message
+            }
+            else {
+                # Check if example file exists and provide helpful message if configuration is missing
                 $examplePath = Join-Path $PSScriptRoot 'Stable.psd1.example'
                 if (Test-Path $examplePath) {
                     Write-Host "Configuration file 'Stable.psd1' not found." -ForegroundColor Yellow
@@ -71,17 +87,19 @@ function Start-VPNSetup {
                 }
             }
             
-            # Load variable settings and merge (variable overrides stable)
+            # Load variable settings and merge (variable overrides stable defaults)
             $variableConfigPath = Join-Path $PSScriptRoot 'Variable.psd1'
             if (Test-Path $variableConfigPath) {
                 $variableSettings = Import-PowerShellDataFile -Path $variableConfigPath -ErrorAction Stop
                 if ($variableSettings) {
+                    # Loop through variable settings and update the main Settings hashtable
                     foreach ($key in $variableSettings.Keys) {
                         $Script:Settings[$key] = $variableSettings[$key]
                     }
                 }
-            } else {
-                # Check if example file exists and provide helpful message
+            }
+            else {
+                # Check if example file exists and provide helpful message for the variable config
                 $examplePath = Join-Path $PSScriptRoot 'Variable.psd1.example'
                 if (Test-Path $examplePath) {
                     Write-Host "Configuration file 'Variable.psd1' not found." -ForegroundColor Yellow
@@ -92,6 +110,7 @@ function Start-VPNSetup {
             }
         }
         catch {
+            # Handle any errors during configuration loading (e.g., syntax errors in PSD1)
             Write-Host "Could not load settings: $($_.Exception.Message)" -ForegroundColor Yellow
             exit 1
         }
@@ -99,8 +118,10 @@ function Start-VPNSetup {
     
     Write-Log "=== AutoSecure-VPN Automatic Setup Started ===" -Level "INFO"
     
+    # Display the main menu
     $choice = Show-Menu -Mode Menu -Title "AutoSecure-VPN Automatic Setup" -Options @("Server Setup", "Client Setup", "Exit") -HeaderColor Cyan -OptionColor Green -FooterColor Cyan -Prompt "Enter your choice (1-3)"
     
+    # Process user choice
     switch ($choice) {
         1 {
             Write-Host "`n[*] Server Setup selected..." -ForegroundColor Cyan
@@ -124,6 +145,7 @@ function Start-VPNSetup {
         }
     }
 }
+
 function Select-ServerMode {
     <#
     .SYNOPSIS
@@ -131,6 +153,7 @@ function Select-ServerMode {
 
     .DESCRIPTION
         This function shows a submenu for choosing between local or remote server setup.
+        It routes the logic to the specific protocol handlers (OpenVPN/WireGuard).
 
     .EXAMPLE
         Select-ServerMode
@@ -143,6 +166,7 @@ function Select-ServerMode {
             Write-Host "`n[*] Local Server Setup selected..." -ForegroundColor Cyan
             Write-Log "Local Server Setup selected" -Level "INFO"
             
+            # Ask for protocol and execute corresponding local setup
             $protocol = Select-VPNProtocol
             if ($protocol -eq "OpenVPN") {
                 Invoke-OpenVPNServerSetup
@@ -155,6 +179,7 @@ function Select-ServerMode {
             Write-Host "`n[*] Remote Server Setup selected..." -ForegroundColor Cyan
             Write-Log "Remote Server Setup selected" -Level "INFO"
             
+            # Ask for protocol and execute corresponding remote setup
             $protocol = Select-VPNProtocol
             if ($protocol -eq "OpenVPN") {
                 Invoke-RemoteOpenVPNServerSetup
@@ -175,13 +200,14 @@ function Select-ServerMode {
         }
     }
 }
+
 function Select-ClientMode {
     <#
     .SYNOPSIS
         Displays submenu for client setup choice (local or remote).
 
     .DESCRIPTION
-        This function shows a submenu for choosing between local or remote client setup.
+        This function shows a submenu for choosing between local, remote, or batch client setup.
 
     .EXAMPLE
         Select-ClientMode
@@ -217,6 +243,7 @@ function Select-ClientMode {
         3 {
             Write-Host "`n[*] Batch Remote Client Setup selected..." -ForegroundColor Cyan
             Write-Log "Batch Remote Client Setup selected" -Level "INFO"
+            # Batch setup handles protocol selection internally
             Invoke-BatchRemoteClientSetup
         }
         4 {
@@ -231,6 +258,7 @@ function Select-ClientMode {
         }
     }
 }
+
 function Select-VPNProtocol {
     <#
     .SYNOPSIS
@@ -245,8 +273,18 @@ function Select-VPNProtocol {
 }
 
 
+#endregion Core / Menu System
+#region OpenVPN Setup Orchestration
 
-# OpenVPNSetup.ps1
+# =================================================================================================
+# REGION: OpenVPN Setup Orchestration
+# =================================================================================================
+# This section contains the high-level orchestration functions for OpenVPN deployments.
+# It coordinates the setup process for both Client and Server roles, covering both
+# Local execution and Remote execution via PowerShell Remoting.
+# Key Functions: Invoke-OpenVPNClientSetup, Invoke-RemoteOpenVPNClientSetup, 
+#                Invoke-OpenVPNServerSetup, Invoke-RemoteOpenVPNServerSetup, Invoke-BatchRemoteClientSetup.
+# =================================================================================================
 
 function Invoke-OpenVPNClientSetup {
     <#
@@ -266,6 +304,7 @@ function Invoke-OpenVPNClientSetup {
         # Step 1: Administrator check
         Write-Progress -Activity "Client Setup" -Status "Step 1 of 6: Checking administrator privileges" -PercentComplete 0
         Write-Host "`n[1/6] Checking administrator privileges..." -ForegroundColor Cyan
+        # Verify if the script is running with elevated privileges
         if (-not (Test-IsAdmin)) {
             throw "Script must be run as Administrator!"
         }
@@ -276,6 +315,7 @@ function Invoke-OpenVPNClientSetup {
         # Step 2: Install OpenVPN
         Write-Progress -Activity "Client Setup" -Status "Step 2 of 6: Installing OpenVPN" -PercentComplete 16.67
         Write-Host "`n[2/6] Installing OpenVPN..." -ForegroundColor Cyan
+        # Download and run the OpenVPN installer
         if (-not (Install-OpenVPN)) {
             throw "OpenVPN installation failed"
         }
@@ -286,6 +326,7 @@ function Invoke-OpenVPNClientSetup {
         # Step 3: Import client configuration
         Write-Progress -Activity "Client Setup" -Status "Step 3 of 6: Importing client configuration" -PercentComplete 33.33
         Write-Host "`n[3/6] Importing client configuration..." -ForegroundColor Cyan
+        # Prompt user for ZIP file or use default, then extract to config folder
         $configPath = Import-ClientConfiguration
         if (-not $configPath) {
             throw "Client configuration import failed"
@@ -297,6 +338,7 @@ function Invoke-OpenVPNClientSetup {
         # Step 4: Check TAP adapter
         Write-Progress -Activity "Client Setup" -Status "Step 4 of 6: Checking TAP adapter" -PercentComplete 50
         Write-Host "`n[4/6] Checking TAP adapter..." -ForegroundColor Cyan
+        # Verify if the TAP network driver was installed correctly
         if (-not (Test-TAPAdapter)) {
             Write-Host "  ! TAP adapter not found, OpenVPN may need to be reinstalled" -ForegroundColor Yellow
             Write-Log "TAP adapter not found" -Level "WARNING"
@@ -311,6 +353,7 @@ function Invoke-OpenVPNClientSetup {
         # Step 5: Start VPN connection
         Write-Progress -Activity "Client Setup" -Status "Step 5 of 6: Starting VPN connection" -PercentComplete 66.67
         Write-Host "`n[5/6] Starting VPN connection..." -ForegroundColor Cyan
+        # Launch OpenVPN GUI/Service with the imported config
         if (-not (Start-VPNConnection -ConfigFile $configPath)) {
             throw "Starting VPN connection failed"
         }
@@ -321,7 +364,8 @@ function Invoke-OpenVPNClientSetup {
         # Step 6: Test connection
         Write-Progress -Activity "Client Setup" -Status "Step 6 of 6: Testing VPN connection" -PercentComplete 83.33
         Write-Host "`n[6/6] Testing VPN connection..." -ForegroundColor Cyan
-        Start-Sleep -Seconds 30  # Wait longer for connection to be fully established
+        Start-Sleep -Seconds 30  # Wait longer for connection to be fully established (Handshake time)
+        # Ping the test IP to verify tunnel traffic
         $testResult = Test-VPNConnection
         if (-not $testResult) {
             throw "VPN connection test failed"
@@ -334,24 +378,27 @@ function Invoke-OpenVPNClientSetup {
         Show-Menu -Mode Success -SuccessTitle "Client Setup Successfully Completed!" -LogFile $script:LogFile
     }
     catch {
+        # Error handling block
         Write-Progress -Activity "Client Setup" -Completed
         Write-Log "Error during Client Setup: $($_.Exception.Message)" -Level "ERROR"
         $choice = Show-Menu -Mode Error -SuccessTitle "Client Setup Failed!" -LogFile $script:LogFile -ExtraMessage "Check the log file for details." -Options @("Try again", "Back to main menu", "Exit")
+        
+        # Error recovery options
         switch ($choice) {
             1 {
-                # Perform rollback before retrying
+                # Perform rollback (cleanup) before retrying
                 Write-Host "`n[*] Performing rollback to undo changes..." -ForegroundColor Yellow
                 Invoke-Rollback -SetupType "Client"
                 Invoke-OpenVPNClientSetup
             }
             2 {
-                # Perform rollback before returning to main menu
+                # Rollback and return to menu
                 Write-Host "`n[*] Performing rollback to undo changes..." -ForegroundColor Yellow
                 Invoke-Rollback -SetupType "Client"
                 Start-VPNSetup
             }
             3 {
-                # Perform rollback before exiting
+                # Rollback and exit
                 Write-Host "`n[*] Performing rollback to undo changes..." -ForegroundColor Yellow
                 Invoke-Rollback -SetupType "Client"
                 exit
@@ -359,6 +406,7 @@ function Invoke-OpenVPNClientSetup {
         }
     }
 }
+
 function Invoke-RemoteOpenVPNClientSetup {
     <#
     .SYNOPSIS
@@ -388,7 +436,7 @@ function Invoke-RemoteOpenVPNClientSetup {
         Write-Progress -Activity "Remote Client Setup" -Status "Step 2 of 5: Remote computer configuration" -PercentComplete 20
         Write-Host "`n[2/5] Remote computer configuration..." -ForegroundColor Cyan
 
-        # Retrieve and validate remoteClientIP; if empty -> error (no prompt)
+        # Retrieve and validate remoteClientIP from loaded settings
         try {
             if ($Script:Settings.ContainsKey('remoteClientIP') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.remoteClientIP) -and $Script:Settings.remoteClientIP -ne 'your.client.ip.here') {
                 $computerName = $Script:Settings.remoteClientIP
@@ -399,6 +447,7 @@ function Invoke-RemoteOpenVPNClientSetup {
             Write-Verbose "Error retrieving remoteClientIP from settings: $_"
         }
 
+        # Validate that we have a target
         if ([string]::IsNullOrWhiteSpace($computerName)) {
             throw "Setting 'remoteClientIP' is empty or invalid in Variable.psd1. Please fill in 'remoteClientIP' or adjust the configuration."
         }
@@ -408,14 +457,18 @@ function Invoke-RemoteOpenVPNClientSetup {
         Write-Log "Remote computer: $computerName" -Level "INFO"
         
         # Step 3: WinRM configuration
+        # Checks if the remote host is trusted to allow PowerShell Remoting connections
         Write-Progress -Activity "Remote Client Setup" -Status "Step 3 of 5: Checking WinRM configuration" -PercentComplete 40
         Write-Host "`n[3/5] Checking WinRM configuration..." -ForegroundColor Cyan
         try {
+            # Get current TrustedHosts list
             $trustedHosts = (Get-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WSMAN\Client -Name TrustedHosts -ErrorAction Stop).TrustedHosts
         }
         catch {
             $trustedHosts = ""
         }
+        
+        # Update TrustedHosts if necessary (adds target IP if not present)
         if ($trustedHosts -notlike "*$computerName*" -and $trustedHosts -ne "*") {
             Write-Host "  Remote computer not in TrustedHosts. Adding..." -ForegroundColor Yellow
             Set-Item WSMan:\localhost\client\TrustedHosts -Value $computerName -Concatenate -Force
@@ -435,6 +488,7 @@ function Invoke-RemoteOpenVPNClientSetup {
             Write-Log "$computerName is already in TrustedHosts" -Level "INFO"
         }
         
+        # Test basic connectivity to the WinRM service on the remote host
         Write-Host "  Checking if PSRemoting is active on remote machine..." -ForegroundColor Cyan
         try {
             Test-WSMan -ComputerName $computerName -ErrorAction Stop | Out-Null
@@ -455,6 +509,7 @@ function Invoke-RemoteOpenVPNClientSetup {
         # Step 4: Credentials
         Write-Progress -Activity "Remote Client Setup" -Status "Step 4 of 5: Authentication" -PercentComplete 60
         Write-Host "`n[4/5] Authentication..." -ForegroundColor Cyan
+        # Ask user for remote Admin credentials
         $cred = Get-Credential -Message "Enter credentials for $computerName (must be Administrator)"
         if (-not $cred) {
             throw "Credentials are required"
@@ -463,12 +518,14 @@ function Invoke-RemoteOpenVPNClientSetup {
         Write-Verbose "Credentials successfully entered for $computerName"
         Write-Log "Credentials entered for $computerName" -Level "INFO"
         
-        # Step 5: Client ZIP file
+        # Step 5: Client ZIP file selection
         Write-Progress -Activity "Remote Client Setup" -Status "Step 5 of 5: Client configuration file" -PercentComplete 80
         Write-Host "`n[5/5] Client configuration file..." -ForegroundColor Cyan
-        # Determine default client name (multiple settings keys possible)
+        # Determine default client name based on settings
         $clientDefaultName = if ($Script:Settings.ContainsKey('clientName') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.clientName)) { $Script:Settings.clientName } else { 'client' }
         $defaultZipPath = Join-Path $Script:Settings.OutputPath "vpn-client-$clientDefaultName.zip"
+        
+        # Check if the auto-generated zip file exists
         if (Test-Path $defaultZipPath) {
             $zipPath = $defaultZipPath
             Write-Host "  ✓ Default client ZIP file found: $zipPath" -ForegroundColor Green
@@ -476,6 +533,7 @@ function Invoke-RemoteOpenVPNClientSetup {
             Write-Log "Default client ZIP file found: $zipPath" -Level "INFO"
         }
         else {
+            # Fallback to manual entry if default not found
             Write-Host "  Default client ZIP file not found at $defaultZipPath" -ForegroundColor Yellow
             $zipPath = Read-Host "  Path to client ZIP file (generated by server setup)"
             Write-Verbose "Manual ZIP path entered: $zipPath"
@@ -487,6 +545,7 @@ function Invoke-RemoteOpenVPNClientSetup {
         Write-Log "ZIP file found: $zipPath" -Level "INFO"
         
         # Perform remote installation
+        # This function copies the module and zip to the remote host and executes the setup there
         Write-Progress -Activity "Remote Client Setup" -Status "Performing remote installation" -PercentComplete 90
         Write-Host "`n[*] Starting remote installation..." -ForegroundColor Cyan
         if (-not (Install-RemoteClient -ComputerName $computerName -Credential $cred -ZipPath $zipPath -RemoteConfigPath $Script:Settings.remoteConfigPath)) {
@@ -512,6 +571,7 @@ function Invoke-RemoteOpenVPNClientSetup {
         Show-Menu -Mode Success -SuccessTitle "Remote Client Setup Successfully Completed!" -LogFile $script:LogFile -ExtraMessage "On the remote machine you can now start the VPN connection via OpenVPN." -ComputerName $computerName
     }
     catch {
+        # Error handling for remote client setup
         Write-Progress -Activity "Remote Client Setup" -Completed
         Write-Log "Error during Remote Client Setup: $($_.Exception.Message)" -Level "ERROR"
         $choice = Show-Menu -Mode Error -SuccessTitle "Remote Client Setup Failed!" -LogFile $script:LogFile -ExtraMessage "Check the log file for details." -Options @("Try again", "Back to main menu", "Exit")
@@ -561,6 +621,7 @@ function Invoke-OpenVPNServerSetup {
         # Step 3: Configure firewall
         Write-Progress -Activity "Server Setup" -Status "Step 3 of 8: Configuring Windows Firewall" -PercentComplete 25
         Write-Host "`n[3/8] Configuring Windows Firewall..." -ForegroundColor Cyan
+        # Open the specific port (usually 443 or 1194) in Windows Firewall
         if (-not (Set-Firewall -Port 443 -Protocol "TCP")) {
             throw "Firewall configuration failed"
         }
@@ -571,16 +632,20 @@ function Invoke-OpenVPNServerSetup {
         # Step 4: Collect user input
         Write-Progress -Activity "Server Setup" -Status "Step 4 of 8: Collecting server configuration parameters" -PercentComplete 37.5
         Write-Host "`n[4/8] Server configuration parameters..." -ForegroundColor Cyan
+        # Ask user for Subnet, IP, etc. or load from settings
         $serverConfig = Get-ServerConfiguration
         Write-Verbose "Server configuration parameters collected: $($serverConfig | ConvertTo-Json)"
         Write-Log "Server configuration parameters collected" -Level "INFO"
         
-        # Step 5: EasyRSA and certificates
+        # Step 5: EasyRSA and certificates (The PKI step)
         Write-Progress -Activity "Server Setup" -Status "Step 5 of 8: Generating certificates" -PercentComplete 50
         Write-Host "`n[5/8] Generating certificates (this may take a while)..." -ForegroundColor Cyan
+        
+        # Setup the EasyRSA environment (download/extract)
         if (-not (Initialize-EasyRSA)) {
             throw "EasyRSA initialization failed"
         }
+        # Generate CA and Server certificates
         if (-not (Initialize-Certificates -ServerName $serverConfig.ServerName -Password $serverConfig.Password)) {
             throw "Certificate generation failed"
         }
@@ -591,6 +656,7 @@ function Invoke-OpenVPNServerSetup {
         # Step 6: Generate server configuration
         Write-Progress -Activity "Server Setup" -Status "Step 6 of 8: Creating server configuration" -PercentComplete 62.5
         Write-Host "`n[6/8] Creating server configuration..." -ForegroundColor Cyan
+        # Create server.ovpn file with paths to generated certs
         if (-not (New-ServerConfig -Config $serverConfig)) {
             throw "Server configuration generation failed"
         }
@@ -601,6 +667,7 @@ function Invoke-OpenVPNServerSetup {
         # Step 7: Start OpenVPN service
         Write-Progress -Activity "Server Setup" -Status "Step 7 of 8: Starting OpenVPN service" -PercentComplete 70
         Write-Host "`n[7/8] Starting OpenVPN service..." -ForegroundColor Cyan
+        # Start the Windows Service for OpenVPN
         if (-not (Start-VPNService)) {
             throw "Starting OpenVPN service failed"
         }
@@ -608,7 +675,7 @@ function Invoke-OpenVPNServerSetup {
         Write-Verbose "OpenVPN service successfully started"
         Write-Log "OpenVPN service active" -Level "INFO"
         
-        # Step 7.5: Start OpenVPN via GUI
+        # Step 7.5: Start OpenVPN via GUI (Visual feedback for user)
         Write-Progress -Activity "Server Setup" -Status "Step 7.5 of 8: Starting OpenVPN GUI with server config" -PercentComplete 75
         Write-Host "`n[7.5/8] Starting OpenVPN GUI with server config..." -ForegroundColor Cyan
         $serverConfigFile = Join-Path $Script:Settings.configPath "server.ovpn"
@@ -622,14 +689,14 @@ function Invoke-OpenVPNServerSetup {
             Write-Log "OpenVPN GUI started" -Level "INFO"
         }
         
-        # Wait for TAP adapter to become active
+        # Wait for TAP adapter to become active before trying to configure NAT
         Write-Host "`n[*] Waiting for TAP adapter to initialize..." -ForegroundColor Cyan
         Start-Sleep -Seconds 10
         
         # Step 7.75: Configure ICS for internet access
         Write-Progress -Activity "Server Setup" -Status "Step 7.75 of 8: Configuring ICS for internet access" -PercentComplete 80
         Write-Host "`n[7.75/8] Configuring ICS (Internet Connection Sharing)..." -ForegroundColor Cyan
-        # Configuring NAT for internet access (10.8.0.0/24 = OpenVPN default subnet)
+        # Configuring NAT/ICS so VPN clients can browse the internet through the server
         if (-not (Enable-VPNNAT -VPNSubnet "10.8.0.0/24")) { 
             Write-Host "  ! ICS configuration warning - manual configuration might be needed" -ForegroundColor Yellow
             Write-Log "ICS configuration warning - manual setup might be needed" -Level "WARNING"
@@ -643,6 +710,7 @@ function Invoke-OpenVPNServerSetup {
         # Step 8: Create client package
         Write-Progress -Activity "Server Setup" -Status "Step 8 of 8: Creating client configuration package" -PercentComplete 87.5
         Write-Host "`n[8/8] Creating client configuration package..." -ForegroundColor Cyan
+        # Generate client keys and zip them up
         $zipPath = New-ClientPackage -Config $serverConfig -OutputPath $Script:OutputPath
         if (-not $zipPath) {
             throw "Creating client package failed"
@@ -656,6 +724,7 @@ function Invoke-OpenVPNServerSetup {
         Show-Menu -Mode Success -SuccessTitle "Server Setup Successfully Completed!" -LogFile $script:LogFile -ExtraInfo "Client package: $zipPath" -ExtraMessage "Transfer this ZIP file to the client to establish the connection."
     }
     catch {
+        # Error handling for Server Setup
         Write-Progress -Activity "Server Setup" -Completed
         Write-Log "Error during Server Setup: $($_.Exception.Message)" -Level "ERROR"   
         $choice = Show-Menu -Mode Error -SuccessTitle "Server Setup Failed!" -LogFile $script:LogFile -ExtraMessage "Check the log file for details." -Options @("Try again", "Back to main menu", "Exit")
@@ -667,13 +736,13 @@ function Invoke-OpenVPNServerSetup {
                 Invoke-OpenVPNServerSetup
             }
             2 {
-                # Perform rollback before returning to main menu
+                # Rollback before menu
                 Write-Host "`n[*] Performing rollback to undo changes..." -ForegroundColor Yellow
                 Invoke-Rollback -SetupType "Server"
                 Start-VPNSetup
             }
             3 {
-                # Perform rollback before exiting
+                # Rollback before exit
                 Write-Host "`n[*] Performing rollback to undo changes..." -ForegroundColor Yellow
                 Invoke-Rollback -SetupType "Server"
                 exit
@@ -681,6 +750,7 @@ function Invoke-OpenVPNServerSetup {
         }
     }
 }
+
 function Invoke-RemoteOpenVPNServerSetup {
     <#
     .SYNOPSIS
@@ -705,7 +775,9 @@ function Invoke-RemoteOpenVPNServerSetup {
         Write-Host "  ✓ Administrator privileges confirmed" -ForegroundColor Green
         Write-Verbose "Local administrator privileges successfully checked"
         Write-Log "Administrator privileges confirmed" -Level "INFO"
+
         # Step 1.5: Check local OpenVPN installation
+        # We need local OpenVPN/EasyRSA tools to generate certificates BEFORE sending them to the remote server.
         Write-Progress -Activity "Remote Server Setup" -Status "Step 1.5 of 8: Checking local OpenVPN installation" -PercentComplete 6
         if (-not (Test-Path $Script:Settings.installedPath)) {
             Write-Host "`n[1.5] Installing OpenVPN locally for certificate generation..." -ForegroundColor Cyan
@@ -723,7 +795,8 @@ function Invoke-RemoteOpenVPNServerSetup {
         # Step 2: Remote computer details
         Write-Progress -Activity "Remote Server Setup" -Status "Step 2 of 8: Remote computer configuration" -PercentComplete 12
         Write-Host "`n[2/8] Remote computer configuration..." -ForegroundColor Cyan
-        # Retrieve Settings.serverIP
+        
+        # Retrieve Server IP from settings
         try {
             if ($Script:Settings.ContainsKey('serverIP') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.serverIP) -and $Script:Settings.serverIP -ne 'your.server.ip.here') {
                 $computerName = $Script:Settings.serverIP
@@ -734,8 +807,9 @@ function Invoke-RemoteOpenVPNServerSetup {
             throw "Server IP address is empty in Variable.psd1"
         }
 
+        # Validate target IP
         if ([string]::IsNullOrWhiteSpace($computerName)) {
-            throw "Setting 'remoteClientIP' is empty or invalid in Variable.psd1. Please fill in 'remoteClientIP' or adjust the configuration."
+            throw "Setting 'serverIP' is empty or invalid in Variable.psd1. Please fill in 'serverIP' or adjust the configuration."
         }
         
         Write-Host "  ✓ Remote computer: $computerName" -ForegroundColor Green
@@ -751,6 +825,8 @@ function Invoke-RemoteOpenVPNServerSetup {
         catch {
             $trustedHosts = ""
         }
+        
+        # Add remote host to TrustedHosts if needed
         if ($trustedHosts -notlike "*$computerName*" -and $trustedHosts -ne "*") {
             Write-Host "  Remote computer not in TrustedHosts. Adding..." -ForegroundColor Yellow
             $newTrustedHosts = if ($trustedHosts) { "$trustedHosts,$computerName" } else { $computerName }
@@ -770,6 +846,7 @@ function Invoke-RemoteOpenVPNServerSetup {
             Write-Log "$computerName is already in TrustedHosts" -Level "INFO"
         }
         
+        # Test WSMan connection
         Write-Host "  Checking if PSRemoting is active on remote machine..." -ForegroundColor Cyan
         try {
             Test-WSMan -ComputerName $computerName -ErrorAction Stop | Out-Null
@@ -796,7 +873,7 @@ function Invoke-RemoteOpenVPNServerSetup {
         Write-Verbose "Credentials successfully entered for $computerName"
         Write-Log "Credentials obtained for $computerName" -Level "INFO"
         
-        # Step 5: Obtain server configuration
+        # Step 5: Obtain server configuration details (subnets, etc)
         Write-Progress -Activity "Remote Server Setup" -Status "Step 5 of 8: Obtaining server configuration" -PercentComplete 50
         Write-Host "`n[5/8] Server configuration..." -ForegroundColor Cyan
         $serverConfig = Get-ServerConfiguration
@@ -805,6 +882,7 @@ function Invoke-RemoteOpenVPNServerSetup {
         Write-Log "Server configuration obtained" -Level "INFO"
         
         # Step 6: Generate certificates locally
+        # This is done locally to avoid installing full build tools on the remote server and easier file management.
         Write-Progress -Activity "Remote Server Setup" -Status "Step 6 of 8: Generating certificates locally" -PercentComplete 62
         Write-Host "`n[6/8] Generating certificates locally..." -ForegroundColor Cyan
         $localEasyRSA = $Script:Settings.easyRSAPath
@@ -819,6 +897,7 @@ function Invoke-RemoteOpenVPNServerSetup {
         Write-Log "Certificates generated locally" -Level "INFO"
         
         # Step 7: Perform remote installation
+        # Copies module, certs, and config to remote, then triggers setup via Invoke-Command
         Write-Progress -Activity "Remote Server Setup" -Status "Step 7 of 8: Performing remote server installation" -PercentComplete 75
         Write-Host "`n[7/8] Starting remote server installation..." -ForegroundColor Cyan
         if (-not (Install-RemoteServer -ComputerName $computerName -Credential $cred -ServerConfig $serverConfig -LocalEasyRSAPath $localEasyRSA -RemoteConfigPath $Script:Settings.remoteConfigPath)) {
@@ -844,7 +923,7 @@ function Invoke-RemoteOpenVPNServerSetup {
         Write-Verbose "Remote OpenVPN starting successfully completed for $computerName"
         Write-Log "Remote OpenVPN service started for $computerName" -Level "INFO"
         
-        # Step 7: Create client package
+        # Step 7 (Correction: Step 9): Create client package
         Write-Progress -Activity "Remote Server Setup" -Status "Step 7 of 7: Creating client configuration package" -PercentComplete 86
         Write-Host "`n[7/7] Creating client configuration package..." -ForegroundColor Cyan
         $zipPath = New-ClientPackage -Config $serverConfig -OutputPath $Script:OutputPath
@@ -860,6 +939,7 @@ function Invoke-RemoteOpenVPNServerSetup {
         Show-Menu -Mode Success -SuccessTitle "Remote Server Setup Successfully Completed!" -LogFile $script:LogFile -ExtraMessage "The VPN server is now running on the remote machine." -ComputerName $computerName
     }
     catch {
+        # Error handling for Remote Server Setup
         Write-Progress -Activity "Remote Server Setup" -Completed
         Write-Log "Error during Remote Server Setup: $($_.Exception.Message)" -Level "ERROR"
         $choice = Show-Menu -Mode Error -SuccessTitle "Remote Server Setup Failed!" -LogFile $script:LogFile -ExtraMessage "Check the log file for details." -Options @("Try again", "Back to main menu", "Exit")
@@ -880,7 +960,7 @@ function Invoke-BatchRemoteClientSetup {
     
     Write-Log "=== Batch Remote Client Setup Started ===" -Level "INFO"
     
-    # Keuze protocol
+    # Choose protocol for the batch
     $protocol = Select-VPNProtocol
     
     try {
@@ -890,6 +970,7 @@ function Invoke-BatchRemoteClientSetup {
         if (-not (Test-Path $csvPath)) { throw "CSV file not found: $csvPath" }
         Write-Host "  ✓ CSV file found" -ForegroundColor Green
         
+        # Import client data (CSV must have Name, IP, Username, Password columns)
         $clients = Import-Csv -Path $csvPath
         if ($clients.Count -eq 0) { throw "No clients found in CSV" }
         Write-Log "$($clients.Count) clients found" -Level "INFO"
@@ -901,6 +982,7 @@ function Invoke-BatchRemoteClientSetup {
             $clientDefaultName = if ($Script:Settings.ContainsKey('clientName')) { $Script:Settings.clientName } else { 'client' }
             $defaultZipPath = Join-Path $Script:Settings.OutputPath "vpn-client-$clientDefaultName.zip"
              
+            # Use default zip if found and user confirms
             if (Test-Path $defaultZipPath) {
                 Write-Host "  Default found: $defaultZipPath"
                 if ((Read-Host "  Use? (Y/N)") -match "^[Yy]") { $zipPath = $defaultZipPath }
@@ -911,12 +993,14 @@ function Invoke-BatchRemoteClientSetup {
              
             # Execute Batch OpenVPN
             Write-Host "`n[3/4] Starting Batch OpenVPN Setup..." -ForegroundColor Cyan
+            # Calculate throttling to avoid overwhelming the local machine
             $cpuCores = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
             $throttleLimit = [math]::Max(1, $cpuCores - 1)
             
             # Set module path for batch install
             $ModulePath = Join-Path $PSScriptRoot "../module/AutoSecureVPN.psd1"
              
+            # Run the parallel installation logic
             $results = Invoke-BatchRemoteClientInstall -Clients $clients -ZipPath $zipPath -ModulePath $ModulePath -Settings $Script:Settings -BasePath $Script:BasePath -ThrottleLimit $throttleLimit
              
         }
@@ -924,7 +1008,7 @@ function Invoke-BatchRemoteClientSetup {
             # WireGuard Logic
             Write-Host "`n[2/4] WireGuard Server data..." -ForegroundColor Cyan
             
-            # Try to retrieve data from an existing client config (local)
+            # Try to retrieve data from an existing client config (local) to auto-fill details
             $wgClientConfigMatch = Get-ChildItem -Path $Script:Settings.OutputPath -Filter "wg-client*.conf" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
             
             $serverEndpoint = $null
@@ -939,6 +1023,7 @@ function Invoke-BatchRemoteClientSetup {
                 if ($content -match 'PublicKey\s*=\s*(.*)') { $serverPubKey = $matches[1].Trim() }
             }
             
+            # Manual input if auto-detection failed
             if (-not $serverEndpoint -or -not $serverPubKey) {
                 Write-Host "  Could not automatically find server data." -ForegroundColor Yellow
                 if (-not $serverEndpoint) { $serverEndpoint = Read-Host "  Server Endpoint (Public IP:Port, e.g. 1.2.3.4:51820)" }
@@ -957,13 +1042,14 @@ function Invoke-BatchRemoteClientSetup {
             # Execute Batch WireGuard
             Write-Host "`n[3/4] Starting Batch WireGuard Setup..." -ForegroundColor Cyan
              
-            # Module path fix
+            # Module path fix for WireGuard
             $modPath = Join-Path $PSScriptRoot "../module/AutoSecureVPN.psm1"
             
+            # Run the parallel installation logic for WireGuard
             $results = Invoke-BatchRemoteWireGuardClientInstall -Clients $clients -ServerKeys $serverKeys -ServerEndpoint $serverEndpoint -ModulePath $modPath -Settings $Script:Settings
         }
 
-        # Show results
+        # Show results summary
         Write-Host "`nResults:" -ForegroundColor Yellow
         $successCount = 0
         foreach ($result in $results) {
@@ -993,13 +1079,32 @@ function Invoke-BatchRemoteClientSetup {
 }
 
 
+#endregion OpenVPN Setup Orchestration
+#region WireGuard Setup Orchestration
 
-# WireGuardSetup.ps1
+# =================================================================================================
+# REGION: WireGuard Setup Orchestration
+# =================================================================================================
+# This section contains the high-level orchestration functions for WireGuard deployments.
+# It handles the installation, key generation, and configuration of WireGuard tunnels
+# for both Server and Client roles, including Remote execution and Batch processing.
+# Key Functions: Invoke-WireGuardClientSetup, Invoke-WireGuardServerSetup,
+#                Invoke-RemoteWireGuardServerSetup, Invoke-RemoteWireGuardClientSetup.
+# =================================================================================================
 
 function Invoke-WireGuardClientSetup {
     <#
     .SYNOPSIS
         Performs WireGuard client setup.
+
+    .DESCRIPTION
+        This function handles the installation and configuration of the WireGuard client
+        on the local machine. It checks for admin privileges, installs the software,
+        and imports a configuration file (automatically detected or manually provided).
+        Finally, it starts the WireGuard tunnel service.
+    
+    .EXAMPLE
+        Invoke-WireGuardClientSetup
     #>
     Write-Log "=== WireGuard Client Setup Started ===" -Level "INFO"
     
@@ -1015,10 +1120,12 @@ function Invoke-WireGuardClientSetup {
         
         # Step 3: Import Config / Start Service
         Write-Host "`n[3/3] Importing config..." -ForegroundColor Cyan
+        # Define output path where configs are likely stored
         $outputPath = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "output"
         Write-Log "Output path: $outputPath" -Level "INFO"
         $configPath = ""
 
+        # Try to find an existing configuration file
         if (Test-Path $outputPath) {
             $foundFile = Get-ChildItem -Path $outputPath -Filter "*.conf" | Select-Object -First 1
             if ($foundFile) {
@@ -1028,6 +1135,7 @@ function Invoke-WireGuardClientSetup {
             }
         }
 
+        # If not found automatically, ask user
         if (-not $configPath) {
             $configPath = Read-Host " Automatic not found: Drag the .conf file here or type the path"
             $configPath = $configPath.Trim('"')
@@ -1035,6 +1143,7 @@ function Invoke-WireGuardClientSetup {
         
         if (-not (Test-Path $configPath)) { throw "File not found: $configPath" }
         
+        # Start the WireGuard tunnel using the config
         if (-not (Start-WireGuardService -ConfigPath $configPath)) { throw "Starting tunnel failed" }
         
         Write-Host "  ✓ Tunnel started" -ForegroundColor Green
@@ -1043,52 +1152,65 @@ function Invoke-WireGuardClientSetup {
         
     }
     catch {
-        Write-Log "Fout tijdens WireGuard Client Setup: $_" -Level "ERROR"
-        Show-Menu -Mode Error -SuccessTitle "WireGuard Client Setup Gefaald!" -LogFile $script:LogFile -ExtraMessage $_
+        Write-Log "Error during WireGuard Client Setup: $_" -Level "ERROR"
+        Show-Menu -Mode Error -SuccessTitle "WireGuard Client Setup Failed!" -LogFile $script:LogFile -ExtraMessage $_
     }
 }
+
 function Invoke-WireGuardServerSetup {
     <#
     .SYNOPSIS
-        Voert volledige WireGuard server setup uit.
+        Performs full WireGuard server setup.
+
+    .DESCRIPTION
+        This function executes the complete setup process for a WireGuard server,
+        including installation, firewall configuration, key generation, and service startup.
+        It also handles the creation of the server configuration file and a client configuration
+        package (including QR code).
+
+    .EXAMPLE
+        Invoke-WireGuardServerSetup
     #>
-    Write-Log "=== WireGuard Server Setup Gestart ===" -Level "INFO"
+    Write-Log "=== WireGuard Server Setup Started ===" -Level "INFO"
     
     try {
-        # Stap 1: Admin check
-        Write-Host "`n[1/6] Controleren administrator rechten..." -ForegroundColor Cyan
-        if (-not (Test-IsAdmin)) { throw "Script moet als Administrator worden uitgevoerd!" }
-        Write-Host "  ✓ Administrator rechten bevestigd" -ForegroundColor Green
+        # Step 1: Admin check
+        Write-Host "`n[1/6] Checking administrator privileges..." -ForegroundColor Cyan
+        if (-not (Test-IsAdmin)) { throw "Script must be run as Administrator!" }
+        Write-Host "  ✓ Administrator privileges confirmed" -ForegroundColor Green
         
-        # Stap 2: Installeren
-        Write-Host "`n[2/6] WireGuard installeren..." -ForegroundColor Cyan
-        if (-not (Install-WireGuard)) { throw "WireGuard installatie mislukt" }
-        Write-Host "  ✓ WireGuard geïnstalleerd" -ForegroundColor Green
+        # Step 2: Install
+        Write-Host "`n[2/6] Installing WireGuard..." -ForegroundColor Cyan
+        if (-not (Install-WireGuard)) { throw "WireGuard installation failed" }
+        Write-Host "  ✓ WireGuard installed" -ForegroundColor Green
         
-        # Stap 3: Firewall
+        # Step 3: Firewall
+        # Get port settings
         $wgPort = if ($Script:Settings.wireGuardPort) { $Script:Settings.wireGuardPort } else { 51820 }
         $baseSubnet = if ($Script:Settings.wireGuardBaseSubnet) { $Script:Settings.wireGuardBaseSubnet } else { "10.13.13" }
 
-        Write-Host "`n[3/6] Firewall configureren (UDP $wgPort)..." -ForegroundColor Cyan
-        if (-not (Set-Firewall -Port $wgPort -Protocol "UDP")) { throw "Firewall configuratie mislukt" }
-        Write-Host "  ✓ Firewall geconfigureerd" -ForegroundColor Green
+        Write-Host "`n[3/6] Configuring firewall (UDP $wgPort)..." -ForegroundColor Cyan
+        if (-not (Set-Firewall -Port $wgPort -Protocol "UDP")) { throw "Firewall configuration failed" }
+        Write-Host "  ✓ Firewall configured" -ForegroundColor Green
         
-        # Stap 4: Parameters en Keys
-        Write-Host "`n[4/6] Configuratie en Keys genereren..." -ForegroundColor Cyan
+        # Step 4: Config and Keys
+        Write-Host "`n[4/6] Generating Configuration and Keys..." -ForegroundColor Cyan
         $serverWanIP = $Script:Settings.serverWanIP
+        # Prompt for WAN IP if default or empty
         if (-not $serverWanIP -or $serverWanIP -eq "your.server.wan.ip.here") {
             $serverWanIP = Read-Host "  Enter public IP or DNS of this server"
         }
         
+        # Generate Public/Private Key pairs
         $serverKeys = Initialize-WireGuardKeys
         $clientKeys = Initialize-WireGuardKeys
         Write-Host "  ✓ Keys generated" -ForegroundColor Green
         
-        # Stop existing WireGuard services before creating new config
+        # Stop existing WireGuard services before creating new config to avoid file locks
         Write-Host "  Stopping existing WireGuard tunnels..." -ForegroundColor Gray
         Stop-WireGuardService | Out-Null
         
-        # Server config directory
+        # Ensure Server config directory exists
         $wgConfigDir = "C:\Program Files\WireGuard\Data\Configurations" 
         if (-not (Test-Path $wgConfigDir)) { New-Item -ItemType Directory -Path $wgConfigDir -Force | Out-Null }
         $serverConfigPath = Join-Path $wgConfigDir "wg_server.conf"
@@ -1099,6 +1221,7 @@ function Invoke-WireGuardServerSetup {
             Start-Sleep -Milliseconds 500  # Wait for file system to release
         }
         
+        # Create and write server config file
         New-WireGuardServerConfig -ServerKeys $serverKeys -ClientKeys $clientKeys -Port $wgPort -Address "$baseSubnet.1/24" -PeerAddress "$baseSubnet.2/32" -ServerType "Windows" -OutputPath $serverConfigPath | Out-Null
         
         # Verify server config was created
@@ -1107,14 +1230,14 @@ function Invoke-WireGuardServerSetup {
         }
         Write-Log "Server config verified at: $serverConfigPath" -Level "INFO"
         
-        # Client config directory
+        # Create client config file in output directory
         $outputDir = Join-Path $PSScriptRoot "..\..\output"
         $outputDir = [System.IO.Path]::GetFullPath($outputDir)
         if (-not (Test-Path $outputDir)) { New-Item -ItemType Directory -Path $outputDir -Force | Out-Null }
         $clientConfigPath = Join-Path $outputDir "wg-client.conf"
         $clientConfigContent = New-WireGuardClientConfig -ClientKeys $clientKeys -ServerKeys $serverKeys -ServerAvailableIP $serverWanIP -Port $wgPort -Address "$baseSubnet.2/24" -OutputPath $clientConfigPath
         
-        # QR-code maken
+        # Create QR code for mobile clients
         $qrPath = Join-Path $outputDir "wg-client-qr.png"
         if (New-WireGuardQRCode -ConfigContent $clientConfigContent -OutputPath $qrPath) {
             Write-Host "  ✓ QR-code created: $qrPath" -ForegroundColor Green
@@ -1130,26 +1253,41 @@ function Invoke-WireGuardServerSetup {
         if (-not (Start-WireGuardService -ConfigPath $serverConfigPath)) { throw "Failed to start service" }
         Write-Host "  ✓ Service started" -ForegroundColor Green
         
-        # Stap 7: NAT en IP Forwarding configureren (na service start, wanneer adapter bestaat)
-        Write-Host "`n[7/7] NAT en IP Forwarding configureren..." -ForegroundColor Cyan
-        Start-Sleep -Seconds 2  # Wacht tot adapter beschikbaar is
+        # Step 7: Configure NAT and IP Forwarding (after service start, when adapter exists)
+        Write-Host "`n[7/7] Configuring NAT and IP Forwarding..." -ForegroundColor Cyan
+        Start-Sleep -Seconds 2  # Wait for adapter to be available
         if (-not (Enable-VPNNAT -VPNSubnet "$baseSubnet.0/24")) { 
-            Write-Host "  ! NAT configuratie warning - mogelijk handmatige configuratie nodig" -ForegroundColor Yellow
-            Write-Log "NAT configuratie warning - handmatige setup mogelijk nodig" -Level "WARNING"
+            Write-Host "  ! NAT configuration warning - manual configuration may be required" -ForegroundColor Yellow
+            Write-Log "NAT configuration warning - manual setup may be required" -Level "WARNING"
         }
         else {
-            Write-Host "  ✓ NAT en IP Forwarding geconfigureerd" -ForegroundColor Green
+            Write-Host "  ✓ NAT and IP Forwarding configured" -ForegroundColor Green
         }
         
-        Show-Menu -Mode Success -SuccessTitle "WireGuard Server Setup Voltooid!" -LogFile $script:LogFile -ExtraInfo "Client config: $clientConfigPath`nQR-code: $qrPath" -ExtraMessage "Kopieer het .conf bestand naar de client en importeer het in WireGuard, of scan de QR-code op mobiele apparaten."
+        Show-Menu -Mode Success -SuccessTitle "WireGuard Server Setup Completed!" -LogFile $script:LogFile -ExtraInfo "Client config: $clientConfigPath`nQR-code: $qrPath" -ExtraMessage "Copy the .conf file to the client and import it into WireGuard, or scan the QR code on mobile devices."
         
     }
     catch {
+        # Error handling
         Write-Log "Error during WireGuard Setup: $($_.Exception.Message)" -Level "ERROR"
         Show-Menu -Mode Error -SuccessTitle "WireGuard Setup Failed!" -LogFile $script:LogFile -ExtraMessage $_
     }
 }
+
 function Invoke-RemoteWireGuardServerSetup {
+    <#
+    .SYNOPSIS
+        Perform remote WireGuard Server setup.
+        
+    .DESCRIPTION
+        This function connects to a remote computer via PowerShell Remoting and
+        performs the full WireGuard Server setup sequence. It handles file transfer,
+        remote installation, and configuration.
+        
+    .EXAMPLE
+        Invoke-RemoteWireGuardServerSetup
+    #>
+    function Write-Log { param($Message, $Level = "INFO") Write-Verbose "[$Level] $Message" }
     Write-Log "=== Remote WireGuard Server Setup Started ===" -Level "INFO"
     try {
         # Step 1: Administrator check
@@ -1186,6 +1324,7 @@ function Invoke-RemoteWireGuardServerSetup {
         Write-Verbose "Generating client keys..."
         $clientKeys = Initialize-WireGuardKeys
         
+        # Get network settings
         $wgPort = if ($Script:Settings.wireGuardPort) { $Script:Settings.wireGuardPort } else { 51820 }
         $baseSubnet = if ($Script:Settings.wireGuardBaseSubnet) { $Script:Settings.wireGuardBaseSubnet } else { "10.13.13" }
         $port = $wgPort
@@ -1198,7 +1337,7 @@ function Invoke-RemoteWireGuardServerSetup {
             throw "Setting 'serverWanIP' is empty or invalid in Variable.psd1."
         }
         
-        # Create Configs
+        # Create Configs in temporary location for transfer
         Write-Verbose "Creating configurations..."
         Write-Verbose "Creating server config..."
         $serverConfPath = Join-Path $env:TEMP "wg_server_remote.conf"
@@ -1218,6 +1357,7 @@ function Invoke-RemoteWireGuardServerSetup {
         # Step 5: Install Remote
         Write-Progress -Activity "Remote WireGuard Setup" -Status "Step 5 of 6: Performing remote installation" -PercentComplete 66
         Write-Host "`n[5/6] Starting remote installation..." -ForegroundColor Cyan
+        # Push configuration and install to remote
         if (Install-RemoteWireGuardServer -ComputerName $computerName -Credential $cred -ServerConfigContent $serverConfContent -RemoteConfigPath "C:\WireGuard" -Port $port) {
             
             # Step 5.5: Configure NAT and IP Forwarding (handled within Install-RemoteWireGuardServer but adding orchestrator reporting)
@@ -1235,7 +1375,20 @@ function Invoke-RemoteWireGuardServerSetup {
         Show-Menu -Mode Error -SuccessTitle "Remote Setup Failed" -ExtraMessage $_
     }
 }
+
 function Invoke-RemoteWireGuardClientSetup {
+    <#
+    .SYNOPSIS
+        Perform remote WireGuard Client setup.
+        
+    .DESCRIPTION
+        This function connects to a remote computer via PowerShell Remoting and
+        executes the WireGuard Client setup. It can deploy a specific client configuration.
+        
+    .EXAMPLE
+        Invoke-RemoteWireGuardClientSetup
+    #>
+    function Write-Log { param($Message, $Level = "INFO") Write-Verbose "[$Level] $Message" }
     Write-Log "=== Remote WireGuard Client Setup Started ===" -Level "INFO"
     try {
         if (-not (Test-IsAdmin)) { throw "Must be run as Administrator" }
@@ -1258,6 +1411,7 @@ function Invoke-RemoteWireGuardClientSetup {
         Write-Log "Output path: $outputPath" -Level "INFO"
         $confPath = ""
 
+        # Auto-detect config file
         if (Test-Path $outputPath) {
             $foundFile = Get-ChildItem -Path $outputPath -Filter "*.conf" | Select-Object -First 1
             if ($foundFile) {
@@ -1267,6 +1421,7 @@ function Invoke-RemoteWireGuardClientSetup {
             }
         }
 
+        # Manual input if auto-detect fails
         if (-not $confPath) {
             $confPath = Read-Host " Automatic not found: Drag the .conf file here or type the path"
             $confPath = $confPath.Trim('"')
@@ -1279,6 +1434,7 @@ function Invoke-RemoteWireGuardClientSetup {
         
         Write-Host "`nStarting remote WireGuard client installation on $computerName..." -ForegroundColor Cyan
         Write-Verbose "Starting remote client installation..."
+        # Trigger remote installation
         if (Install-RemoteWireGuardClient -ComputerName $computerName -Credential $cred -ClientConfigContent $content) {
             Show-Menu -Mode Success -SuccessTitle "Remote WireGuard Client Setup Completed"
         }
@@ -1289,10 +1445,15 @@ function Invoke-RemoteWireGuardClientSetup {
     }
 }
 
+#endregion WireGuard Setup Orchestration
+#region Module Initialization & Configuration Loading
 
-# Modules:
-
-# AutoSecureVPN.psm1:
+# =================================================================================================
+# REGION: Module Initialization & Configuration Loading
+# =================================================================================================
+# This section handles the dynamic loading of configuration settings from .psd1 files
+# upon module import. It establishes the global settings scope and base paths.
+# =================================================================================================
 
 # Load module settings from src/config/Stable.psd1 and Variable.psd1 (if present)
 # Use $PSScriptRoot and $Script: scope so the module is import-safe in test runspaces.
@@ -1329,14 +1490,24 @@ if ($PSScriptRoot -and -not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
     $Script:BasePath = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 }
 else {
-    # Fallback for remote execution via Invoke-Expression
+    # Fallback for remote execution via Invoke-Expression where paths are volatile
     $Script:BasePath = "C:\Temp"
 }
 
 
 
+#endregion Module Initialization & Configuration Loading
+#region Helper Functions & Utilities
 
-# Core.ps1
+
+# =================================================================================================
+# REGION: Helper Functions & Utilities
+# =================================================================================================
+# This section contains shared utility functions used across the module.
+# It includes UI helpers (Show-Menu), logging (Write-Log), system checks (Test-IsAdmin),
+# network configuration (Set-Firewall, Enable-VPNNAT, Enable-IPForwarding), and 
+# remote installation helpers (Install-RemoteServer, Install-OpenVPN).
+# =================================================================================================
 
 function Show-Menu {
     <#
@@ -1442,7 +1613,7 @@ function Show-Menu {
         # If NoPrompt is set, return null without prompt
         if ($NoPrompt) { return $null }
 
-        # Ask for user input and validate the choice
+        # Ask for user input and validate the choice in a loop
         while ($true) {
             $userInput = Read-Host -Prompt $Prompt
             if ($userInput -match '^[0-9]+$') {
@@ -1492,6 +1663,7 @@ function Show-Menu {
         elseif ($ExtraInfo) { $displayError = $ExtraInfo }
         elseif ($LogFile) { $displayError = "See log file: $LogFile" }
         elseif ($global:Error.Count -gt 0) {
+            # Attempt to retrieve the last error from the global stack
             try {
                 $err = $global:Error[0]
                 $msg = $err.Exception.Message
@@ -1539,6 +1711,7 @@ function Show-Menu {
         }
     }
 }
+
 function Wait-Input {
     <#
     .SYNOPSIS
@@ -1570,6 +1743,7 @@ function Set-ModuleSettings {
 
     .DESCRIPTION
         This function sets $Script:Settings and $Script:BasePath for use in remote sessions.
+        It is typically called inside a remote ScriptBlock to initialize the environment.
 
     .PARAMETER Settings
         The hashtable with settings.
@@ -1600,7 +1774,7 @@ function Test-IsAdmin {
         Checks if the script is run as administrator.
 
     .DESCRIPTION
-        This function checks if the current user has administrator privileges.
+        This function checks if the current user has administrator privileges by verifying role membership.
 
     .OUTPUTS
         System.Boolean
@@ -1613,6 +1787,7 @@ function Test-IsAdmin {
     #>
     return ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
+
 function Write-Log {
     <#
     .SYNOPSIS
@@ -1620,6 +1795,7 @@ function Write-Log {
 
     .DESCRIPTION
         This function logs a message with level, timestamp, to a file and console.
+        It handles log directory creation if needed.
 
     .PARAMETER Message
         The message to log.
@@ -1662,7 +1838,7 @@ function Write-Log {
         $LogFile = Join-Path $logsPath $Script:Settings.logFileName
     }
     
-    # Verify LogFile is not a directory
+    # Verify LogFile is not a directory (safety check)
     if (Test-Path $LogFile -PathType Container) {
         Write-Warning "LogFile path is a directory, not a file: $LogFile"
         $LogFile = Join-Path $LogFile 'vpn-setup.log'
@@ -1680,6 +1856,7 @@ function Write-Log {
         Write-Verbose "Cannot write to log file: $_"
     }
     
+    # Note: Console output handling is commented out here as the caller usually handles visual output
     # # Also write to the console depending on the log level
     # switch ($Level.ToUpper()) {
     #     "ERROR" { Write-Host $logEntry -ForegroundColor Red }
@@ -1688,13 +1865,15 @@ function Write-Log {
     #     default { Write-Host $logEntry -ForegroundColor White }
     # }
 }
+
 function Set-Firewall {
     <#
     .SYNOPSIS
-        Configures the Windows Firewall for OpenVPN.
+        Configures the Windows Firewall for OpenVPN or WireGuard.
 
     .DESCRIPTION
         This function adds an inbound firewall rule for the specified port and protocol.
+        It checks if the rule already exists to avoid duplication.
 
     .PARAMETER Port
         The port to open (default from settings).
@@ -1735,7 +1914,7 @@ function Set-Firewall {
     Write-Log "Firewall configuration started for port $Port $Protocol" -Level "INFO"
     
     try {
-        # Enable firewall rule for OpenVPN
+        # Define unique rule name
         $ruleName = "OpenVPN-Inbound-$Protocol-$Port"
         
         # Check if rule already exists
@@ -1746,6 +1925,7 @@ function Set-Firewall {
             return $true
         }
         
+        # Create new rule
         New-NetFirewallRule -Name $ruleName `
             -DisplayName "OpenVPN $Protocol $Port" `
             -Direction Inbound `
@@ -1762,6 +1942,7 @@ function Set-Firewall {
         return $false
     }
 }
+
 function Enable-VPNNAT {
     <#
     .SYNOPSIS
@@ -1770,7 +1951,8 @@ function Enable-VPNNAT {
     .DESCRIPTION
         This function configures Network Address Translation (NAT) so that
         VPN clients have internet access via the server.
-        Prioritizes Internet Connection Sharing (ICS) as it handles DNS/DHCP correctly for VPNs.
+        It prioritizes Internet Connection Sharing (ICS) as it handles DNS/DHCP correctly for VPNs.
+        It uses COM objects (HNetCfg.HNetShare) for configuration and Registry tweaks for persistence.
         
     .PARAMETER VPNSubnet
         The VPN subnet in CIDR notation (e.g. 10.13.13.0/24).
@@ -1791,7 +1973,7 @@ function Enable-VPNNAT {
         [Parameter(Mandatory = $false)][ValidateSet("OpenVPN", "WireGuard")][string]$VPNType
     )
     
-    # Defaults
+    # Defaults logic for Subnet
     if ([string]::IsNullOrWhiteSpace($VPNSubnet)) {
         $base = $null
         if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardBaseSubnet')) {
@@ -1803,21 +1985,22 @@ function Enable-VPNNAT {
     }
     
     try {
-        # 0. Enable IP Forwarding
+        # 0. Enable IP Forwarding first (Prerequisite for any routing)
         if (-not (Enable-IPForwarding)) {
             Write-Log "Could not enable IP Forwarding" -Level "ERROR"
             return $false
         }
         
-        # 1. Register DLL
+        # 1. Register DLL required for ICS COM objects
         Write-Log "Registering hnetcfg.dll..." -Level "INFO"
         Start-Process -FilePath "regsvr32.exe" -ArgumentList "/s hnetcfg.dll" -Wait -NoNewWindow
         
         # 2. Identify Adapters (Network Adapter Objects)
         # We generally need these for the Registry logic later
         
-        # A. Internet Adapter
+        # A. Internet Adapter detection
         if (-not $InterfaceAlias) {
+            # Try to find the adapter with the default route (internet facing)
             $defaultRoute = Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | 
             Where-Object { $_.NextHop -ne "0.0.0.0" } | 
             Sort-Object RouteMetric | Select-Object -First 1
@@ -1840,7 +2023,7 @@ function Enable-VPNNAT {
         }
         $internetAdapter = Get-NetAdapter -Name $InterfaceAlias -ErrorAction SilentlyContinue
 
-        # B. VPN Adapter (Strict Priority)
+        # B. VPN Adapter detection (Strict Priority based on type)
         $vpnAdapter = $null
         if ($VPNType -eq "OpenVPN") {
             Write-Log "Looking for OpenVPN adapter (Priority: TAP-Windows)..." -Level "INFO"
@@ -1864,19 +2047,21 @@ function Enable-VPNNAT {
         }
         elseif ($VPNType -eq "WireGuard") {
             Write-Log "Looking for WireGuard adapter..." -Level "INFO"
+            # Look for WireGuard adapters, prefer 'Up' status
             $vpnAdapter = Get-NetAdapter | Where-Object { 
                 ($_.Name -like "*wg_server*" -or $_.Name -like "*WireGuard*" -or $_.InterfaceDescription -like "*WireGuard*") -and $_.Status -eq 'Up'
             } | Sort-Object ifIndex | Select-Object -Last 1
             
             if (-not $vpnAdapter) {
                 Start-Sleep -Seconds 3
+                # Retry without 'Up' status requirement
                 $vpnAdapter = Get-NetAdapter | Where-Object { 
                     ($_.Name -like "*wg_server*" -or $_.Name -like "*WireGuard*" -or $_.InterfaceDescription -like "*WireGuard*")
                 } | Select-Object -First 1
             }
         }
         else {
-            # Generic Fallback
+            # Generic Fallback if type not specified
             $vpnAdapter = Get-NetAdapter | Where-Object { 
                 ($_.Name -like "*wg*" -or $_.InterfaceDescription -like "*WireGuard*" -or $_.InterfaceDescription -like "*TAP-Windows*" -or $_.Name -like "*OpenVPN*")
             } | Select-Object -Last 1
@@ -1898,12 +2083,13 @@ function Enable-VPNNAT {
         }
 
         # 3. PHASE 1: COM Cleanup & Enable
-        # Use COM to clear the field and set initial state
+        # Use COM to clear existing sharing configs and set initial state
         try {
             $netShare = New-Object -ComObject HNetCfg.HNetShare -ErrorAction Stop
             $connections = @($netShare.EnumEveryConnection)
             
             Write-Log "Cleaning up existing ICS configurations (COM)..." -Level "INFO"
+            # Disable sharing on all connections first
             foreach ($conn in $connections) {
                 try {
                     $conf = $netShare.INetSharingConfigurationForINetConnection($conn)
@@ -1921,7 +2107,9 @@ function Enable-VPNNAT {
             
             if ($pubConn -and $privConn) {
                 Write-Log "Setting initial COM sharing..." -Level "INFO"
+                # Enable Public sharing (0 = public)
                 $netShare.INetSharingConfigurationForINetConnection($pubConn).EnableSharing(0)
+                # Enable Private sharing (1 = private)
                 $netShare.INetSharingConfigurationForINetConnection($privConn).EnableSharing(1)
             }
             else {
@@ -1933,12 +2121,12 @@ function Enable-VPNNAT {
             Write-Log "COM Phase warning: $_" -Level "WARNING"
         }
 
-        # 4. PHASE 2: Registry Enforcement (User Code)
-        # This forces the bindings and restarts the service, ensuring internet access works.
+        # 4. PHASE 2: Registry Enforcement (Persistence)
+        # This forces the bindings in the registry and restarts the service, ensuring internet access works reliably.
         Write-Log "Enforcing ICS via Registry..." -Level "INFO"
         
         if ($internetAdapter -and $vpnAdapter) {
-            # Get GUIDs
+            # Get Network Connection GUIDs from Registry
             $netCfgPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Network\{4D36E972-E325-11CE-BFC1-08002BE10318}"
             $internetGuid = $null
             $vpnGuid = $null
@@ -1953,21 +2141,21 @@ function Enable-VPNNAT {
             }
             
             if ($internetGuid -and $vpnGuid) {
-                # Stop Service
+                # Stop Service before registry edit
                 Stop-Service SharedAccess -Force -ErrorAction SilentlyContinue
                 Start-Sleep -Seconds 2
                 
-                # Registry Hacking for ICS
+                # Registry Hacking for ICS Binding
                 $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\SharedAccess"
                 
-                # Explicitly Enable Sharing
+                # Explicitly Enable Sharing by GUID
                 Set-ItemProperty -Path $regPath -Name "SharingPublicInterface" -Value $internetGuid -Type String -Force
                 Set-ItemProperty -Path $regPath -Name "SharingPrivateInterface" -Value $vpnGuid -Type String -Force
                 
-                # Ensure start mode
+                # Ensure start mode is Manual (triggered by dependencies) or Auto
                 Set-Service SharedAccess -StartupType Manual
                 
-                # Start Service
+                # Start Service to apply changes
                 Write-Log "Restarting SharedAccess service..." -Level "INFO"
                 Start-Service SharedAccess
                 
@@ -2013,12 +2201,13 @@ function Enable-VPNNAT {
         catch {}
 
         if ($icsVerified) {
-            # Extra Packet Forwarding check
+            # Extra Packet Forwarding check on interfaces
             Set-NetIPInterface -InterfaceIndex $internetAdapter.ifIndex -Forwarding Enabled -ErrorAction SilentlyContinue
             Set-NetIPInterface -InterfaceIndex $vpnAdapter.ifIndex -Forwarding Enabled -ErrorAction SilentlyContinue
             return $true
         }
         else {
+            # Provide manual instructions if automation failed
             $manualMsg = "WARNING: ICS configuration commands ran, but verification failed.`n" +
             "Please enable Internet Connection Sharing MANUALLY on the server:`n" +
             "  1. Go to Control Panel > Network Connections`n" +
@@ -2039,13 +2228,14 @@ function Enable-VPNNAT {
         return $false
     }
 }
+
 function Enable-IPForwarding {
     <#
     .SYNOPSIS
         Enables IP Forwarding on Windows for VPN routing.
     
     .DESCRIPTION
-        This function enables IP routing via the Windows registry.
+        This function enables IP routing via the Windows registry (IPEnableRouter).
         This is required to forward VPN traffic to the internet.
         
     .OUTPUTS
@@ -2056,7 +2246,7 @@ function Enable-IPForwarding {
         Enable-IPForwarding
         
     .NOTES
-        Requires admin privileges. A restart may be required for activation.
+        Requires admin privileges. A restart may be required for activation on some systems.
     #>
     param()
     
@@ -2064,15 +2254,17 @@ function Enable-IPForwarding {
         $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters"
         $currentValue = Get-ItemProperty -Path $regPath -Name "IPEnableRouter" -ErrorAction SilentlyContinue
         
+        # Check if already enabled
         if ($currentValue.IPEnableRouter -eq 1) {
             Write-Log "IP Forwarding is already enabled" -Level "INFO"
             return $true
         }
         
+        # Enable it
         Set-ItemProperty -Path $regPath -Name "IPEnableRouter" -Value 1 -Type DWord
         Write-Log "IP Forwarding enabled in registry. Restart may be required." -Level "SUCCESS"
         
-        # Probeer ook RemoteAccess service te starten voor directe activatie
+        # Attempt to start RemoteAccess service to activate routing without reboot
         try {
             $rasService = Get-Service -Name "RemoteAccess" -ErrorAction SilentlyContinue
             if ($rasService) {
@@ -2094,6 +2286,7 @@ function Enable-IPForwarding {
         return $false
     }
 }
+
 function Invoke-Rollback {
     <#
     .SYNOPSIS
@@ -2101,6 +2294,7 @@ function Invoke-Rollback {
 
     .DESCRIPTION
         This function attempts to revert all changes made during setup, including stopping services, removing files and firewall rules.
+        It is used to clean up the system state if an installation fails partway through.
 
     .PARAMETER SetupType
         Type of setup ('Server' or 'Client').
@@ -2112,7 +2306,7 @@ function Invoke-Rollback {
         Invoke-Rollback -SetupType "Server"
 
     .NOTES
-        This function tries to ignore errors and logs warnings on failures.
+        This function tries to ignore errors and logs warnings on failures, as the system might already be in an inconsistent state.
     #>
     param(
         [Parameter(Mandatory = $true, Position = 0)]
@@ -2165,7 +2359,7 @@ function Invoke-Rollback {
                     Write-Log "Could not remove server configuration file: $_" -Level "WARNING"
                 }
 
-                # Remove PKI directory
+                # Remove PKI directory (Certificates)
                 Write-Log "Removing certificates (PKI directory)" -Level "INFO"
                 try {
                     $pkiPath = Join-Path $Script:Settings.easyRSAPath "pki"
@@ -2210,7 +2404,7 @@ function Invoke-Rollback {
             }
 
             "Client" {
-                # Stop VPN connection
+                # Stop VPN connection (Processes)
                 Write-Log "Stopping VPN connection" -Level "INFO"
                 try {
                     $openvpnProcesses = Get-Process -Name "openvpn" -ErrorAction SilentlyContinue
@@ -2223,7 +2417,7 @@ function Invoke-Rollback {
                     Write-Log "Could not stop OpenVPN processes: $_" -Level "WARNING"
                 }
 
-                # Remove imported configuration files
+                # Remove imported configuration files from config directory
                 Write-Log "Removing imported configuration files" -Level "INFO"
                 try {
                     $configPath = $Script:Settings.configPath
@@ -2259,16 +2453,26 @@ function Invoke-Rollback {
 }
 
 
+#endregion Helper Functions & Utilities
+#region OpenVPN Implementation Details
 
-# OpenVPN.ps1
+# =================================================================================================
+# REGION: OpenVPN Implementation Details
+# =================================================================================================
+# This section contains the specific implementation logic for OpenVPN tasks.
+# It includes functions for installing the software, managing EasyRSA PKI,
+# generating configurations, and controlling the OpenVPN Windows Service.
+# Key Functions: Install-RemoteServer, Install-OpenVPN, Initialize-EasyRSA, 
+#                Initialize-Certificates, New-ServerConfig, Start-VPNService.
+# =================================================================================================
 
 function Install-RemoteServer {
     <#
     .SYNOPSIS
-        Installs and configures OpenVPN server on a remote machine.
-
+        Installs OpenVPN Remote Server and fully configures it.
     .DESCRIPTION
-        This function uses PowerShell remoting to install OpenVPN, configure firewall, generate certificates, create server config, and start the service on a remote computer.
+        This function copies the module to a remote server, installs OpenVPN,
+        configures the firewall, generates certificates, creates server config, and starts the service on a remote computer.
 
     .PARAMETER ComputerName
         Name of the remote computer.
@@ -2307,8 +2511,7 @@ function Install-RemoteServer {
         $sessionOption = New-PSSessionOption -NoMachineProfile
         $session = New-PSSession -ComputerName $ComputerName -Credential $Credential -SessionOption $sessionOption -ErrorAction Stop
         
-        # Get local paths (robust fallback when module base is empty)
-        # Get local paths
+        # Get local paths logic to determine where the module source files are
         $moduleBase = $null
         
         # Priority 1: Use Script BasePath if available and valid (Development/Source context)
@@ -2356,13 +2559,14 @@ function Install-RemoteServer {
             }
         }
 
-        # copy module to remote temp path
+        # define remote temporary paths
         $remoteTemp = "C:\Temp"
         $remoteModuleDir = Join-Path $remoteTemp "AutoSecureVPN"
         $remoteEasyRSA = Join-Path $remoteTemp "easy-rsa"
         $remoteEasyRSAZip = Join-Path $remoteTemp "easy-rsa.zip"
         $remoteConfigDir = Join-Path $remoteTemp "config"
 
+        # Prepare remote directories
         Invoke-Command -Session $session -ScriptBlock { 
             param($temp, $modDir, $cfgDir, $rsaDir) 
             if (-not (Test-Path $temp)) { New-Item -ItemType Directory -Path $temp -Force | Out-Null } 
@@ -2381,7 +2585,7 @@ function Install-RemoteServer {
         $localConfigDir = Join-Path (Split-Path $localModuleDir -Parent) "config"
         if (-not (Test-Path $localConfigDir)) { throw "Local config directory not found: $localConfigDir" }
 
-        # Compress EasyRSA locally for much faster transfer (10x+ speedup)
+        # Compress EasyRSA locally for much faster transfer (10x+ speedup vs individual files)
         $tempZip = [System.IO.Path]::GetTempFileName() + ".zip"
         Write-Log "Compressing EasyRSA for faster transfer..." -Level "INFO"
         Compress-Archive -Path "$LocalEasyRSAPath\*" -DestinationPath $tempZip -Force
@@ -2400,13 +2604,14 @@ function Install-RemoteServer {
         # Clean up local temp zip
         Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
         
+        # Execute the setup script block on the remote machine
         Invoke-Command -Session $session -ScriptBlock {
             param($moduleSettings, $moduleDirPath, $config, $remoteEasyRSAZip, $remoteEasyRSA, $remoteConfigPath, $remoteConfigDir)
             
             # Stop on errors from the start
             $ErrorActionPreference = 'Stop'
             
-            # Disable file logging for remote operations - define early
+            # Disable file logging for remote operations (output is handled by PSSession)
             function global:Write-Log {
                 param($Message, $Level = "INFO")
                 Write-Verbose "[$Level] $Message"
@@ -2435,7 +2640,7 @@ function Install-RemoteServer {
                 $moduleSettings = @{}
             }
             
-            # Ensure critical settings have values with proper defaults
+            # Ensure critical settings have values with proper defaults for the remote context
             if (-not $moduleSettings.port -or $moduleSettings.port -eq 0) { $moduleSettings.port = 443 }
             if (-not $moduleSettings.protocol) { $moduleSettings.protocol = 'TCP' }
             if (-not $moduleSettings.easyRSAPath) { $moduleSettings.easyRSAPath = 'C:\Program Files\OpenVPN\easy-rsa' }
@@ -2458,7 +2663,7 @@ function Install-RemoteServer {
                 }
             }
             
-            # Set module settings manually
+            # Set module settings manually for the remote scope
             $Script:Settings = $moduleSettings
             $Script:BasePath = "C:\Temp"
             
@@ -2469,21 +2674,23 @@ function Install-RemoteServer {
                     throw "Administrator rights required"
                 }
                 
+                # Perform installation
                 Write-Verbose "Installing OpenVPN..."
                 if (-not (Install-OpenVPN)) {
                     throw "OpenVPN installation failed"
                 }
                 
+                # Configure firewall
                 Write-Verbose "Configuring firewall..."
                 if (-not (Set-Firewall -Port $Script:Settings.port -Protocol $Script:Settings.protocol)) {
                     throw "Firewall configuration failed"
                 }
                 
-
+                # Setup certificates (copy extracted files to final location)
                 Write-Verbose "Copying EasyRSA with certificates..."
                 $targetEasyRSAPath = $Script:Settings.easyRSAPath
                 Write-Verbose "Target EasyRSA path: $targetEasyRSAPath"
-                # easyRSAPath should now have a default value set above
+                
                 if (-not (Test-Path $targetEasyRSAPath)) {
                     Write-Verbose "Creating target directory: $targetEasyRSAPath"
                     New-Item -ItemType Directory -Path $targetEasyRSAPath -Force | Out-Null
@@ -2494,6 +2701,7 @@ function Install-RemoteServer {
                 Write-Verbose "Copying from $remoteEasyRSA to $targetEasyRSAPath..."
                 Copy-Item -Path "$remoteEasyRSA\*" -Destination $targetEasyRSAPath -Recurse -Force
                 
+                # Create config and start service
                 Write-Verbose "Creating server config..."
                 if (-not (New-ServerConfig -Config $config)) {
                     throw "Server config generation failed"
@@ -2518,6 +2726,7 @@ function Install-RemoteServer {
                 throw
             }
             
+            # Cleanup temp files on remote
             Remove-Item $moduleDirPath -Recurse -Force
             Remove-Item $remoteEasyRSA -Recurse -Force
             Remove-Item $remoteConfigDir -Recurse -Force
@@ -2531,7 +2740,7 @@ function Install-RemoteServer {
     catch {
         Write-Log "Error during remote server configuration: $_" -Level "ERROR"
         
-        # Probeer remote rollback uit te voeren
+        # Try to perform remote rollback if setup fails
         try {
             $rollbackSession = New-PSSession -ComputerName $ComputerName -Credential $Credential -ErrorAction SilentlyContinue
             if ($rollbackSession) {
@@ -2548,20 +2757,22 @@ function Install-RemoteServer {
             }
         }
         catch {
-            Write-Log "Kon remote rollback niet uitvoeren: $_" -Level "WARNING"
+            Write-Log "Could not perform remote rollback: $_" -Level "WARNING"
         }
         
         if ($session) { Remove-PSSession $session -ErrorAction SilentlyContinue }
         return $false
     }
 }
+
 function Install-OpenVPN {
     <#
     .SYNOPSIS
-        Installs OpenVPN on the local machine.
-
+        Downloads and installs OpenVPN.
+        
     .DESCRIPTION
-        This function downloads and installs OpenVPN via MSI if it is not already installed.
+        Downloads the OpenVPN installer from the official website (or uses a cached version)
+        and performs a silent installation.
 
     .PARAMETER Url
         The URL of the OpenVPN installer (default from settings).
@@ -2579,6 +2790,7 @@ function Install-OpenVPN {
         [Parameter(Position = 0)][string]$openVpnUrl # url validation 
     )
     
+    # Check if URL provided, else fetch latest version
     if (-not $openVpnUrl) {
         $version = if ($Script:Settings.openVpnVersion) { $Script:Settings.openVpnVersion } else { 
             try {
@@ -2593,6 +2805,7 @@ function Install-OpenVPN {
         $openVpnUrl = "https://swupdate.openvpn.org/community/releases/OpenVPN-$version-I001-amd64.msi"
     }
     
+    # Check if already installed
     $installedPath = $Script:Settings.installedPath
     if (-not $installedPath -or [string]::IsNullOrWhiteSpace($installedPath)) {
         # Default fallback path for OpenVPN installation check
@@ -2608,9 +2821,11 @@ function Install-OpenVPN {
     $tempPath = [System.IO.Path]::GetTempFileName() + ".msi"
     
     try {
+        # Download MSI
         Invoke-WebRequest -Uri $openVpnUrl -OutFile $tempPath -UseBasicParsing
         Write-Log "OpenVPN MSI downloaded to $tempPath" -Level "INFO"
         
+        # Install silently
         $arguments = "/i `"$tempPath`" /qn /norestart"
         $process = Start-Process -FilePath "msiexec.exe" -ArgumentList $arguments -Wait -PassThru
         
@@ -2633,6 +2848,7 @@ function Install-OpenVPN {
         }
     }
 }
+
 function Get-ServerConfiguration {
     <#
     .SYNOPSIS
@@ -2640,6 +2856,7 @@ function Get-ServerConfiguration {
 
     .DESCRIPTION
         This function asks for server name, IP, LAN subnet, and password for certificates.
+        It validates IP addresses and ensures inputs are valid.
 
     .PARAMETER ServerName
         The name of the server (default from settings).
@@ -2691,7 +2908,7 @@ function Get-ServerConfiguration {
     if ([string]::IsNullOrWhiteSpace($inputServerIP) -or $inputServerIP -eq 'your.server.wan.ip.here') {
         throw "Server Wan IP not set in Variable.psd1. Set serverWanIP to a valid WAN IP or DDNS."
     }
-    # Validate ServerIP: must be IP address or hostname
+    # Validate ServerIP: must be IP address or hostname regex check
     if ($inputServerIP -notmatch '^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$' -and $inputServerIP -notmatch '^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$') {
         # https://stackoverflow.com/questions/5284147/validating-ipv4-addresses-with-regexp 
         throw "serverWanIP '$inputServerIP' is not a valid IP address or hostname."
@@ -2728,6 +2945,7 @@ function Get-ServerConfiguration {
             $config.Password = $Password
         }
         else {
+            # Loop until valid password entered
             while ($true) {
                 $enteredPwd = Read-Host "Enter password for certificates (minimum 8 characters)"
                 if ($enteredPwd.Length -ge 8) {
@@ -2749,20 +2967,22 @@ function Get-ServerConfiguration {
     
     return $config
 }
+
 function Initialize-EasyRSA {
     <#
     .SYNOPSIS
-        Initialiseert EasyRSA voor certificaatbeheer.
-
+        Initializes the PKI with EasyRSA.
+        
     .DESCRIPTION
-        Deze functie downloadt en installeert EasyRSA als het niet aanwezig is.
+        Sets up the EasyRSA environment, including copying necessary files
+        and initializing the Public Key Infrastructure.
 
     .PARAMETER EasyRSAPath
-        Het pad waar EasyRSA geïnstalleerd wordt (standaard uit settings).
+        The path where EasyRSA is installed (default from settings).
 
     .OUTPUTS
         System.Boolean
-        $true bij succes, anders $false.
+        $true on success, otherwise $false.
 
     .EXAMPLE
         Initialize-EasyRSA
@@ -2774,52 +2994,57 @@ function Initialize-EasyRSA {
     )
     
     if (Test-Path $EasyRSAPath) {
-        Write-Log "EasyRSA is al geïnstalleerd in $EasyRSAPath" -Level "INFO"
+        Write-Log "EasyRSA is already installed in $EasyRSAPath" -Level "INFO"
         return $true
     }
     
     try {
         Add-Type -AssemblyName System.IO.Compression.FileSystem
+        # Determine version to download
         $version = if ($Script:Settings.easyRSAVersion) { $Script:Settings.easyRSAVersion } else { 
             try {
                 $latest = Invoke-RestMethod -Uri 'https://api.github.com/repos/OpenVPN/easy-rsa/releases/latest'
                 $latest.tag_name -replace '^v', ''
             }
             catch {
-                Write-Log "3.2.4 gebuikt als fallback bij ophalen van laatste EasyRSA versie: $_" -Level "WARNING"
+                Write-Log "3.2.4 used as fallback when retrieving latest EasyRSA version: $_" -Level "WARNING"
                 '3.2.4'  # fallback
             }
         }
         $easyRSAUrl = "https://github.com/OpenVPN/easy-rsa/releases/download/v$version/EasyRSA-$version-win64.zip"
         $tempZip = Join-Path $env:TEMP "easyrsa.zip"
         
+        # Download and extract
         Invoke-WebRequest -Uri $easyRSAUrl -OutFile $tempZip -UseBasicParsing
         [System.IO.Compression.ZipFile]::ExtractToDirectory($tempZip, $EasyRSAPath)
         
+        # Fix nested directory structure if needed (e.g., EasyRSA-3.x.x folder inside)
         $nestedDir = Get-ChildItem $EasyRSAPath -Directory | Where-Object { $_.Name -like "EasyRSA-*" } | Select-Object -First 1
         if ($nestedDir) {
             Get-ChildItem $nestedDir.FullName | Move-Item -Destination $EasyRSAPath -Force
             Remove-Item $nestedDir.FullName -Recurse -Force
         }
         
-        Write-Log "EasyRSA geïnstalleerd in $EasyRSAPath" -Level "SUCCESS"
+        Write-Log "EasyRSA installed in $EasyRSAPath" -Level "SUCCESS"
         return $true
     }
     catch {
-        Write-Log "Fout tijdens EasyRSA installatie: $_" -Level "ERROR"
+        Write-Log "Error during EasyRSA installation: $_" -Level "ERROR"
         return $false
     }
     finally {
         if (Test-Path $tempZip) { Remove-Item $tempZip -Force }
     }
 }
+
 function Initialize-Certificates {
     <#
     .SYNOPSIS
-        Generates certificates for the VPN server.
-
+        Generates CA and Server certificates.
+        
     .DESCRIPTION
-        This function initializes the PKI and generates CA, server, and DH certificates.
+        Runs EasyRSA commands to build the Certificate Authority (CA)
+        and generate the server certificate and key.
 
     .PARAMETER ServerName
         The name of the server (default from settings).
@@ -2857,6 +3082,7 @@ function Initialize-Certificates {
     }
     
     try {
+        # Set environment variables for EasyRSA batch mode
         $env:EASYRSA_BATCH = "1"
         $env:EASYRSA_REQ_CN = $ServerName
         $varsFileWin = Join-Path $EasyRSAPath "vars"
@@ -2864,12 +3090,12 @@ function Initialize-Certificates {
         $sh = Join-Path $EasyRSAPath "bin\sh.exe"
         $easyrsa = Join-Path $EasyRSAPath "easyrsa"
 
-        # Prepare Unix-style paths for bash (do not use them for Set-Content)
+        # Prepare Unix-style paths for bash (do not use them for Set-Content, only for execution)
         $drive = $EasyRSAPath.Substring(0, 1).ToLower()
         $unixEasyRSAPath = '/' + $drive + $EasyRSAPath.Substring(2) -replace '\\', '/'
         $env:EASYRSA = $unixEasyRSAPath
 
-        # Create vars file (write using Windows path)
+        # Create 'vars' file content (EasyRSA configuration)
         $pkiPath = Join-Path $EasyRSAPath "pki"
         $pkiPathUnix = (Join-Path $pkiPath '') -replace '\\', '/'
         $pkiPathUnix = '/' + $drive + $pkiPathUnix.Substring(2) -replace ' ', '\ '
@@ -2897,7 +3123,7 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
         
         Push-Location $EasyRSAPath
         
-        # Write vars file in the current directory (EasyRSA path)
+        # Write vars file in the current directory (EasyRSA path) as backup
         Set-Content -Path "vars" -Value $varsContent -Encoding UTF8
 
         if (Test-Path "vars") {
@@ -2907,20 +3133,19 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
             Write-Log "vars file could not be written" -Level "ERROR"
         }
 
-        # Set the environment variable to the relative path
+        # Set the environment variable to the relative path for the script execution
         $env:EASYRSA_VARS_FILE = "vars"
         $env:EASYRSA_PKI = "pki"
         
-        # Remove existing PKI if it exists to avoid init-pki failure
+        # Remove existing PKI if it exists to avoid init-pki failure or stale certs
         if (Test-Path $pkiPath) {
             Write-Log "Removing existing PKI directory: $pkiPath" -Level "INFO"
             Remove-Item $pkiPath -Recurse -Force
         }
         
-        # Build the bash PATH setup - use semicolons for Windows sh.exe PATH separator
-        # Convert Windows path to Unix-style for bash (C:\... -> C:/...)
+        # Build the bash PATH setup string - use semicolons for Windows sh.exe PATH separator
+        # This setup ensures the bash environment has access to openssl and tools
         $unixEasyRSAPath = $EasyRSAPath -replace '\\', '/'
-        # EASYRSA_BATCH=1 disables interactive prompts
         $bashPathSetup = "export PATH=`"$unixEasyRSAPath;$unixEasyRSAPath/bin;`$PATH`"; export HOME=`"$unixEasyRSAPath`"; export EASYRSA_OPENSSL=`"$unixEasyRSAPath/openssl.exe`"; export EASYRSA_BATCH=1; cd `"$unixEasyRSAPath`";"
         
         Write-Verbose "Shell executable: $sh"
@@ -2929,6 +3154,7 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
         Write-Verbose "Bash PATH setup: $bashPathSetup"
         Write-Verbose "Current directory: $(Get-Location)"
         
+        # Execute Step 1: Initialize PKI
         Write-Progress -Id 1 -Activity "Certificate Generation" -Status "Step 1 of 6: Initializing PKI" -PercentComplete 0
         Write-Verbose "Starting init-pki..."
         $initPkiCmd = "$bashPathSetup ./easyrsa init-pki"
@@ -2941,7 +3167,7 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
         }
         Write-Log "Easy-RSA output: $easyrsaOutput"
 
-        # Handle password if provided
+        # Handle password logic if provided (create temp password file for non-interactive passing)
         $passFile = $null
         if ($Password) {
             $passFile = [System.IO.Path]::GetTempFileName()
@@ -2954,9 +3180,9 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
             Write-Log "Password file created for certificate generation" -Level "INFO"
         }
 
+        # Execute Step 2: Build CA
         Write-Progress -Id 1 -Activity "Certificate Generation" -Status "Step 2 of 6: Generating CA certificate" -PercentComplete 16.67
         Write-Verbose "Starting build-ca (nopass=$(-not $Password))..."
-        # EASYRSA_BATCH=1 handles confirmation prompts, no need for echo 'yes' |
         if ($Password) {
             $buildCaCmd = "$bashPathSetup ./easyrsa build-ca"
         }
@@ -2974,6 +3200,7 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
         }
         Write-Log "Easy-RSA output: $easyrsaOutput"
         
+        # Execute Step 3: Generate Server Request
         Write-Progress -Id 1 -Activity "Certificate Generation" -Status "Step 3 of 6: Generating server certificate request" -PercentComplete 33.33
         Write-Verbose "Starting gen-req for $ServerName..."
         if ($Password) {
@@ -2993,9 +3220,9 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
         }
         Write-Log "Easy-RSA output: $easyrsaOutput"
 
+        # Execute Step 4: Sign Server Request
         Write-Progress -Id 1 -Activity "Certificate Generation" -Status "Step 4 of 6: Signing server certificate" -PercentComplete 50
         Write-Verbose "Starting sign-req for $ServerName..."
-        # EASYRSA_BATCH=1 handles confirmation prompts
         $signReqCmd = "$bashPathSetup ./easyrsa sign-req server $ServerName"
         Write-Verbose "Command: $sh -c `"$signReqCmd`""
         Write-Verbose "  Executing sign-req command..."
@@ -3007,6 +3234,7 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
             return $false
         }
         
+        # Execute Step 5: Diffie-Hellman Parameters
         Write-Progress -Id 1 -Activity "Certificate Generation" -Status "Step 5 of 6: Generating DH parameters" -PercentComplete 66.67
         Write-Verbose "Starting gen-dh (this may take a while)..."
         $genDhCmd = "$bashPathSetup ./easyrsa gen-dh"
@@ -3020,6 +3248,7 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
             return $false
         }
         
+        # Execute Step 6: Certificate Revocation List (CRL)
         Write-Progress -Id 1 -Activity "Certificate Generation" -Status "Step 6 of 6: Generating CRL" -PercentComplete 83.33
         Write-Verbose "Starting gen-crl..."
         $genCrlCmd = "$bashPathSetup ./easyrsa gen-crl"
@@ -3043,21 +3272,23 @@ set_var EASYRSA_CRL_DAYS "$($Script:Settings.easyRSACRLDays)"
         return $false
     }
     finally {
-        # Clean up password file
+        # Clean up password file for security
         if ($passFile -and (Test-Path $passFile)) {
             Remove-Item $passFile -Force
         }
-        # Keep vars file for client
+        # Keep vars file for client generation later
         Pop-Location
     }
 }
+
 function New-ServerConfig {
     <#
     .SYNOPSIS
-        Generates the server configuration for OpenVPN.
-
+        Generates server.ovpn configuration.
+        
     .DESCRIPTION
-        This function creates a server.ovpn file with the specified configuration.
+        Creates the 'server.ovpn' configuration file based on the provided settings
+        (port, protocol, subnet, etc.).
 
     .PARAMETER Config
         Hashtable with server configuration.
@@ -3103,6 +3334,7 @@ function New-ServerConfig {
     
     $pkiPath = Join-Path $EasyRSAPath "pki"
 
+    # Define paths to keys/certs
     $caPath = Join-Path $pkiPath 'ca.crt'
     $certPath = Join-Path $pkiPath (Join-Path 'issued' "$($Config.ServerName).crt")
     $keyPath = Join-Path $pkiPath (Join-Path 'private' "$($Config.ServerName).key")
@@ -3114,6 +3346,7 @@ function New-ServerConfig {
     $keyPath = $keyPath -replace '\\', '\\'
     $dhPath = $dhPath -replace '\\', '\\'
 
+    # Build the OpenVPN server config content
     $serverConfig = @"
 port $($Script:Settings.port)
 proto tcp
@@ -3137,6 +3370,7 @@ status openvpn-status.log
 verb 3
 "@
     
+    # Push LAN route if LAN access is configured
     if ($Config.LANSubnet) {
         $serverConfig += "`npush `"route $($Config.LANSubnet) $($Config.LANMask)`""
     }
@@ -3146,6 +3380,7 @@ verb 3
             New-Item -ItemType Directory -Path $ConfigPath -Force
         }
         
+        # Write config to file
         Set-Content -Path $serverConfigFile -Value $serverConfig -Encoding UTF8
         
         Write-Log "Server configuration created: $serverConfigFile" -Level "SUCCESS"
@@ -3156,13 +3391,14 @@ verb 3
         return $false
     }
 }
+
 function Start-VPNService {
     <#
     .SYNOPSIS
-        Starts the OpenVPN service.
-
+        Starts the OpenVPN Service.
+        
     .DESCRIPTION
-        This function starts the OpenVPN Windows service if it is not already running.
+        Starts the 'OpenVPNService' and sets its startup type to Automatic.
 
     .OUTPUTS
         System.Boolean
@@ -3198,6 +3434,7 @@ function Start-VPNService {
         return $false
     }
 }
+
 function New-ClientPackage {
     <#
     .SYNOPSIS
@@ -3230,6 +3467,7 @@ function New-ClientPackage {
         [Parameter(Position = 2)][string]$OutputPath = $Script:OutputPath
     )
     
+    # Default Output path check
     if (-not $OutputPath -or [string]::IsNullOrWhiteSpace($OutputPath)) {
         $OutputPath = Join-Path $Script:BasePath "output"
     }
@@ -3249,6 +3487,7 @@ function New-ClientPackage {
         Write-Log "PKI path: $pkiPath" -Level "INFO"
         Write-Log "Output path: $OutputPath" -Level "INFO"
         
+        # Configure EasyRSA environment variables
         $env:EASYRSA_BATCH = "1"
         $env:EASYRSA_VARS_FILE = "vars"
         $env:EASYRSA_PKI = "pki"
@@ -3274,12 +3513,14 @@ function New-ClientPackage {
         Push-Location $EasyRSAPath
         Write-Log "Switched to directory: $EasyRSAPath" -Level "INFO"
         
+        # Generate Client Request
         $genReqCmd = "$bashPathSetup ./easyrsa gen-req $clientName nopass"
         Write-Log "Executing: $sh -c `"$genReqCmd`"" -Level "INFO"
         $result1 = & $sh -c "$genReqCmd" 2>&1
         Write-Log "Exit code gen-req: $LASTEXITCODE" -Level "INFO"
         if ($LASTEXITCODE -ne 0) { Write-Log "Error during gen-req: $result1" -Level "ERROR" }
         
+        # Sign Client Request
         $signReqCmd = "$bashPathSetup ./easyrsa sign-req client $clientName"
         Write-Log "Executing: $sh -c `"$signReqCmd`"" -Level "INFO"
         $result2 = & $sh -c "$signReqCmd" 2>&1
@@ -3289,6 +3530,7 @@ function New-ClientPackage {
         Pop-Location
         Write-Log "Returned to original directory" -Level "INFO"
         
+        # Verify generated files exist
         Write-Log "Checking if certificates exist..." -Level "INFO"
         $caCrt = Join-Path $pkiPath 'ca.crt'
         $clientCrt = Join-Path $pkiPath (Join-Path 'issued' "$clientName.crt")
@@ -3298,6 +3540,7 @@ function New-ClientPackage {
         if ([System.IO.File]::Exists($clientCrt)) { Write-Log "$clientName.crt found: $clientCrt" -Level "INFO" } else { Write-Log "$clientName.crt not found: $clientCrt" -Level "ERROR" }
         if ([System.IO.File]::Exists($clientKey)) { Write-Log "$clientName.key found: $clientKey" -Level "INFO" } else { Write-Log "$clientName.key not found: $clientKey" -Level "ERROR" }
         
+        # Create client config file content
         $clientConfig = @"
 client
 dev tun
@@ -3324,6 +3567,7 @@ verb 3
         Write-Log "Copying certificates to output directory..." -Level "INFO"
         $copyFailed = $false
         
+        # Copy keys/certs to output
         Copy-Item -Path $caCrt -Destination $OutputPath
         if ($?) { Write-Log "ca.crt copied" -Level "INFO" } else { Write-Log "cp failed for ca.crt" -Level "ERROR"; $copyFailed = $true }
         
@@ -3338,9 +3582,11 @@ verb 3
             return $null
         }
         
+        # Zip all files
         Write-Log "Creating ZIP file: $zipPath" -Level "INFO"
         Compress-Archive -Path "$OutputPath\*" -DestinationPath $zipPath -Force
         
+        # Cleanup temporary loose files in output
         Write-Log "Cleaning up temporary files" -Level "INFO"
         Remove-Item "$OutputPath\ca.crt", "$OutputPath\$clientName.crt", "$OutputPath\$clientName.key", $clientConfigPath -Force
         
@@ -3352,6 +3598,7 @@ verb 3
         return $null
     }
 }
+
 function Import-ClientConfiguration {
     <#
     .SYNOPSIS
@@ -3388,6 +3635,7 @@ function Import-ClientConfiguration {
         Write-Log "Default client ZIP file found: $zipFile" -Level "INFO"
     }
     else {
+        # Prompt user if default not found
         while ($true) {
             $zipFile = Read-Host "Path to client ZIP file"
             if ($zipFile -match '\.zip$' -and (Test-Path $zipFile)) {
@@ -3411,12 +3659,13 @@ function Import-ClientConfiguration {
         
         if ($ovpnFile) {
             # Update the OVPN file to use absolute paths for certificates
+            # This is critical because OpenVPN GUI sometimes struggles with relative paths depending on CWD
             $ovpnContent = Get-Content $ovpnFile.FullName -Raw
             $escapedPath = $configPath -replace '\\', '\\\\'
             $ovpnContent = $ovpnContent -replace 'ca\s+ca\.crt', "ca `"$escapedPath\\ca.crt`""
             $ovpnContent = $ovpnContent -replace 'cert\s+client1\.crt', "cert `"$escapedPath\\client1.crt`""
             $ovpnContent = $ovpnContent -replace 'key\s+client1\.key', "key `"$escapedPath\\client1.key`""
-            # Remove Windows-unsupported options
+            # Remove Windows-unsupported options (user/group dropping)
             $ovpnContent = $ovpnContent -replace 'user\s+nobody.*\n', ''
             $ovpnContent = $ovpnContent -replace 'group\s+nobody.*\n', ''
             # Update deprecated cipher
@@ -3438,6 +3687,7 @@ function Import-ClientConfiguration {
         return $null
     }
 }
+
 function Test-TAPAdapter {
     <#
     .SYNOPSIS
@@ -3458,6 +3708,7 @@ function Test-TAPAdapter {
     Write-Log "TAP adapter check started" -Level "INFO"
     
     try {
+        # Check NetAdapter list for TAP drivers
         $tapAdapters = Get-NetAdapter | Where-Object { $_.Name -like "*TAP*" -or $_.DriverDescription -like "*TAP*" }
         
         if ($tapAdapters) {
@@ -3474,6 +3725,7 @@ function Test-TAPAdapter {
         return $false
     }
 }
+
 function Start-VPNConnection {
     <#
     .SYNOPSIS
@@ -3481,6 +3733,7 @@ function Start-VPNConnection {
 
     .DESCRIPTION
         This function starts OpenVPN with the specified configuration file.
+        On remote machines, it uses Task Scheduler to launch the GUI interactively.
 
     .PARAMETER ConfigFile
         Path to the OVPN configuration file.
@@ -3505,10 +3758,10 @@ function Start-VPNConnection {
     try {
         if ($ComputerName) {
             # Remote execution - use Task Scheduler to start GUI interactively
+            # This bypasses the limitation where remote PSSessions cannot launch visible GUIs for the logged-in user.
             $session = New-PSSession -ComputerName $ComputerName -Credential $Credential -ErrorAction Stop
 
             # Treat the provided ConfigFile as a path on the remote machine.
-            # Do NOT attempt to Test-Path or copy from the local host when starting remotely.
             $remoteConfigFile = $ConfigFile
             $remoteConfigDir = Split-Path $remoteConfigFile -Parent
             $profileName = [System.IO.Path]::GetFileNameWithoutExtension($remoteConfigFile)
@@ -3532,7 +3785,7 @@ function Start-VPNConnection {
                 # We use the 'Users' group so it starts for whoever is logged in.
                 $principal = New-ScheduledTaskPrincipal -GroupId "BUILTIN\Users" -RunLevel Highest
 
-                # 4. Create task settings (RunOnlyIfLoggedOn is crucial for GUI)
+                # 4. Create task settings (RunOnlyIfLoggedOn is crucial for GUI visibility)
                 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit 0
 
                 $taskName = "StartOpenVPNGUI_Remote"
@@ -3568,7 +3821,7 @@ function Start-VPNConnection {
                 return $false
             }
             
-            # Copy config to OpenVPN config directory
+            # Copy config to OpenVPN config directory if it's not already there
             $configDir = $Script:Settings.configPath
             if (-not (Test-Path $configDir)) {
                 New-Item -ItemType Directory -Path $configDir -Force | Out-Null
@@ -3651,6 +3904,7 @@ function Test-VPNConnection {
         return $false
     }
 }
+
 function Install-RemoteClient {
     <#
     .SYNOPSIS
@@ -3696,7 +3950,7 @@ function Install-RemoteClient {
         $sessionOption = New-PSSessionOption -NoMachineProfile
         $session = New-PSSession -ComputerName $ComputerName -Credential $Credential -SessionOption $sessionOption -ErrorAction Stop
         
-        # Get local paths
+        # Get local paths for the module source
         $moduleBase = $MyInvocation.MyCommand.Module.ModuleBase
         # Ensure moduleBase is usable before building local module path
         if (-not $moduleBase -or [string]::IsNullOrWhiteSpace($moduleBase)) {
@@ -3728,7 +3982,7 @@ function Install-RemoteClient {
         Copy-Item -Path $localModuleDir -Destination $remoteModuleDir -ToSession $session -ErrorAction Stop -Recurse -Force
         Copy-Item -Path $ZipPath -Destination $remoteZip -ToSession $session -ErrorAction Stop -Force
         
-        # Perform full client setup on remote
+        # Perform full client setup on remote by invoking the module logic remotely
         Invoke-Command -Session $session -ScriptBlock {
             param($settings, $moduleDirPath, $zipPath, $configPath)
             
@@ -3818,7 +4072,7 @@ function Install-RemoteClient {
     catch {
         Write-Log "Error during remote client configuration: $_" -Level "ERROR"
         
-        # Probeer remote rollback uit te voeren
+        # Attempt remote rollback on failure
         try {
             $rollbackSession = New-PSSession -ComputerName $ComputerName -Credential $Credential -ErrorAction SilentlyContinue
             if ($rollbackSession) {
@@ -3849,13 +4103,14 @@ function Install-RemoteClient {
             }
         }
         catch {
-            Write-Log "Kon remote rollback niet uitvoeren: $_" -Level "WARNING"
+            Write-Log "Could not perform remote rollback: $_" -Level "WARNING"
         }
         
         if ($session) { Remove-PSSession $session -ErrorAction SilentlyContinue }
         return $false
     }
 }
+
 function Invoke-BatchRemoteClientInstall {
     <#
     .SYNOPSIS
@@ -3905,6 +4160,7 @@ function Invoke-BatchRemoteClientInstall {
     $settingsLocal = $Settings
     $basePathLocal = $BasePath
 
+    # Set default throttling if not provided
     if (-not $ThrottleLimit -or $ThrottleLimit -lt 1) {
         try {
             $cpuCores = (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).NumberOfLogicalProcessors
@@ -3915,6 +4171,7 @@ function Invoke-BatchRemoteClientInstall {
         $ThrottleLimit = [math]::Max(1, $cpuCores - 1)
     }
 
+    # Parallel processing of clients
     $results = $clientsLocal | ForEach-Object -Parallel {
         param(
             [string]$Name,
@@ -3928,14 +4185,16 @@ function Invoke-BatchRemoteClientInstall {
         $username = $client.Username
         $password = $client.Password
 
+        # Create credential object safely
         $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
         $cred = New-Object System.Management.Automation.PSCredential ($username, $securePassword)
 
-        # Ensure module and settings are available in this runspace
+        # Ensure module and settings are available in this isolated runspace
         Import-Module $using:modulePathLocal -Force
         Set-ModuleSettings -Settings $using:settingsLocal -BasePath $using:basePathLocal
 
         try {
+            # Install
             $result = Install-RemoteClient -ComputerName $ip -Credential $cred -ZipPath $using:zipPathLocal
             if ($result) { 
                 # Start VPN connection after successful installation
@@ -3960,9 +4219,18 @@ function Invoke-BatchRemoteClientInstall {
 }
 
 
+#endregion OpenVPN Implementation Details
+#region WireGuard Implementation Details
 
-# WireGuard.ps1 
-
+# =================================================================================================
+# REGION: WireGuard Implementation Details
+# =================================================================================================
+# This section contains the specific implementation logic for WireGuard tasks.
+# It includes functions for downloading/installing WireGuard, generating KeyPairs,
+# creating interface configurations, and managing the WireGuard Tunnel Service.
+# Key Functions: Install-WireGuard, Initialize-WireGuardKeys, New-WireGuardServerConfig,
+#                Start-WireGuardService, Stop-WireGuardService.
+# =================================================================================================
 
 function Install-WireGuard {
     <#
@@ -3971,6 +4239,7 @@ function Install-WireGuard {
 
     .DESCRIPTION
         This function downloads and installs WireGuard.
+        It attempts to find the latest version dynamically or falls back to a known stable URL.
         
     .PARAMETER Url
         The URL of the WireGuard installer (optional).
@@ -3983,6 +4252,7 @@ function Install-WireGuard {
         [Parameter(Position = 0)][string]$wgUrl
     )
     
+    # Check if already installed
     $wgExePath = if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardInstalledPath') -and $Script:Settings.wireGuardInstalledPath) { $Script:Settings.wireGuardInstalledPath } else { "C:\Program Files\WireGuard\wireguard.exe" }
     if (Test-Path $wgExePath) {
         Write-Log "WireGuard appears to be already installed" -Level "INFO"
@@ -4000,7 +4270,7 @@ function Install-WireGuard {
     $tempPath = [System.IO.Path]::GetTempFileName() + ".msi"
     
     try {
-        # Try to dynamically find the latest version
+        # Try to dynamically find the latest version from the web
         try {
             $content = Invoke-WebRequest -Uri $Script:Settings.wireGuardVersionCheckUrl -UseBasicParsing -ErrorAction SilentlyContinue
             if ($content.Content -match $Script:Settings.wireGuardVersionRegex) {
@@ -4018,7 +4288,7 @@ function Install-WireGuard {
         Write-Log "WireGuard MSI downloaded to $tempPath" -Level "INFO"
         
         # Silent install options
-        # DO_NOT_LAUNCH=1 prevents the GUI from starting immediately
+        # DO_NOT_LAUNCH=1 prevents the GUI from starting immediately so we can control it
         $arguments = $Script:Settings.wireGuardInstallerArguments -f $tempPath
         
         Write-Log "Installing..." -Level "INFO"
@@ -4043,19 +4313,24 @@ function Install-WireGuard {
         }
     }
 }
+
 function Initialize-WireGuardKeys {
     <#
     .SYNOPSIS
         Generates Private and Public keys for WireGuard.
+        
+    .DESCRIPTION
+        Uses 'wg.exe' to generate a keypair.
     
     .OUTPUTS
         Hashtable with PrivateKey and PublicKey.
     #>
     param(
-        [string]$WgPath,
-        [hashtable]$Settings = $null
+        [Parameter(Position = 0)][string]$WgPath,
+        [Parameter(Position = 1)][hashtable]$Settings = $null
     )
     
+    # Determine path to wg.exe
     if (-not $WgPath) {
         if ($Settings -and $Settings.ContainsKey('wireGuardKeysExePath') -and $Settings.wireGuardKeysExePath) {
             $WgPath = $Settings.wireGuardKeysExePath
@@ -4085,7 +4360,7 @@ function Initialize-WireGuardKeys {
             
             if ([string]::IsNullOrWhiteSpace($privateKey)) { throw "Private key generation resulted in empty output" }
 
-            # Generate public key
+            # Generate public key from private key
             Get-Content -Path $tempPrivPath -Raw | & $WgPath pubkey | Set-Content -Path $tempPubPath -NoNewline
             $publicKey = (Get-Content -Path $tempPubPath -Raw).Trim()
 
@@ -4112,21 +4387,23 @@ function Initialize-WireGuardKeys {
         throw
     }
 }
+
 function New-WireGuardServerConfig {
     <#
     .SYNOPSIS
         Creates a WireGuard server configuration.
     #>
     param(
-        [Parameter(Mandatory = $true)]$ServerKeys,
-        [Parameter(Mandatory = $true)]$ClientKeys,
-        [Parameter(Mandatory = $true)]$Port,
-        [Parameter(Mandatory = $true)]$Address, # e.g. 10.13.13.1/24
-        [Parameter(Mandatory = $true)]$PeerAddress, # e.g. 10.13.13.2/32
-        [Parameter(Mandatory = $true)]$ServerType,
-        [string]$OutputPath
+        [Parameter(Mandatory = $true, Position = 0)]$ServerKeys,
+        [Parameter(Mandatory = $true, Position = 1)]$ClientKeys,
+        [Parameter(Mandatory = $true, Position = 2)]$Port,
+        [Parameter(Mandatory = $true, Position = 3)]$Address, # e.g. 10.13.13.1/24
+        [Parameter(Mandatory = $true, Position = 4)]$PeerAddress, # e.g. 10.13.13.2/32
+        [Parameter(Mandatory = $true, Position = 5)]$ServerType,
+        [Parameter(Position = 6)][string]$OutputPath
     )
     
+    # Construct the config text
     $configContent = @"
 [Interface]
 PrivateKey = $($ServerKeys.PrivateKey)
@@ -4147,21 +4424,23 @@ AllowedIPs = $PeerAddress
     
     return $configContent
 }
+
 function New-WireGuardClientConfig {
     <#
     .SYNOPSIS
         Creates a WireGuard client configuration.
     #>
     param(
-        [Parameter(Mandatory = $true)]$ClientKeys,
-        [Parameter(Mandatory = $true)]$ServerKeys,
-        [Parameter(Mandatory = $true)]$ServerAvailableIP, # WAN IP
-        [Parameter(Mandatory = $true)]$Port,
-        [Parameter(Mandatory = $true)]$Address, # e.g. 10.13.13.2/24
-        [string]$DNS,
-        [string]$OutputPath
+        [Parameter(Mandatory = $true, Position = 0)]$ClientKeys,
+        [Parameter(Mandatory = $true, Position = 1)]$ServerKeys,
+        [Parameter(Mandatory = $true, Position = 2)]$ServerAvailableIP, # WAN IP
+        [Parameter(Mandatory = $true, Position = 3)]$Port,
+        [Parameter(Mandatory = $true, Position = 4)]$Address, # e.g. 10.13.13.2/24
+        [Parameter(Position = 5)][string]$DNS,
+        [Parameter(Position = 6)][string]$OutputPath
     )
     
+    # DNS fallback logic
     if ([string]::IsNullOrWhiteSpace($DNS)) {
         $dnsFromSettings = $null
         if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardDefaultDns')) {
@@ -4177,6 +4456,7 @@ function New-WireGuardClientConfig {
         }
     }
     
+    # Construct config text
     $configContent = @"
 [Interface]
 PrivateKey = $($ClientKeys.PrivateKey)
@@ -4199,13 +4479,14 @@ PersistentKeepalive = $($Script:Settings.wireGuardDefaultPersistentKeepalive)
     
     return $configContent
 }
+
 function Start-WireGuardService {
     <#
     .SYNOPSIS
         Installs and starts the WireGuard tunnel service.
     #>
     param(
-        [Parameter(Mandatory = $true)]$ConfigPath
+        [Parameter(Mandatory = $true, Position = 0)]$ConfigPath
     )
     
     $wgPath = if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardInstalledPath') -and $Script:Settings.wireGuardInstalledPath) { $Script:Settings.wireGuardInstalledPath } else { "C:\Program Files\WireGuard\wireguard.exe" }
@@ -4214,7 +4495,7 @@ function Start-WireGuardService {
     }
     
     try {
-        # First stop existing WireGuard services to prevent conflicts
+        # First stop existing WireGuard services to prevent conflicts (one tunnel at a time typically on Windows)
         Stop-WireGuardService | Out-Null
         
         # wireguard /installtunnelservice <path>
@@ -4224,8 +4505,7 @@ function Start-WireGuardService {
         
         $process = Start-Process -FilePath $wgPath -ArgumentList "/installtunnelservice `"$ConfigPath`"" -Wait -PassThru
         
-        # Start GUI Manager
-        # WireGuard GUI manager is just the same exe without arguments (or user executes it)
+        # Start GUI Manager so the user can see the status
         Write-Log "Starting WireGuard GUI Manager..." -Level "INFO"
         Start-Process -FilePath $wgPath -NoNewWindow
         
@@ -4244,6 +4524,7 @@ function Start-WireGuardService {
         return $false
     }
 }
+
 function Stop-WireGuardService {
     <#
     .SYNOPSIS
@@ -4258,14 +4539,14 @@ function Stop-WireGuardService {
     }
     
     try {
-        # Stop all WireGuard tunnel services
+        # Find and stop all WireGuard tunnel services
         $services = Get-Service -Name "WireGuardTunnel*" -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq "Running" }
         foreach ($service in $services) {
             Write-Log "Stopping and removing WireGuard service: $($service.Name)" -Level "INFO"
             if ($service.Status -eq "Running") {
                 Stop-Service -Name $service.Name -Force -ErrorAction SilentlyContinue
             }
-            # Extract tunnel name from service name (format: WireGuardTunnel$TunnelName)
+            # Uninstall the service wrapper
             $tunnelName = $service.Name -replace '^WireGuardTunnel\$', ''
             if ($tunnelName) {
                 Start-Process -FilePath $wgPath -ArgumentList "/uninstalltunnelservice `"$tunnelName`"" -Wait -PassThru -NoNewWindow | Out-Null
@@ -4281,17 +4562,18 @@ function Stop-WireGuardService {
         return $false
     }
 }
+
 function New-WireGuardQRCode {
     <#
     .SYNOPSIS
         Creates a QR code for the WireGuard client configuration.
     #>
     param(
-        [Parameter(Mandatory = $true)]$ConfigContent,
-        [Parameter(Mandatory = $true)]$OutputPath
+        [Parameter(Mandatory = $true, Position = 0)]$ConfigContent,
+        [Parameter(Mandatory = $true, Position = 1)]$OutputPath
     )
     
-    # Check if QrCodes module is installed
+    # Check if QrCodes module is installed, install if missing
     if (-not (Get-Module -Name QrCodes -ListAvailable)) {
         try {
             Write-Log "Installing QrCodes module..." -Level "INFO"
@@ -4305,6 +4587,7 @@ function New-WireGuardQRCode {
     
     try {
         Import-Module QrCodes -ErrorAction Stop
+        # Generate the barcode image
         Out-BarcodeImage -Content $ConfigContent -Path $OutputPath
         Write-Log "QR code saved in $OutputPath" -Level "INFO"
         return $true
@@ -4314,21 +4597,22 @@ function New-WireGuardQRCode {
         return $false
     }
 }
+
 function Install-RemoteWireGuardServer {
     <#
     .SYNOPSIS
         Installs WireGuard Server on a remote machine.
     #>
     param(
-        [Parameter(Mandatory = $true)]$ComputerName,
-        [Parameter(Mandatory = $true)][PSCredential]$Credential,
-        [Parameter(Mandatory = $true)]$ServerConfigContent, # De inhoud van wg_server.conf
-        [Parameter(Mandatory = $true)]$RemoteConfigPath, # Waar op te slaan (directory of full path?)
-        [int]$Port
+        [Parameter(Mandatory = $true, Position = 0)]$ComputerName,
+        [Parameter(Mandatory = $true, Position = 1)][PSCredential]$Credential,
+        [Parameter(Mandatory = $true, Position = 2)]$ServerConfigContent, # The content of wg_server.conf
+        [Parameter(Mandatory = $true, Position = 3)]$RemoteConfigPath, # Where to save
+        [Parameter(Position = 4)][int]$Port
     )
     
     if (-not $Port) {
-        # Probeer poort uit settings te halen als niet opgegeven
+        # Try to get port from settings if not specified
         if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardPort') -and $Script:Settings.wireGuardPort) {
             $Port = [int]$Script:Settings.wireGuardPort
         }
@@ -4337,7 +4621,7 @@ function Install-RemoteWireGuardServer {
         }
     }
 
-    # Bepaal VPN subnet vanuit settings (veilig controleren)
+    # Determine VPN subnet from settings
     $vpnSubnet = $null
     if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardBaseSubnet') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.wireGuardBaseSubnet)) {
         $vpnSubnet = "${($Script:Settings.wireGuardBaseSubnet)}.0/24"
@@ -4372,7 +4656,7 @@ function Install-RemoteWireGuardServer {
             New-Item -ItemType Directory -Path $modDir -Force | Out-Null
         } -ArgumentList $remoteTemp, $remoteModuleDir
         
-        # 2. Get local paths
+        # 2. Get local paths (module source)
         $moduleBase = $null
         if ($Script:BasePath -and (Test-Path (Join-Path $Script:BasePath 'src\module\AutoSecureVPN.psd1'))) {
             $moduleBase = Join-Path $Script:BasePath 'src\module'
@@ -4391,7 +4675,7 @@ function Install-RemoteWireGuardServer {
             throw "Local module directory not found or invalid: $localModuleDir"
         }
 
-        # 3. Copy module (contents)
+        # 3. Copy module (contents) to remote
         Write-Verbose "Copying module to remote..."
         Copy-Item -Path "$localModuleDir\*" -Destination $remoteModuleDir -ToSession $session -Recurse -Force
         Write-Verbose "Module directory copied"
@@ -4414,7 +4698,7 @@ function Install-RemoteWireGuardServer {
                 
                 Set-ModuleSettings -Settings $settings -BasePath "C:\Temp"
                 
-                # Override Write-Log to capture output and stream critical info
+                # Override Write-Log to capture output in variable instead of file
                 $script:remoteLog = @()
                 function global:Write-Log { 
                     param($Message, $Level = "INFO") 
@@ -4516,17 +4800,19 @@ function Install-RemoteWireGuardServer {
         }
     }
 }
+
 function Install-RemoteWireGuardClient {
     <#
     .SYNOPSIS
         Installs WireGuard Client on a remote machine.
     #>
     param(
-        [Parameter(Mandatory = $true)]$ComputerName,
-        [Parameter(Mandatory = $true)][PSCredential]$Credential,
-        [Parameter(Mandatory = $true)]$ClientConfigContent
+        [Parameter(Mandatory = $true, Position = 0)]$ComputerName,
+        [Parameter(Mandatory = $true, Position = 1)][PSCredential]$Credential,
+        [Parameter(Mandatory = $true, Position = 2)]$ClientConfigContent
     )
     
+    # Defaults for remote paths
     $remoteTemp = if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardRemoteTempPath') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.wireGuardRemoteTempPath)) { $Script:Settings.wireGuardRemoteTempPath } else { 'C:\Temp' }
     $configDir = if ($Script:Settings -and $Script:Settings.ContainsKey('wireGuardRemoteClientConfigDir') -and -not [string]::IsNullOrWhiteSpace($Script:Settings.wireGuardRemoteClientConfigDir)) { $Script:Settings.wireGuardRemoteClientConfigDir } else { 'C:\Program Files\WireGuard\Data\Configurations' }
     
@@ -4552,7 +4838,7 @@ function Install-RemoteWireGuardClient {
         
         # 2. Execute on remote with output capture
         Write-Verbose "Executing installation on remote..."
-        # Use -AsJob to prevent blocking if network changes
+        # Use -AsJob to prevent blocking if network changes (VPN connect breaks session)
         $job = Invoke-Command -Session $session -AsJob -ScriptBlock {
             param($moduleDirPath, $configContent, $configDir, $settings)
             
@@ -4628,7 +4914,7 @@ function Install-RemoteWireGuardClient {
                 }
                 $log += "OK: Config saved to $clientConfigPath"
                 
-                # 4. Start service (this will break the PSSession when tunnel activates)
+                # 4. Start service (this will likely break the PSSession when tunnel activates)
                 $log += "Starting WireGuard tunnel..."
                 if (-not (Start-WireGuardService -ConfigPath $clientConfigPath)) { 
                     $log += "ERROR: Service start failed"
@@ -4652,6 +4938,7 @@ function Install-RemoteWireGuardClient {
                 }
             }
             finally {
+                # Clean up module
                 if (Test-Path $moduleDirPath) {
                     Remove-Item $moduleDirPath -Recurse -Force -ErrorAction SilentlyContinue
                 }
@@ -4732,21 +5019,21 @@ function Invoke-BatchRemoteWireGuardClientInstall {
         Installs WireGuard on multiple clients and generates unique configs.
     #>
     param(
-        [Parameter(Mandatory = $true)]$Clients,
-        [Parameter(Mandatory = $true)]$ServerKeys,
-        [Parameter(Mandatory = $true)]$ServerEndpoint, # IP:Port
-        [Parameter(Mandatory = $true)]$ModulePath,
-        [Parameter(Mandatory = $true)]$Settings, # Pass configs
-        [int]$ThrottleLimit = 5
+        [Parameter(Mandatory = $true, Position = 0)]$Clients,
+        [Parameter(Mandatory = $true, Position = 1)]$ServerKeys,
+        [Parameter(Mandatory = $true, Position = 2)]$ServerEndpoint, # IP:Port
+        [Parameter(Mandatory = $true, Position = 3)]$ModulePath,
+        [Parameter(Mandatory = $true, Position = 4)]$Settings, # Pass configs
+        [Parameter(Position = 5)][int]$ThrottleLimit = 5
     )
     
     # Get base IP from settings or default
     $baseSubnet = if ($Settings.ContainsKey('wireGuardBaseSubnet') -and -not [string]::IsNullOrEmpty($Settings.wireGuardBaseSubnet)) { $Settings.wireGuardBaseSubnet } else { "10.13.13" }
     
-    # $preparedClients pre-processing follows...
+    # Counter for IP assignment
     $i = 0
     
-    # Pre-process clients: Generate Keys & Configs Locally
+    # Pre-process clients: Generate Keys & Configs Locally to avoid race conditions
     Write-Log "Preparing WireGuard configurations for batch..." -Level "INFO"
     Write-Verbose "Preparing configurations for $($Clients.Count) clients..."
     
@@ -4775,6 +5062,7 @@ AllowedIPs = 0.0.0.0/0
 PersistentKeepalive = $($Script:Settings.wireGuardDefaultPersistentKeepalive)
 "@
 
+        # Create a custom object with all info needed for installation
         $preparedClients += [PSCustomObject]@{
             Name          = $client.Name
             IP            = $client.IP # Remote Access IP
@@ -4782,13 +5070,13 @@ PersistentKeepalive = $($Script:Settings.wireGuardDefaultPersistentKeepalive)
             Password      = $client.Password
             ConfigContent = $configContent
             VPNIP         = $clientIp
-            PublicKey     = $keys.PublicKey # Needed to update server?
+            PublicKey     = $keys.PublicKey # Needed to update server
         }
     }
     Write-Verbose "All configurations prepared"
     
     # NOTE: Server config must be updated to include these peers!
-    # This script currently does not update the server config.
+    # This script currently does not update the server config automatically.
     # We log the Public Keys so the admin can add them.
     
     $serverUpdates = ""
@@ -4796,6 +5084,7 @@ PersistentKeepalive = $($Script:Settings.wireGuardDefaultPersistentKeepalive)
         $serverUpdates += "`n[Peer] # User: $($pc.Name)`nPublicKey = $($pc.PublicKey)`nAllowedIPs = $($pc.VPNIP)/32`n"
     }
     
+    # Save instructions to a file
     $serverUpdateFile = Join-Path $Script:Settings.outputPath "wg_server_additions.txt"
     Set-Content -Path $serverUpdateFile -Value $serverUpdates
     Write-Log "IMPORTANT: Add the peers to your server config! Saved in $serverUpdateFile" -Level "WARNING"
@@ -4825,12 +5114,14 @@ PersistentKeepalive = $($Script:Settings.wireGuardDefaultPersistentKeepalive)
     $parallelResults = $preparedClients | ForEach-Object -Parallel {
         $pc = $_
         
+        # Prepare credential
         $securePassword = ConvertTo-SecureString $pc.Password -AsPlainText -Force
         $cred = New-Object System.Management.Automation.PSCredential ($pc.Username, $securePassword)
         
-        # Load Module
+        # Load Module in parallel runspace
         Import-Module $using:localModulePath -Force
         
+        # Install
         if (Install-RemoteWireGuardClient -ComputerName $pc.IP -Credential $cred -ClientConfigContent $pc.ConfigContent) {
             "SUCCESS: $($pc.Name) ($($pc.IP))"
         }
@@ -4845,3 +5136,4 @@ PersistentKeepalive = $($Script:Settings.wireGuardDefaultPersistentKeepalive)
 }
 
 
+#endregion WireGuard Implementation Details
