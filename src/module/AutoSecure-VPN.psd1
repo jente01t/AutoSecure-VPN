@@ -3,7 +3,7 @@
     RootModule        = 'AutoSecure-VPN.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.0.4'
+    ModuleVersion     = '1.0.5'
 
     # Supported PSEditions
     # CompatiblePSEditions = @('Desktop', 'Core')
@@ -115,6 +115,7 @@
     # Default prefix for commands exported from the module. Override the default prefix using Import-Module -Prefix.
     # DefaultCommandPrefix = ''
 }
+
 
 
 
