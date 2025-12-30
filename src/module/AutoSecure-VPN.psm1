@@ -69,8 +69,9 @@ function Start-VPNSetup {
     # Check if the global Settings hashtable is empty
     if ($Script:Settings.Count -eq 0) {
         try {
+            $configDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'config'
             # Load stable settings first (defaults from module directory)
-            $stableConfigPath = Join-Path $PSScriptRoot 'Stable.psd1'
+            $stableConfigPath = Join-Path $configDir 'Stable.psd1'
             if (Test-Path $stableConfigPath) {
                 # Import the PSD1 data file safely
                 $stableSettings = Import-PowerShellDataFile -Path $stableConfigPath -ErrorAction Stop
@@ -78,17 +79,17 @@ function Start-VPNSetup {
             }
             else {
                 # Check if example file exists and provide helpful message if configuration is missing
-                $examplePath = Join-Path $PSScriptRoot 'Stable.psd1.example'
+                $examplePath = Join-Path $configDir 'Stable.psd1.example'
                 if (Test-Path $examplePath) {
                     Write-Host "Configuration file 'Stable.psd1' not found." -ForegroundColor Yellow
                     Write-Host "Please copy 'Stable.psd1.example' to 'Stable.psd1' and customize it." -ForegroundColor Yellow
-                    Write-Host "Location: $PSScriptRoot" -ForegroundColor Cyan
+                    Write-Host "Location: $configDir" -ForegroundColor Cyan
                     exit 1
                 }
             }
             
             # Load variable settings and merge (variable overrides stable defaults)
-            $variableConfigPath = Join-Path $PSScriptRoot 'Variable.psd1'
+            $variableConfigPath = Join-Path $configDir 'Variable.psd1'
             if (Test-Path $variableConfigPath) {
                 $variableSettings = Import-PowerShellDataFile -Path $variableConfigPath -ErrorAction Stop
                 if ($variableSettings) {
@@ -100,11 +101,11 @@ function Start-VPNSetup {
             }
             else {
                 # Check if example file exists and provide helpful message for the variable config
-                $examplePath = Join-Path $PSScriptRoot 'Variable.psd1.example'
+                $examplePath = Join-Path $configDir 'Variable.psd1.example'
                 if (Test-Path $examplePath) {
                     Write-Host "Configuration file 'Variable.psd1' not found." -ForegroundColor Yellow
                     Write-Host "Please copy 'Variable.psd1.example' to 'Variable.psd1' and customize it." -ForegroundColor Yellow
-                    Write-Host "Location: $PSScriptRoot" -ForegroundColor Cyan
+                    Write-Host "Location: $configDir" -ForegroundColor Cyan
                     exit 1
                 }
             }

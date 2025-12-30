@@ -63,6 +63,17 @@ A comprehensive PowerShell automation framework for **OpenVPN** and **WireGuard*
 
 ---
 
+## ⚠️ Limitations
+
+This project automates the installation and configuration of VPN servers and clients on Windows systems but has several limitations and out-of-scope features:
+
+- **DDNS and Port Forwarding**: The project does not handle Dynamic DNS (DDNS) configuration or port forwarding on routers. These must be set up manually by the user on their network equipment or DDNS provider.
+
+- **Network Infrastructure**: Assumes the server has a public IP or is behind a properly configured NAT/firewall. The script configures Windows Firewall but does not interact with external routers or gateways.
+
+
+---
+
 ## 📋 Requirements
 
 ### System Requirements
@@ -100,7 +111,8 @@ Additionally:
 - Firewall rules allowing WinRM (TCP 5985/5986).
 - Administrator credentials for remote systems.
 
-WARNING: script uses Internet Connection Sharing (ICS), VPN wont have outisde connection when network adapter already in use. Dubble check if adapter is not already in use.
+> [!WARNING]
+> This script uses Internet Connection Sharing (ICS) to enable NAT for VPN clients. If your network adapter is already configured for ICS (e.g., sharing internet with another network), the VPN may not establish an external connection. Ensure no other ICS configuration is active on the adapter before running the script.
 
 ---
 
