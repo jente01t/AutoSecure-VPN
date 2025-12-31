@@ -996,8 +996,8 @@ function Invoke-BatchRemoteClientSetup {
             $cpuCores = (Get-CimInstance Win32_ComputerSystem).NumberOfLogicalProcessors
             $throttleLimit = [math]::Max(1, $cpuCores - 1)
             
-            # Set module path for batch install
-            $ModulePath = Join-Path $PSScriptRoot "../module/AutoSecure-VPN.psd1"
+            # Set module path for batch install (use manifest in current module directory)
+            $ModulePath = Join-Path $PSScriptRoot "AutoSecure-VPN.psd1"
              
             # Run the parallel installation logic
             $results = Invoke-BatchRemoteClientInstall -Clients $clients -ZipPath $zipPath -ModulePath $ModulePath -Settings $Script:Settings -BasePath $Script:BasePath -ThrottleLimit $throttleLimit
@@ -1041,8 +1041,8 @@ function Invoke-BatchRemoteClientSetup {
             # Execute Batch WireGuard
             Write-Host "`n[3/4] Starting Batch WireGuard Setup..." -ForegroundColor Cyan
              
-            # Module path fix for WireGuard
-            $modPath = Join-Path $PSScriptRoot "../module/AutoSecure-VPN.psm1"
+            # Module path fix for WireGuard (use .psm1 in current module directory)
+            $modPath = Join-Path $PSScriptRoot "AutoSecure-VPN.psm1"
             
             # Run the parallel installation logic for WireGuard
             $results = Invoke-BatchRemoteWireGuardClientInstall -Clients $clients -ServerKeys $serverKeys -ServerEndpoint $serverEndpoint -ModulePath $modPath -Settings $Script:Settings
@@ -2527,41 +2527,28 @@ function Install-RemoteServer {
         $sessionOption = New-PSSessionOption -NoMachineProfile
         $session = New-PSSession -ComputerName $ComputerName -Credential $Credential -ConfigurationName PowerShell.7 -SessionOption $sessionOption -ErrorAction Stop
         
-        # Get local paths logic to determine where the module source files are
-        $moduleBase = $null
+        # Get local paths - use PSScriptRoot which always points to the currently executing module location
+        # This works correctly regardless of which version is installed or loaded
+        $moduleBase = $PSScriptRoot
         
-        # Priority 1: Use Script BasePath if available and valid (Development/Source context)
-        if ($Script:BasePath -and (Test-Path (Join-Path $Script:BasePath 'src\module\AutoSecure-VPN.psd1'))) {
-            $moduleBase = Join-Path $Script:BasePath 'src\module'
-            Write-Verbose "Using source module path from Script Scope: $moduleBase"
-        }
-        
-        # Priority 2: Use loaded module base (Installed context)
+        # Fallback for development context if PSScriptRoot is not available
         if (-not $moduleBase -or [string]::IsNullOrWhiteSpace($moduleBase)) {
-            $moduleBase = $MyInvocation.MyCommand.Module.ModuleBase
-        }
-
-        # Priority 3: Fallbacks
-        if (-not $moduleBase -or [string]::IsNullOrWhiteSpace($moduleBase)) {
-            $moduleBase = $PSScriptRoot
-            if (-not $moduleBase -or [string]::IsNullOrWhiteSpace($moduleBase)) {
-                $moduleBase = Split-Path -Parent $MyInvocation.MyCommand.Definition
-            }
-        }
-        # Ensure moduleBase is usable before building local module path
-        if (-not $moduleBase -or [string]::IsNullOrWhiteSpace($moduleBase)) {
-            if ($PSScriptRoot -and -not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
-                $moduleBase = $PSScriptRoot
-            }
-            elseif ($Script:BasePath -and -not [string]::IsNullOrWhiteSpace($Script:BasePath)) {
+            if ($Script:BasePath -and (Test-Path (Join-Path $Script:BasePath 'src\module\AutoSecure-VPN.psd1'))) {
                 $moduleBase = Join-Path $Script:BasePath 'src\module'
+                Write-Verbose "Using source module path from Script Scope: $moduleBase"
             }
             else {
-                $moduleBase = (Get-Location).Path
+                # Last resort fallback
+                $moduleBase = Split-Path -Parent $MyInvocation.MyCommand.Path
             }
         }
+        
         $localModuleDir = $moduleBase
+        Write-Verbose "Using module directory: $localModuleDir"
+        Write-Log "Module directory for remote installation: $localModuleDir" -Level "INFO"
+        
         if (-not (Test-Path (Join-Path $localModuleDir "AutoSecure-VPN.psd1"))) {
+            Write-Log "Local module manifest not found in $localModuleDir" -Level "ERROR"
             throw "Local module manifest not found in $localModuleDir"
         }
 
@@ -3966,22 +3953,28 @@ function Install-RemoteClient {
         $sessionOption = New-PSSessionOption -NoMachineProfile
         $session = New-PSSession -ComputerName $ComputerName -Credential $Credential -ConfigurationName PowerShell.7 -SessionOption $sessionOption -ErrorAction Stop
         
-        # Get local paths for the module source
-        $moduleBase = $MyInvocation.MyCommand.Module.ModuleBase
-        # Ensure moduleBase is usable before building local module path
+        # Get local paths - use PSScriptRoot which always points to the currently executing module location
+        # This works correctly regardless of which version is installed or loaded
+        $moduleBase = $PSScriptRoot
+        
+        # Fallback for development context if PSScriptRoot is not available
         if (-not $moduleBase -or [string]::IsNullOrWhiteSpace($moduleBase)) {
-            if ($PSScriptRoot -and -not [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
-                $moduleBase = $PSScriptRoot
-            }
-            elseif ($Script:BasePath -and -not [string]::IsNullOrWhiteSpace($Script:BasePath)) {
+            if ($Script:BasePath -and (Test-Path (Join-Path $Script:BasePath 'src\module\AutoSecure-VPN.psd1'))) {
                 $moduleBase = Join-Path $Script:BasePath 'src\module'
+                Write-Verbose "Using source module path from Script Scope: $moduleBase"
             }
             else {
-                $moduleBase = (Get-Location).Path
+                # Last resort fallback
+                $moduleBase = Split-Path -Parent $MyInvocation.MyCommand.Path
             }
         }
+        
         $localModuleDir = $moduleBase
+        Write-Verbose "Using module directory: $localModuleDir"
+        Write-Log "Module directory for remote installation: $localModuleDir" -Level "INFO"
+        
         if (-not (Test-Path (Join-Path $localModuleDir "AutoSecure-VPN.psd1"))) {
+            Write-Log "Local module manifest not found in $localModuleDir" -Level "ERROR"
             throw "Local module manifest not found in $localModuleDir"
         }
         
