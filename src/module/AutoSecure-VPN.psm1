@@ -997,7 +997,7 @@ function Invoke-BatchRemoteClientSetup {
             $throttleLimit = [math]::Max(1, $cpuCores - 1)
             
             # Set module path for batch install
-            $ModulePath = Join-Path $PSScriptRoot "../module/AutoSecureVPN.psd1"
+            $ModulePath = Join-Path $PSScriptRoot "../module/AutoSecure-VPN.psd1"
              
             # Run the parallel installation logic
             $results = Invoke-BatchRemoteClientInstall -Clients $clients -ZipPath $zipPath -ModulePath $ModulePath -Settings $Script:Settings -BasePath $Script:BasePath -ThrottleLimit $throttleLimit
@@ -1042,7 +1042,7 @@ function Invoke-BatchRemoteClientSetup {
             Write-Host "`n[3/4] Starting Batch WireGuard Setup..." -ForegroundColor Cyan
              
             # Module path fix for WireGuard
-            $modPath = Join-Path $PSScriptRoot "../module/AutoSecureVPN.psm1"
+            $modPath = Join-Path $PSScriptRoot "../module/AutoSecure-VPN.psm1"
             
             # Run the parallel installation logic for WireGuard
             $results = Invoke-BatchRemoteWireGuardClientInstall -Clients $clients -ServerKeys $serverKeys -ServerEndpoint $serverEndpoint -ModulePath $modPath -Settings $Script:Settings
@@ -2525,13 +2525,13 @@ function Install-RemoteServer {
     try {
         # Create session with bypassed execution policy (more reliable than setting inside scriptblock)
         $sessionOption = New-PSSessionOption -NoMachineProfile
-        $session = New-PSSession -ComputerName $ComputerName -Credential $Credential -SessionOption $sessionOption -ErrorAction Stop
+        $session = New-PSSession -ComputerName $ComputerName -Credential $Credential -ConfigurationName PowerShell.7 -SessionOption $sessionOption -ErrorAction Stop
         
         # Get local paths logic to determine where the module source files are
         $moduleBase = $null
         
         # Priority 1: Use Script BasePath if available and valid (Development/Source context)
-        if ($Script:BasePath -and (Test-Path (Join-Path $Script:BasePath 'src\module\AutoSecureVPN.psd1'))) {
+        if ($Script:BasePath -and (Test-Path (Join-Path $Script:BasePath 'src\module\AutoSecure-VPN.psd1'))) {
             $moduleBase = Join-Path $Script:BasePath 'src\module'
             Write-Verbose "Using source module path from Script Scope: $moduleBase"
         }
@@ -2561,7 +2561,7 @@ function Install-RemoteServer {
             }
         }
         $localModuleDir = $moduleBase
-        if (-not (Test-Path (Join-Path $localModuleDir "AutoSecureVPN.psd1"))) {
+        if (-not (Test-Path (Join-Path $localModuleDir "AutoSecure-VPN.psd1"))) {
             throw "Local module manifest not found in $localModuleDir"
         }
 
@@ -2577,7 +2577,7 @@ function Install-RemoteServer {
 
         # define remote temporary paths
         $remoteTemp = "C:\Temp"
-        $remoteModuleDir = Join-Path $remoteTemp "AutoSecureVPN"
+        $remoteModuleDir = Join-Path $remoteTemp "AutoSecure-VPN"
         $remoteEasyRSA = Join-Path $remoteTemp "easy-rsa"
         $remoteEasyRSAZip = Join-Path $remoteTemp "easy-rsa.zip"
         $remoteConfigDir = Join-Path $remoteTemp "config"
@@ -2669,7 +2669,7 @@ function Install-RemoteServer {
             
             # Load module manifest (only when not already loaded)
             Write-Verbose "Loading module..."
-            $manifestPath = Join-Path $moduleDirPath "AutoSecureVPN.psd1"
+            $manifestPath = Join-Path $moduleDirPath "AutoSecure-VPN.psd1"
             if (-not (Get-Module -Name 'AutoSecure-VPN' -ErrorAction SilentlyContinue)) {
                 try {
                     Import-Module $manifestPath -Force
@@ -2758,7 +2758,7 @@ function Install-RemoteServer {
         
         # Try to perform remote rollback if setup fails
         try {
-            $rollbackSession = New-PSSession -ComputerName $ComputerName -Credential $Credential -ErrorAction SilentlyContinue
+            $rollbackSession = New-PSSession -ComputerName $ComputerName -Credential $Credential -ConfigurationName PowerShell.7 -ErrorAction SilentlyContinue
             if ($rollbackSession) {
                 Invoke-Command -Session $rollbackSession -ScriptBlock {
                     param($settings, $remoteEasyRSA, $remoteModule, $remoteConfigDir)
@@ -3775,7 +3775,7 @@ function Start-VPNConnection {
         if ($ComputerName) {
             # Remote execution - use Task Scheduler to start GUI interactively
             # This bypasses the limitation where remote PSSessions cannot launch visible GUIs for the logged-in user.
-            $session = New-PSSession -ComputerName $ComputerName -Credential $Credential -ErrorAction Stop
+            $session = New-PSSession -ComputerName $ComputerName -Credential $Credential -ConfigurationName PowerShell.7 -ErrorAction Stop
 
             # Treat the provided ConfigFile as a path on the remote machine.
             $remoteConfigFile = $ConfigFile
@@ -3964,7 +3964,7 @@ function Install-RemoteClient {
     try {
         # Create session with bypassed execution policy
         $sessionOption = New-PSSessionOption -NoMachineProfile
-        $session = New-PSSession -ComputerName $ComputerName -Credential $Credential -SessionOption $sessionOption -ErrorAction Stop
+        $session = New-PSSession -ComputerName $ComputerName -Credential $Credential -ConfigurationName PowerShell.7 -SessionOption $sessionOption -ErrorAction Stop
         
         # Get local paths for the module source
         $moduleBase = $MyInvocation.MyCommand.Module.ModuleBase
@@ -3981,14 +3981,14 @@ function Install-RemoteClient {
             }
         }
         $localModuleDir = $moduleBase
-        if (-not (Test-Path (Join-Path $localModuleDir "AutoSecureVPN.psd1"))) {
+        if (-not (Test-Path (Join-Path $localModuleDir "AutoSecure-VPN.psd1"))) {
             throw "Local module manifest not found in $localModuleDir"
         }
         
         # Copy module directory to remote temp
         $remoteTemp = "C:\Temp"
         Invoke-Command -Session $session -ScriptBlock { if (-not (Test-Path "C:\Temp")) { New-Item -ItemType Directory -Path "C:\Temp" -Force } } -ErrorAction Stop
-        $remoteModuleDir = Join-Path $remoteTemp "AutoSecureVPN"
+        $remoteModuleDir = Join-Path $remoteTemp "AutoSecure-VPN"
         $remoteZip = Join-Path $remoteTemp "client.zip"
 
         # Validate local files/paths before attempting remote copy
@@ -4009,7 +4009,7 @@ function Install-RemoteClient {
             Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process -Force
             
             # Load module manifest (only when not already loaded)
-            $manifestPath = Join-Path $moduleDirPath "AutoSecureVPN.psd1"
+            $manifestPath = Join-Path $moduleDirPath "AutoSecure-VPN.psd1"
             if (-not (Get-Module -Name 'AutoSecure-VPN' -ErrorAction SilentlyContinue)) {
                 try {
                     Import-Module $manifestPath -Force
@@ -4090,7 +4090,7 @@ function Install-RemoteClient {
         
         # Attempt remote rollback on failure
         try {
-            $rollbackSession = New-PSSession -ComputerName $ComputerName -Credential $Credential -ErrorAction SilentlyContinue
+            $rollbackSession = New-PSSession -ComputerName $ComputerName -Credential $Credential -ConfigurationName PowerShell.7 -ErrorAction SilentlyContinue
             if ($rollbackSession) {
                 Invoke-Command -Session $rollbackSession -ScriptBlock {
                     param($settings, $modulePath)
@@ -4098,7 +4098,7 @@ function Install-RemoteClient {
                         # Set execution policy to allow script execution
                         Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process -Force
                         
-                        $manifestPath = Join-Path $modulePath "AutoSecureVPN.psd1"
+                        $manifestPath = Join-Path $modulePath "AutoSecure-VPN.psd1"
                         if (-not (Get-Module -Name 'AutoSecure-VPN' -ErrorAction SilentlyContinue)) {
                             Import-Module $manifestPath -Force
                         }
@@ -4654,12 +4654,12 @@ function Install-RemoteWireGuardServer {
         $remoteTemp = 'C:\Temp'
     }
 
-    $remoteModuleDir = Join-Path $remoteTemp "AutoSecureVPN"
+    $remoteModuleDir = Join-Path $remoteTemp "AutoSecure-VPN"
     
     Write-Log "Starting remote WireGuard server installation on $ComputerName..." -Level "INFO"
     Write-Verbose "Connecting to remote machine $ComputerName..."
     
-    $session = New-PSSession -ComputerName $ComputerName -Credential $Credential
+    $session = New-PSSession -ComputerName $ComputerName -Credential $Credential -ConfigurationName PowerShell.7
     Write-Verbose "PSSession established"
     
     try {
@@ -4674,20 +4674,20 @@ function Install-RemoteWireGuardServer {
         
         # 2. Get local paths (module source)
         $moduleBase = $null
-        if ($Script:BasePath -and (Test-Path (Join-Path $Script:BasePath 'src\module\AutoSecureVPN.psd1'))) {
+        if ($Script:BasePath -and (Test-Path (Join-Path $Script:BasePath 'src\module\AutoSecure-VPN.psd1'))) {
             $moduleBase = Join-Path $Script:BasePath 'src\module'
             Write-Verbose "Using source module path from Script Scope: $moduleBase"
         }
         
         if (-not $moduleBase -or [string]::IsNullOrWhiteSpace($moduleBase)) {
             $moduleBase = $PSScriptRoot
-            if (-not $moduleBase -or -not (Test-Path (Join-Path $moduleBase "AutoSecureVPN.psd1"))) {
-                $moduleBase = (Get-Module AutoSecureVPN).ModuleBase
+            if (-not $moduleBase -or -not (Test-Path (Join-Path $moduleBase "AutoSecure-VPN.psd1"))) {
+                $moduleBase = (Get-Module AutoSecure-VPN).ModuleBase
             }
         }
         $localModuleDir = $moduleBase
         
-        if (-not $localModuleDir -or -not (Test-Path (Join-Path $localModuleDir "AutoSecureVPN.psd1"))) {
+        if (-not $localModuleDir -or -not (Test-Path (Join-Path $localModuleDir "AutoSecure-VPN.psd1"))) {
             throw "Local module directory not found or invalid: $localModuleDir"
         }
 
@@ -4707,7 +4707,7 @@ function Install-RemoteWireGuardServer {
             try {
                 # Load module
                 $log += "Loading module..."
-                $manifestPath = Join-Path $moduleDirPath "AutoSecureVPN.psd1"
+                $manifestPath = Join-Path $moduleDirPath "AutoSecure-VPN.psd1"
                 if (-not (Get-Module -Name 'AutoSecure-VPN' -ErrorAction SilentlyContinue)) {
                     Import-Module $manifestPath -Force
                 }
@@ -4835,7 +4835,7 @@ function Install-RemoteWireGuardClient {
     Write-Log "Starting remote WireGuard client installation on $ComputerName..." -Level "INFO"
     Write-Verbose "Connecting to remote machine $ComputerName..."
     
-    $session = New-PSSession -ComputerName $ComputerName -Credential $Credential
+    $session = New-PSSession -ComputerName $ComputerName -Credential $Credential -ConfigurationName PowerShell.7
     Write-Verbose "PSSession established"
     
     try {
@@ -4844,11 +4844,11 @@ function Install-RemoteWireGuardClient {
         Invoke-Command -Session $session -ScriptBlock { param($path) if (-not (Test-Path $path)) { New-Item -ItemType Directory -Path $path -Force } } -ArgumentList $remoteTemp
         
         $localModuleDir = $PSScriptRoot
-        if (-not $localModuleDir -or -not (Test-Path (Join-Path $localModuleDir "AutoSecureVPN.psd1"))) {
-            $localModuleDir = (Get-Module AutoSecureVPN).ModuleBase
+        if (-not $localModuleDir -or -not (Test-Path (Join-Path $localModuleDir "AutoSecure-VPN.psd1"))) {
+            $localModuleDir = (Get-Module AutoSecure-VPN).ModuleBase
         }
 
-        $remoteModuleDir = Join-Path $remoteTemp "AutoSecureVPN"
+        $remoteModuleDir = Join-Path $remoteTemp "AutoSecure-VPN"
         Copy-Item -Path $localModuleDir -Destination $remoteModuleDir -ToSession $session -Recurse -Force
         Write-Verbose "Module directory copied"
         
@@ -4867,7 +4867,7 @@ function Install-RemoteWireGuardClient {
                 
                 # Load module
                 $log += "Loading module..."
-                $manifestPath = Join-Path $moduleDirPath "AutoSecureVPN.psd1"
+                $manifestPath = Join-Path $moduleDirPath "AutoSecure-VPN.psd1"
                 if (-not (Get-Module -Name 'AutoSecure-VPN' -ErrorAction SilentlyContinue)) {
                     Import-Module $manifestPath -Force
                 }

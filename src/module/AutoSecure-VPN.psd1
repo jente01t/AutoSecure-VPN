@@ -3,7 +3,7 @@
     RootModule        = 'AutoSecure-VPN.psm1'
 
     # Version number of this module.
-    ModuleVersion     = '1.0.5'
+    ModuleVersion     = '1.0.6'
 
     # Supported PSEditions
     # CompatiblePSEditions = @('Desktop', 'Core')
@@ -60,11 +60,8 @@
     # NestedModules = @()
 
     # Functions to export from this module, for best performance, do not use wildcards
-    FunctionsToExport = @(
-        'Start-VPNSetup',
-        'Select-ServerMode',
-        'Select-ClientMode'
-    )
+    # Export all functions so they're available in remote sessions
+    FunctionsToExport = @('*')
 
     # Cmdlets to export from this module
     CmdletsToExport   = @()
