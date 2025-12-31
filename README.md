@@ -178,9 +178,9 @@ The project uses **PowerShell Data Files (`.psd1`)** for configuration, split in
 
 1. **Copy the example configuration files**:
    ```powershell
-   cd src\module
-   Copy-Item Stable.psd1.example Stable.psd1
-   Copy-Item Variable.psd1.example Variable.psd1
+   cd [User]\Documents\PowerShell\Modules\AutoSecure-VPN\x.x.x
+   Copy-Item Stable.psd1.example ../config/Stable.psd1
+   Copy-Item Variable.psd1.example ../config/Variable.psd1
    ```
 
 2. **Edit `Variable.psd1`** with your environment-specific settings:

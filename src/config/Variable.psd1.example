@@ -22,9 +22,11 @@
 	lanSubnet = '192.168.1.0' # Mandatory: LAN subnet of the network behind the VPN server
 	lanMask = '255.255.255.0' # Mandatory: Subnet mask of the LAN network
 	noPass = $true  # Whether certificates should be created without a password
-	remoteClientIP = "your.client.ip.here" # Mandatory: IP of the client
+
 
 	# client configuration (Example)
 	clientName = 'client1'  # Mandatory: Name of the VPN client
+	remoteClientIP = "your.client.ip.here" # Mandatory: IP of the client
+	
 	clientCSVPath = "output\test_clients.csv" # Path to CSV file with extra clients
 }

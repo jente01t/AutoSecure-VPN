@@ -696,7 +696,7 @@ function Invoke-OpenVPNServerSetup {
         Write-Progress -Activity "Server Setup" -Status "Step 7.75 of 8: Configuring ICS for internet access" -PercentComplete 80
         Write-Host "`n[7.75/8] Configuring ICS (Internet Connection Sharing)..." -ForegroundColor Cyan
         # Configuring NAT/ICS so VPN clients can browse the internet through the server
-        if (-not (Enable-VPNNAT -VPNSubnet "10.8.0.0/24")) { 
+        if (-not (Enable-VPNNAT -VPNSubnet "10.8.0.0/24" -VPNType "OpenVPN")) { 
             Write-Host "  ! ICS configuration warning - manual configuration might be needed" -ForegroundColor Yellow
             Write-Log "ICS configuration warning - manual setup might be needed" -Level "WARNING"
         }
@@ -1142,8 +1142,21 @@ function Invoke-WireGuardClientSetup {
         
         if (-not (Test-Path $configPath)) { throw "File not found: $configPath" }
         
-        # Start the WireGuard tunnel using the config
-        if (-not (Start-WireGuardService -ConfigPath $configPath)) { throw "Starting tunnel failed" }
+        # Copy config to WireGuard's official configuration directory (required for GUI visibility)
+        $wgConfigDir = "C:\Program Files\WireGuard\Data\Configurations"
+        if (-not (Test-Path $wgConfigDir)) { New-Item -ItemType Directory -Path $wgConfigDir -Force | Out-Null }
+        
+        # Extract tunnel name from config file (without extension)
+        $tunnelName = [System.IO.Path]::GetFileNameWithoutExtension($configPath)
+        $wgConfigPath = Join-Path $wgConfigDir "$tunnelName.conf"
+        
+        # Copy config file to WireGuard directory
+        Write-Host "  Copying config to WireGuard directory..." -ForegroundColor Gray
+        Copy-Item -Path $configPath -Destination $wgConfigPath -Force
+        Write-Log "Config copied to: $wgConfigPath" -Level "INFO"
+        
+        # Start the WireGuard tunnel using the config from WireGuard directory
+        if (-not (Start-WireGuardService -ConfigPath $wgConfigPath)) { throw "Starting tunnel failed" }
         
         Write-Host "  ✓ Tunnel started" -ForegroundColor Green
         
@@ -1214,11 +1227,15 @@ function Invoke-WireGuardServerSetup {
         if (-not (Test-Path $wgConfigDir)) { New-Item -ItemType Directory -Path $wgConfigDir -Force | Out-Null }
         $serverConfigPath = Join-Path $wgConfigDir "wg_server.conf"
         
-        # Remove existing config file if it exists
+        # Remove existing config files if they exist (both .conf and .dpapi)
         if (Test-Path $serverConfigPath) {
             Remove-Item $serverConfigPath -Force -ErrorAction SilentlyContinue
-            Start-Sleep -Milliseconds 500  # Wait for file system to release
         }
+        $dpapiPath = "$serverConfigPath.dpapi"
+        if (Test-Path $dpapiPath) {
+            Remove-Item $dpapiPath -Force -ErrorAction SilentlyContinue
+        }
+        Start-Sleep -Milliseconds 500  # Wait for file system to release both files
         
         # Create and write server config file
         New-WireGuardServerConfig -ServerKeys $serverKeys -ClientKeys $clientKeys -Port $wgPort -Address "$baseSubnet.1/24" -PeerAddress "$baseSubnet.2/32" -ServerType "Windows" -OutputPath $serverConfigPath | Out-Null
@@ -1255,7 +1272,7 @@ function Invoke-WireGuardServerSetup {
         # Step 7: Configure NAT and IP Forwarding (after service start, when adapter exists)
         Write-Host "`n[7/7] Configuring NAT and IP Forwarding..." -ForegroundColor Cyan
         Start-Sleep -Seconds 2  # Wait for adapter to be available
-        if (-not (Enable-VPNNAT -VPNSubnet "$baseSubnet.0/24")) { 
+        if (-not (Enable-VPNNAT -VPNSubnet "$baseSubnet.0/24" -VPNType "WireGuard")) { 
             Write-Host "  ! NAT configuration warning - manual configuration may be required" -ForegroundColor Yellow
             Write-Log "NAT configuration warning - manual setup may be required" -Level "WARNING"
         }
