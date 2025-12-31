@@ -3352,7 +3352,7 @@ function New-ServerConfig {
     # Build the OpenVPN server config content
     $serverConfig = @"
 port $($Script:Settings.port)
-proto tcp
+proto $($Script:Settings.protocol.ToLower())
 dev tun
 ca "$caPath"
 cert "$certPath"
@@ -3547,7 +3547,7 @@ function New-ClientPackage {
         $clientConfig = @"
 client
 dev tun
-proto tcp
+proto $($Script:Settings.protocol.ToLower())
 remote $($Config.ServerIP) $($Script:Settings.port)
 resolv-retry infinite
 nobind
