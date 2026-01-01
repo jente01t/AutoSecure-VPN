@@ -15,8 +15,6 @@
 .NOTES
     Name:        AutoSecure-VPN.psm1
     Author:      Jente
-    Version:     1.0
-    Date:        December 2025
     Requires:    PowerShell 7.0+
 #>
 
@@ -2224,8 +2222,8 @@ function Enable-VPNNAT {
         }
         else {
             # Provide manual instructions if automation failed
-            $manualMsg = "WARNING: ICS configuration commands ran, but verification failed.`n" +
-            "Please enable Internet Connection Sharing MANUALLY on the server:`n" +
+            $manualMsg = "ICS configuration commands ran, but verification failed.`n" +
+            "If internet access does not work for VPN clients, consider enabling Internet Connection Sharing MANUALLY on the server:`n" +
             "  1. Go to Control Panel > Network Connections`n" +
             "  2. Right-click '$($internetAdapter.Name)' (Internet) > Properties > Sharing`n" +
             "  3. Check 'Allow other network users to connect...'`n" +

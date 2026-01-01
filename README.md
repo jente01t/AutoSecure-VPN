@@ -87,8 +87,14 @@ This project automates the installation and configuration of VPN servers and cli
 
 ### Software Dependencies
 
-- **PowerShell 7.0+**: The module uses features specific to PowerShell 7 (e.g., `ForEach-Object -Parallel`).
+- **PowerShell 7.0+**: The module uses features specific to PowerShell 7.
 - **Pester 5.x** (optional): Required only for running unit tests.
+
+> [!WARNING]
+> This script uses Internet Connection Sharing (ICS) to enable NAT for VPN clients. If your network adapter is already configured for ICS (e.g., sharing internet with another network), the VPN may not establish an external connection. Ensure no other ICS configuration is active on the adapter before running the script. Additionally, if you have a successful handshake between client and server but no internet access, the issue may be that the network adapters are already in use by another service or configuration.
+
+> [!WARNING]
+> Do not attempt to connect to the VPN from within the same local network (LAN) as the VPN server. This can cause routing loops and connectivity issues. VPN connections should be made from external networks.
 
 ### Remote Deployment Requirements
 
@@ -110,9 +116,6 @@ Additionally:
 - Target machine inside private network or public with domain.
 - Firewall rules allowing WinRM (TCP 5985/5986).
 - Administrator credentials for remote systems.
-
-> [!WARNING]
-> This script uses Internet Connection Sharing (ICS) to enable NAT for VPN clients. If your network adapter is already configured for ICS (e.g., sharing internet with another network), the VPN may not establish an external connection. Ensure no other ICS configuration is active on the adapter before running the script.
 
 ---
 
@@ -178,7 +181,7 @@ The project uses **PowerShell Data Files (`.psd1`)** for configuration, split in
 
 1. **Copy the example configuration files**:
    ```powershell
-   cd [User]\Documents\PowerShell\Modules\AutoSecure-VPN\x.x.x
+   cd C:\Users\[User]\Documents\PowerShell\Modules\AutoSecure-VPN\x.x.x
    Copy-Item Stable.psd1.example ../config/Stable.psd1
    Copy-Item Variable.psd1.example ../config/Variable.psd1
    ```
