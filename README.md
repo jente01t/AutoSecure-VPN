@@ -328,6 +328,29 @@ Select-ServerMode
 Select-ClientMode
 ```
 
+### CSV Batch Deployment
+
+For deploying multiple clients at once, you can use a CSV file. This is particularly useful for remote deployments.
+
+#### CSV Format
+The CSV file must contain the following headers:
+- **Name**: The name of the client (used for config filenames).
+- **IP**: The IP address or hostname of the remote machine.
+- **Username**: The username for the remote connection (Administrator privileges required).
+- **Password**: The password for the remote user.
+
+**Example `clients.csv`:**
+```csv
+Name,IP,Username,Password
+Client1,192.168.1.10,AdminUser,SecretPass123
+Client2,192.168.1.11,AdminUser,AnotherPass456
+```
+
+#### Missing Credentials or Information
+If a row in the CSV file does not contain a `Name`, `IP`, `Username`, or `Password`, the script will **skip** that client during the batch installation process. This prevents the script from pausing or crashing.
+- Skipped clients will be reported in the final summary with a `SKIPPED` status.
+- Ensure all rows have valid data before running a batch deployment.
+
 ---
 
 ## 🏗️ Project Architecture

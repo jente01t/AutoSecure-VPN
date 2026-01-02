@@ -2528,6 +2528,16 @@ function Invoke-BatchRemoteClientInstall {
         $username = $client.Username
         $password = $client.Password
 
+        if ([string]::IsNullOrWhiteSpace($name) -or [string]::IsNullOrWhiteSpace($ip)) {
+            "SKIPPED: Row $($_) - Missing Name or IP in CSV"
+            return
+        }
+
+        if ([string]::IsNullOrWhiteSpace($username) -or [string]::IsNullOrWhiteSpace($password)) {
+            "SKIPPED: $name ($ip) - Missing credentials in CSV"
+            return
+        }
+
         # Create credential object safely
         $securePassword = ConvertTo-SecureString $password -AsPlainText -Force
         $cred = New-Object System.Management.Automation.PSCredential ($username, $securePassword)

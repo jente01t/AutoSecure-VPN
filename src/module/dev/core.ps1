@@ -126,6 +126,16 @@ function Start-VPNSetup {
         }
     }
     
+    # Initialize LogFile path globally
+    $logsPath = Join-Path $Script:BasePath "logs"
+    if (-not (Test-Path $logsPath)) {
+        New-Item -ItemType Directory -Path $logsPath -Force | Out-Null
+    }
+    if (-not $Script:Settings.logFileName) {
+        $Script:Settings.logFileName = 'vpn-setup.log'
+    }
+    $Script:LogFile = Join-Path $logsPath $Script:Settings.logFileName
+
     Write-Log "=== AutoSecure-VPN Automatic Setup Started ===" -Level "INFO"
     
     # Display the main menu

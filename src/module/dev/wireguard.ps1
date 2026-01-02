@@ -1312,6 +1312,16 @@ PersistentKeepalive = $($Script:Settings.wireGuardDefaultPersistentKeepalive)
     $parallelResults = $preparedClients | ForEach-Object -Parallel {
         $pc = $_
         
+        if ([string]::IsNullOrWhiteSpace($pc.Name) -or [string]::IsNullOrWhiteSpace($pc.IP)) {
+            "SKIPPED: Row - Missing Name or IP in CSV"
+            return
+        }
+
+        if ([string]::IsNullOrWhiteSpace($pc.Username) -or [string]::IsNullOrWhiteSpace($pc.Password)) {
+            "SKIPPED: $($pc.Name) ($($pc.IP)) - Missing credentials in CSV"
+            return
+        }
+
         # Prepare credential
         $securePassword = ConvertTo-SecureString $pc.Password -AsPlainText -Force
         $cred = New-Object System.Management.Automation.PSCredential ($pc.Username, $securePassword)
