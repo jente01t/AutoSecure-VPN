@@ -39,7 +39,14 @@ function Invoke-WireGuardClientSetup {
         # Step 3: Import Config / Start Service
         Write-Host "`n[3/3] Importing config..." -ForegroundColor Cyan
         # Define output path where configs are likely stored
-        $outputPath = Join-Path (Split-Path (Split-Path $Script:ModuleRoot -Parent) -Parent) "output"
+        $outputPath = $Script:Settings.OutputPath
+        if (-not [System.IO.Path]::IsPathRooted($outputPath)) {
+             if ($Script:BasePath) {
+                $outputPath = Join-Path $Script:BasePath $outputPath
+            } else {
+                $outputPath = Join-Path (Split-Path (Split-Path $Script:ModuleRoot -Parent) -Parent) $outputPath
+            }
+        }
         Write-Log "Output path: $outputPath" -Level "INFO"
         $configPath = ""
 
@@ -166,8 +173,16 @@ function Invoke-WireGuardServerSetup {
         Write-Log "Server config verified at: $serverConfigPath" -Level "INFO"
         
         # Create client config file in output directory
-        $outputDir = Join-Path $Script:ModuleRoot "..\..\output"
-        $outputDir = [System.IO.Path]::GetFullPath($outputDir)
+        # Resolve Output Path
+        $outputDir = $Script:Settings.OutputPath
+        if (-not [System.IO.Path]::IsPathRooted($outputDir)) {
+            if ($Script:BasePath) {
+                $outputDir = Join-Path $Script:BasePath $outputDir
+            } else {
+                $outputDir = Join-Path (Split-Path (Split-Path $Script:ModuleRoot -Parent) -Parent) $outputDir
+            }
+        }
+
         if (-not (Test-Path $outputDir)) { New-Item -ItemType Directory -Path $outputDir -Force | Out-Null }
         $clientConfigPath = Join-Path $outputDir "wg-client.conf"
         $clientConfigContent = New-WireGuardClientConfig -ClientKeys $clientKeys -ServerKeys $serverKeys -ServerAvailableIP $serverWanIP -Port $wgPort -Address "$baseSubnet.2/24" -OutputPath $clientConfigPath
@@ -279,11 +294,26 @@ function Invoke-RemoteWireGuardServerSetup {
         $serverConfContent = New-WireGuardServerConfig -ServerKeys $serverKeys -ClientKeys $clientKeys -Port $port -Address "$baseSubnet.1/24" -PeerAddress "$baseSubnet.2/32" -ServerType "Windows" -OutputPath $serverConfPath
         
         Write-Verbose "Creating client config..."
-        $clientConfPath = Join-Path $Script:Settings.OutputPath "wg-client.conf"
+        
+        # Resolve Output Path
+        $outputDir = $Script:Settings.OutputPath
+        if (-not [System.IO.Path]::IsPathRooted($outputDir)) {
+            if ($Script:BasePath) {
+                $outputDir = Join-Path $Script:BasePath $outputDir
+            } else {
+                $outputDir = Join-Path (Split-Path (Split-Path $Script:ModuleRoot -Parent) -Parent) $outputDir
+            }
+        }
+        
+        if (-not (Test-Path $outputDir)) {
+            New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+        }
+
+        $clientConfPath = Join-Path $outputDir "wg-client.conf"
         $clientConfigContent = New-WireGuardClientConfig -ClientKeys $clientKeys -ServerKeys $serverKeys -ServerAvailableIP $wanIP -Port $port -Address "$baseSubnet.2/24" -OutputPath $clientConfPath
         
         # QR-code generation
-        $qrPath = Join-Path $Script:Settings.OutputPath "wg-client-qr.png"
+        $qrPath = Join-Path $outputDir "wg-client-qr.png"
         New-WireGuardQRCode -ConfigContent $clientConfigContent -OutputPath $qrPath
 
         Write-Verbose "Client Config: $clientConfigContent"
@@ -342,7 +372,14 @@ function Invoke-RemoteWireGuardClientSetup {
         $cred = Get-Credential -Message "Admin Credentials for $computerName"
         
         Write-Host "`nImporting config..." -ForegroundColor Cyan
-        $outputPath = Join-Path (Split-Path (Split-Path $Script:ModuleRoot -Parent) -Parent) "output"
+        $outputPath = $Script:Settings.OutputPath
+        if (-not [System.IO.Path]::IsPathRooted($outputPath)) {
+             if ($Script:BasePath) {
+                $outputPath = Join-Path $Script:BasePath $outputPath
+            } else {
+                $outputPath = Join-Path (Split-Path (Split-Path $Script:ModuleRoot -Parent) -Parent) $outputPath
+            }
+        }
         Write-Log "Output path: $outputPath" -Level "INFO"
         $confPath = ""
 
