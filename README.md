@@ -353,8 +353,12 @@ AutoSecure-VPN/
 │   │   ├── Variable.psd1           # User settings
 │   │   └── Variable.psd1.example   # Template for Variable.psd1
 │   └── module/                     # PowerShell module
+│       ├── dev/                    # Development source files
+│       │   ├── core.ps1            # Core logic & menus
+│       │   ├── openvpn.ps1         # OpenVPN implementation
+│       │   └── wireguard.ps1       # WireGuard implementation
 │       ├── AutoSecure-VPN.psd1     # Module manifest
-│       └── AutoSecure-VPN.psm1     # Module implementation
+│       └── AutoSecure-VPN.psm1     # Loader script (dev) / Monolithic module (prod)
 ├── tests/                          # Pester test files
 │   ├── AutoSecure-VPN.Tests.ps1    # Main test suite
 │   └── Manual/
@@ -365,7 +369,37 @@ AutoSecure-VPN/
 
 ### Module Architecture
 
-The module (`AutoSecure-VPN.psm1`) follows a **single-file module pattern** with logical regions:
+The project uses a **split-file development architecture** that is compiled into a **single-file module** for production/publishing.
+
+#### Development Mode
+In the `src/module/dev/` directory, the code is split into logical components:
+- **`core.ps1`**: Contains the main entry point (`Start-VPNSetup`), menu system, logging, and shared utility functions.
+- **`openvpn.ps1`**: Contains all OpenVPN-specific logic (installation, certificate generation, config creation).
+- **`wireguard.ps1`**: Contains all WireGuard-specific logic (installation, key generation, QR codes).
+
+The `AutoSecure-VPN.psm1` file in the source tree acts as a **loader**. When you import the module locally (e.g., `Import-Module ./src/module/AutoSecure-VPN.psd1`), it dynamically loads (dot-sources) these three files. This allows developers to work on smaller, focused files without needing a build step for every change.
+
+#### Production / Publishing
+When the module is published to the PowerShell Gallery using `publish.ps1`, a build process occurs:
+1. The script reads `core.ps1`, `openvpn.ps1`, and `wireguard.ps1`.
+2. It concatenates them into a single, monolithic `AutoSecure-VPN.psm1` file.
+3. This single file is what gets uploaded to the Gallery.
+
+This approach gives the best of both worlds: a clean development environment and a simple, high-performance single-file artifact for end-users.
+
+### Publishing Workflow
+
+To publish a new version to the PowerShell Gallery:
+
+```powershell
+# Run the publish script with your API key
+.\publish.ps1 -ApiKey "YOUR_NUGET_API_KEY"
+```
+
+The `publish.ps1` script handles:
+1. **Version Auto-increment**: Checks the Gallery for the latest version and increments the patch number (e.g., 1.0.1 -> 1.0.2).
+2. **Building**: Combines the split development files into the production artifact.
+3. **Publishing**: Uploads the result to the PowerShell Gallery.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐

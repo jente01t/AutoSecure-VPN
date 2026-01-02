@@ -69,8 +69,25 @@ $TempModulePath = Join-Path ([System.IO.Path]::GetTempPath()) 'AutoSecure-VPN'
 if (Test-Path $TempModulePath) { Remove-Item -Path $TempModulePath -Recurse -Force }
 New-Item -Path $TempModulePath -ItemType Directory | Out-Null
 
-# Copy module files to the temp directory
-Get-ChildItem -Path $ModulePath -File | ForEach-Object { Copy-Item -Path $_.FullName -Destination $TempModulePath -Force }
+# Copy module manifest
+Copy-Item -Path $ManifestPath -Destination $TempModulePath -Force
+
+# Build the single psm1 file from dev files
+$devPath = Join-Path $ModulePath 'dev'
+if (Test-Path $devPath) {
+    Write-Host "Building single psm1 file from dev sources..." -ForegroundColor Cyan
+    $coreContent = Get-Content (Join-Path $devPath 'core.ps1') -Raw
+    $openvpnContent = Get-Content (Join-Path $devPath 'openvpn.ps1') -Raw
+    $wireguardContent = Get-Content (Join-Path $devPath 'wireguard.ps1') -Raw
+    
+    $fullContent = $coreContent + "`n" + $openvpnContent + "`n" + $wireguardContent
+    Set-Content -Path (Join-Path $TempModulePath 'AutoSecure-VPN.psm1') -Value $fullContent -Encoding UTF8
+}
+else {
+    # Fallback if dev folder doesn't exist (e.g. already built)
+    Write-Warning "Dev folder not found, copying existing psm1 file."
+    Copy-Item -Path (Join-Path $ModulePath 'AutoSecure-VPN.psm1') -Destination $TempModulePath -Force
+}
 
 # Copy config example files to the temp directory (not the actual config files)
 $ConfigPath = Join-Path (Split-Path $ModulePath -Parent) 'config'
